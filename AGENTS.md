@@ -1,4 +1,4 @@
-# Agent standing orders (Go-TOPS 0.2.0, draft)
+# Agent standing orders (Go-TOPS 0.3.0, draft)
 
 Goal: correct, dense, fast Go.
 Production: the fewest lines that keep the named invariants and measured performance.
@@ -11,14 +11,14 @@ The protocol text is [`GO_TOPS.md`](GO_TOPS.md). This file is the harness for wo
 
 Milestone M0: the spec. There is no Go code, no `go.mod`, no CLI and no CI yet. `go tool gotops` does not exist. Do not document, run or claim a command that has not landed.
 
-Draft 0.2.0 still says otherwise on these points. They are revised in `GO_TOPS.md`, in a protocol-change PR, before M1 code starts:
+Points from 0.3.0 that code must follow (see the change note at the top of `GO_TOPS.md`):
 
-1. The CRAP cap does not depend on who wrote the code. There is no authorship trailer.
-2. `-race` needs cgo on Linux. Test jobs run with `CGO_ENABLED=1`; builds and releases use `CGO_ENABLED=0`.
-3. An enabled layer with no command fails the gate. Only `enabled: false` in config turns a layer off.
-4. The error-guard discount applies in every class, and only to guards that return the error. Blank discards (`_ =`, `x, _ :=`) are caught.
-5. Adopters are gated by ratchet: no function gets worse, new functions meet the cap. This repo gates itself `hard`.
-6. The Bend2 parity layer and Lean recheck are out until there is evidence they judge something the analyzers do not.
+1. One CRAP cap per class, for every author. There is no authorship trailer.
+2. Test jobs run with `CGO_ENABLED=1`, because `-race` needs cgo on Linux. Builds and releases use `CGO_ENABLED=0`.
+3. An enabled layer with no command is `not-run` and fails the gate. Only `enabled: false` in config turns a layer off.
+4. The error-guard discount applies in every class, and only to guards that return the error. Blank discards (`_ =`, `x, _ :=`) are caught by errcheck `check-blank`.
+5. Adopters are gated by `ratchet` against `.go-tops/baseline.json`. This repo gates itself `hard`.
+6. There is no Bend2 or Lean layer. The `go/analysis` analyzers are the laws layer.
 
 ## Do this
 

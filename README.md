@@ -7,7 +7,7 @@ A written spec, a JSON Schema, per-class profiles, a laws layer of `go/analysis`
 
 ## Status
 
-Draft. Protocol **0.2.0**. The package is unreleased (0.0.0). There is no code yet.
+Draft. Protocol **0.3.0**. The package is unreleased (0.0.0). There is no code yet.
 
 This repo is at milestone M0: the spec. `go tool gotops` does not exist yet, and nothing here is ready to copy into CI.
 
@@ -21,22 +21,20 @@ This repo is at milestone M0: the spec. `go tool gotops` does not exist yet, and
 
 The full roadmap is in [`GO_TOPS.md` §19](GO_TOPS.md#19-roadmap).
 
-### Open before M1
-
-These are revised in the spec before any code is written. They are listed in [`AGENTS.md`](AGENTS.md#state).
+### What 0.3.0 changed
 
 - One CRAP cap per class, with no authorship trailer.
 - Test jobs run with cgo, because `-race` needs cgo on Linux.
 - An enabled layer with no command fails the gate, instead of being skipped.
-- The error-guard discount applies in every class.
-- Adopters are gated by ratchet.
-- The Bend2 parity layer and Lean recheck are out for now.
+- The error-guard discount applies in every class, and blank error discards are caught.
+- Adopters are gated by ratchet against a baseline file.
+- No Bend2 or Lean layer; the `go/analysis` analyzers are the laws layer.
 
 ## What is here
 
 | Path | What it is |
 |---|---|
-| [`GO_TOPS.md`](GO_TOPS.md) | The protocol, draft 0.2.0 |
+| [`GO_TOPS.md`](GO_TOPS.md) | The protocol, draft 0.3.0 |
 | [`config/AGENTS.md.tmpl`](config/AGENTS.md.tmpl) | The `AGENTS.md` that `gotops init` will write into an adopting repo |
 | [`AGENTS.md`](AGENTS.md) | Standing orders for agents working on this repo ([`CLAUDE.md`](CLAUDE.md) imports it) |
 
