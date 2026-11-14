@@ -1,0 +1,28 @@
+# Build output
+/bin/
+/dist/
+*.test
+*.out
+
+# Coverage and benchmark scratch
+/.cover/
+/.bench/new.txt
+coverage.txt
+junit.xml
+
+# Gate report is written on every run; the ledgers in .go-tops/ are tracked
+/.go-tops/report.json
+
+# Local workspace
+go.work
+go.work.sum
+
+# Nix
+result
+result-*
+.direnv
+
+# Editors and OS
+.DS_Store
+*.swp
+/tmp
