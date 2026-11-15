@@ -5,7 +5,7 @@ Production: the fewest lines that keep the named invariants and measured perform
 Tests: as many as the contract needs. Never write tests by reading the implementation.
 
 The protocol text is [`GO_TOPS.md`](GO_TOPS.md). This file is the harness for work on this repo.
-[`config/AGENTS.md.tmpl`](config/AGENTS.md.tmpl) is the file `gotops init` will write into an adopting repo. It is not the harness for this repo.
+[`config/AGENTS.template.md`](config/AGENTS.template.md) is the file `gotops init` will write into an adopting repo. It is not the harness for this repo.
 
 ## State
 

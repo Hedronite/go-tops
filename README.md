@@ -35,7 +35,7 @@ The full roadmap is in [`GO_TOPS.md` §19](GO_TOPS.md#19-roadmap).
 | Path | What it is |
 |---|---|
 | [`GO_TOPS.md`](GO_TOPS.md) | The protocol, draft 0.3.0 |
-| [`config/AGENTS.md.tmpl`](config/AGENTS.md.tmpl) | The `AGENTS.md` that `gotops init` will write into an adopting repo |
+| [`config/AGENTS.template.md`](config/AGENTS.template.md) | The `AGENTS.md` that `gotops init` will write into an adopting repo |
 | [`AGENTS.md`](AGENTS.md) | Standing orders for agents working on this repo ([`CLAUDE.md`](CLAUDE.md) imports it) |
 
 ## Contributing

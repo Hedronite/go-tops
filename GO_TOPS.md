@@ -165,7 +165,7 @@ For a new repo, copy the drop-in set and replace the placeholders:
 |---|---|---|
 | `go-tops.yaml` | Protocol config (§9) | `{MODULE}`, `{CLASS}` |
 | `go-tops.lock` | Tool pins and checksums (§10) | generated |
-| `AGENTS.md` | Agent-facing commands and rules (template: `config/AGENTS.md.tmpl`) | `{MODULE}`, `{CLASS}`, `{ENFORCE}`, `{COVERAGE_FLOOR}`, `{CRAP_CAP}`, `{SURVIVORS_MAX}` |
+| `AGENTS.md` | Agent-facing commands and rules (template: `config/AGENTS.template.md`) | `{MODULE}`, `{CLASS}`, `{ENFORCE}`, `{COVERAGE_FLOOR}`, `{CRAP_CAP}`, `{SURVIVORS_MAX}` |
 | `.golangci.yml` | golangci-lint v2 config; errcheck `check-blank` and `check-type-assertions` on (§6.3) | `{MODULE}` |
 | `.go-tops/baseline.json` | Ratchet baseline (§6.7); written by `gotops baseline`, not by hand | generated |
 | `.gremlins.yaml` or engine config | Mutation settings **[verify]** | |
