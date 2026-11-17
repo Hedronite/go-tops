@@ -53,6 +53,10 @@ All notable changes to this project are listed here. The protocol version and th
     - R10: `gates.coverage.statements_floor` replaces `lines_floor`, and the report's `lines_pct` is `statements_pct`.
     - R4 (report): catalog-level and class-level law counts, with `applicable_judged`.
     - R14: `layers.goleak`, `layers.synctest` and `layers.fuzz.replay_seed_corpus` are removed and `layers.fuzz.targets` is added.
+    - R25: `gates.hygiene.govulncheck.db`. R10: `gates.tests.race`, `shuffle` and `count` are fixed by the schema. R31: `check` validates survivor and ack entries; the report types its layer details and lists every exemption in force.
+    - R18 / A11: a class with no column takes cap 8 (provisional) and the strictest floor, and `check` rejects a config looser than its class.
+    - A run must measure something: `hygiene`, `tests` and `coverage` cannot be off; `crap` and `mutation` may be off only with a reason and a dated expiry, and every disabled gate is listed in the report.
+    - Keys removed: `gates.mutation.scope` goes alongside `gates.crap.scope` (tier 1 mutates the diff, tier 2 the whole module), and `laws.enable`, `layers.goleak`, `layers.synctest` and `layers.fuzz.replay_seed_corpus` go with them.
     - §16 records the 0.4.0 decisions; §17 shows the real tree; §18 points to the schema files; §19 is the plan of record with one 1.0 criterion; Appendix A shows one test run.
 - **Protocol 0.3.0** (`GO_TOPS.md`, schema sketch, `config/AGENTS.template.md`):
   - One CRAP cap per class; the `Authored-By: agent` trailer and the separate agent cap are removed (§5.2, §6.2).
