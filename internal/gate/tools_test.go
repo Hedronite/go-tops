@@ -129,8 +129,14 @@ func TestOSExecDirEnvAndStdin(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want, _ := filepath.EvalSymlinks(dir)
-	got, _ := filepath.EvalSymlinks(strings.TrimSpace(string(out.Stdout)))
+	want, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := filepath.EvalSymlinks(strings.TrimSpace(string(out.Stdout)))
+	if err != nil {
+		t.Fatal(err)
+	}
 	if got != want {
 		t.Errorf("pwd %q, want %q", got, want)
 	}

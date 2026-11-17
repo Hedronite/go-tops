@@ -3,16 +3,18 @@ package gate
 import (
 	"context"
 	"errors"
+	"io/fs"
 	"regexp"
 	"slices"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/santhosh-tekuri/jsonschema/v6"
+
 	gotops "github.com/Hedronite/go-tops"
 	"github.com/Hedronite/go-tops/internal/laws"
 	"github.com/Hedronite/go-tops/internal/report"
-	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
 // ---- fake layers ----
@@ -36,6 +38,7 @@ func (f *fakeLayer) Run(context.Context, *Env) Result {
 	}
 	return f.res
 }
+
 func (f *fakeLayer) Preflight(context.Context, *Env) error {
 	f.preSeen = true
 	return f.preErr
@@ -51,8 +54,10 @@ func details(id string) map[string]any {
 	case "crap":
 		return map[string]any{"cap": 10.0, "violations": []any{}}
 	case "mutation":
-		return map[string]any{"mutants": 0, "killed": 0, "survived_explained": 0, "survived_unexplained": 0, "max": 0,
-			"timed_out": 0, "timed_out_keys": []any{}, "dropped": 0, "exempt": []any{}}
+		return map[string]any{
+			"mutants": 0, "killed": 0, "survived_explained": 0, "survived_unexplained": 0, "max": 0,
+			"timed_out": 0, "timed_out_keys": []any{}, "dropped": 0, "exempt": []any{},
+		}
 	}
 	return nil
 }
@@ -133,8 +138,10 @@ func cfg() Config {
 var epoch = time.Date(2026, 11, 17, 18, 0, 0, 0, time.UTC)
 
 func deps(ls []Layer) Deps {
-	return Deps{Dir: ".", Layers: ls, Exec: newExec(), Tools: &ToolResolver{Dir: ".", Exec: newExec()}, ToolVersion: "0.0.0-dev",
-		Now: func() time.Time { return epoch }}
+	return Deps{
+		Dir: ".", Layers: ls, Exec: newExec(), Tools: &ToolResolver{Dir: ".", Exec: newExec()}, ToolVersion: "0.0.0-dev",
+		Now: func() time.Time { return epoch },
+	}
 }
 
 func opts() Options { return Options{MaxTier: 1} }
@@ -208,7 +215,7 @@ func checkSchema(t *testing.T, rep report.Report) {
 func validateDoc(doc []byte) error {
 	c := jsonschema.NewCompiler()
 	for _, name := range []string{"core.schema.json", "go-tops.schema.json", "gate-report.schema.json"} {
-		b, err := gotops.FS.ReadFile("schema/" + name)
+		b, err := fs.ReadFile(gotops.Files(), "schema/"+name)
 		if err != nil {
 			return err
 		}
@@ -246,4 +253,23 @@ func analyzersAllow(in laws.Input) []laws.Result {
 
 func regexpShell() *regexp.Regexp {
 	return regexp.MustCompile(`"(/bin/|/usr/bin/)?(sh|bash|zsh|dash|fish)"|\bsh -c\b|"-c",\s*"`)
+}
+
+// fl, fx narrow a Layer or an Executor to the fake, failing the test on a mismatch.
+func fl(t *testing.T, l Layer) *fakeLayer {
+	t.Helper()
+	f, ok := l.(*fakeLayer)
+	if !ok {
+		t.Fatalf("layer %T is not a *fakeLayer", l)
+	}
+	return f
+}
+
+func fx(t *testing.T, e Executor) *fakeExec {
+	t.Helper()
+	f, ok := e.(*fakeExec)
+	if !ok {
+		t.Fatalf("executor %T is not a *fakeExec", e)
+	}
+	return f
 }

@@ -2,13 +2,15 @@ package report
 
 import (
 	"encoding/json"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	gotops "github.com/Hedronite/go-tops"
 	"github.com/santhosh-tekuri/jsonschema/v6"
+
+	gotops "github.com/Hedronite/go-tops"
 )
 
 // validate checks a report document against the embedded
@@ -17,7 +19,7 @@ func validate(t *testing.T, doc []byte) error {
 	t.Helper()
 	c := jsonschema.NewCompiler()
 	for _, name := range []string{"core.schema.json", "go-tops.schema.json", "gate-report.schema.json"} {
-		b, err := gotops.FS.ReadFile("schema/" + name)
+		b, err := fs.ReadFile(gotops.Files(), "schema/"+name)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -107,7 +109,10 @@ func TestValidatorRejectsInvalidReport(t *testing.T) {
 	}
 	r = minimal()
 	r.Layers = []Layer{{ID: "tests", Tier: 1, Outcome: "pass"}} // details are required once a layer ran
-	b, _ = Marshal(r)
+	b, err = Marshal(r)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if validate(t, b) == nil {
 		t.Fatal("a tests layer that ran with no details validated")
 	}
@@ -128,7 +133,10 @@ func TestWriteCreatesDirAndFile(t *testing.T) {
 	if !strings.HasSuffix(string(b), "\n") {
 		t.Error("no trailing newline")
 	}
-	entries, _ := os.ReadDir(filepath.Dir(p))
+	entries, err := os.ReadDir(filepath.Dir(p))
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(entries) != 1 {
 		t.Errorf("%d files left in the report directory, want 1 (no temp file)", len(entries))
 	}
@@ -142,7 +150,10 @@ func TestWriteReplacesAnExistingReport(t *testing.T) {
 	if err := Write(p, minimal()); err != nil {
 		t.Fatal(err)
 	}
-	b, _ := os.ReadFile(p)
+	b, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if strings.Contains(string(b), "stale") {
 		t.Error("old content survived")
 	}
@@ -171,7 +182,10 @@ func TestFailedLayerMayCarryAnError(t *testing.T) {
 		t.Fatalf("a failed tests layer with details.error is invalid: %v", err)
 	}
 	r.Layers[0].Details = map[string]any{"error": ""}
-	b, _ = Marshal(r)
+	b, err = Marshal(r)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if validate(t, b) == nil {
 		t.Fatal("an empty error validated")
 	}

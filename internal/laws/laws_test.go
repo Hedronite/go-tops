@@ -144,7 +144,6 @@ func TestDriftTestCatchesEdits(t *testing.T) {
 			return strings.Replace(s, "| G-40 | Zero reachable vulnerabilities per `govulncheck` | R | tl | ✓ |", "| G-40 | Zero reachable vulnerabilities per `govulncheck` | R | tl | |", 1)
 		},
 		"retired": func(s string) string { return strings.Replace(s, "| G-03 | Retired:", "| G-03 | Absorbed:", 1) },
-		"tier":    func(s string) string { return strings.Replace(s, "| G-22 |", "| G-22 |", 1) },
 		"deleted row": func(s string) string {
 			i := strings.Index(s, "| G-17 |")
 			j := strings.Index(s[i:], "\n")
@@ -155,9 +154,6 @@ func TestDriftTestCatchesEdits(t *testing.T) {
 		},
 	}
 	for name, edit := range edits {
-		if name == "tier" {
-			continue // covered by the reader edit: tier is derived from the reader and the tier 3 marks
-		}
 		edited := edit(spec)
 		if edited == spec {
 			t.Fatalf("%s: the edit did not change the spec text; the test anchor is stale", name)

@@ -174,7 +174,7 @@ func TestExit1StubLawsNeverPass(t *testing.T) {
 func TestExit2LockMismatchBeforeAnyLayer(t *testing.T) {
 	var ran []string
 	ls := gateLayers(&ran, nil)
-	ls[0].(*fakeLayer).preErr = &LockError{Err: errors.New("govulncheck is v1.8.0, the lock says v1.9.0")}
+	fl(t, ls[0]).preErr = &LockError{Err: errors.New("govulncheck is v1.8.0, the lock says v1.9.0")}
 	mustRefuse(t, cfg(), opts(), deps(ls), 2)
 	if len(ran) != 0 {
 		t.Fatalf("layers ran before the exit 2: %v", ran)
@@ -183,7 +183,7 @@ func TestExit2LockMismatchBeforeAnyLayer(t *testing.T) {
 
 func TestExit2ConfigErrorWrapped(t *testing.T) {
 	ls := gateLayers(nil, nil)
-	ls[1].(*fakeLayer).preErr = &ConfigError{Err: errors.New("bad")}
+	fl(t, ls[1]).preErr = &ConfigError{Err: errors.New("bad")}
 	mustRefuse(t, cfg(), opts(), deps(ls), 2)
 }
 
@@ -200,7 +200,7 @@ func TestExit2UnknownOnlyLayer(t *testing.T) {
 func TestExit3EnvironmentError(t *testing.T) {
 	var ran []string
 	ls := gateLayers(&ran, nil)
-	ls[1].(*fakeLayer).preErr = &EnvError{Err: errors.New("no C compiler; -race needs cgo")}
+	fl(t, ls[1]).preErr = &EnvError{Err: errors.New("no C compiler; -race needs cgo")}
 	mustRefuse(t, cfg(), opts(), deps(ls), 3)
 	if len(ran) != 0 {
 		t.Fatalf("layers ran before the exit 3: %v", ran)
@@ -209,19 +209,19 @@ func TestExit3EnvironmentError(t *testing.T) {
 
 func TestExit3UnreadableRepository(t *testing.T) {
 	d := deps(gateLayers(nil, nil))
-	d.Exec.(*fakeExec).gitFail = true
+	fx(t, d.Exec).gitFail = true
 	mustRefuse(t, cfg(), opts(), d, 3)
 }
 
 // A layer that is out of range or disabled never preflights.
 func TestPreflightOnlyForLayersThatRun(t *testing.T) {
 	ls := gateLayers(nil, nil)
-	ls[2].(*fakeLayer).preErr = &EnvError{Err: errors.New("x")}
+	fl(t, ls[2]).preErr = &EnvError{Err: errors.New("x")}
 	r := mustRun(t, cfg(), Options{MaxTier: 1, Only: "hygiene"}, deps(ls))
 	if r.ExitCode != 0 {
 		t.Fatalf("exit %d: a layer outside --only must not preflight", r.ExitCode)
 	}
-	if ls[2].(*fakeLayer).preSeen {
+	if fl(t, ls[2]).preSeen {
 		t.Error("coverage preflighted though out of range")
 	}
 }
@@ -326,10 +326,10 @@ func TestAdvisoryStillRefusesAndStillErrors(t *testing.T) {
 	mustRefuse(t, c, Options{MaxTier: 1, Only: "tests"}, d, 4)
 
 	ls := gateLayers(nil, nil)
-	ls[1].(*fakeLayer).preErr = &EnvError{Err: errors.New("no cc")}
+	fl(t, ls[1]).preErr = &EnvError{Err: errors.New("no cc")}
 	mustRefuse(t, c, opts(), deps(ls), 3)
 
 	ls = gateLayers(nil, nil)
-	ls[0].(*fakeLayer).preErr = &LockError{Err: errors.New("sha")}
+	fl(t, ls[0]).preErr = &LockError{Err: errors.New("sha")}
 	mustRefuse(t, c, opts(), deps(ls), 2)
 }

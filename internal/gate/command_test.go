@@ -2,7 +2,9 @@ package gate
 
 import (
 	"bytes"
+	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,9 +20,13 @@ func cmdDeps(t *testing.T, ls []Layer, c Config) CommandDeps {
 	}
 }
 
+type bufPrinter struct{ bytes.Buffer }
+
+func (b *bufPrinter) Printf(format string, a ...any) { fmt.Fprintf(&b.Buffer, format, a...) }
+
 func run(args []string, d CommandDeps) (int, string, string) {
-	var so, se bytes.Buffer
-	code := Main(args, d, &so, &se)
+	var so, se bufPrinter
+	code := Main(context.Background(), args, d, &so, &se)
 	return code, so.String(), se.String()
 }
 
@@ -95,7 +101,7 @@ func TestMainRefusedRunsWriteNoReport(t *testing.T) {
 	assertNoReport(t, d)
 
 	d = cmdDeps(t, gateLayers(nil, nil), cfg())
-	d.Exec.(*fakeExec).gitFail = true
+	fx(t, d.Exec).gitFail = true
 	if code, _, _ = run(nil, d); code != 3 {
 		t.Fatalf("unreadable repository: exit %d", code)
 	}
@@ -157,21 +163,5 @@ func TestMainAdvisory(t *testing.T) {
 	code, out, _ := run(nil, d)
 	if code != 0 || !strings.Contains(out, "NOT ENFORCED (advisory, expires 2027-01-31): outcome FAIL") {
 		t.Fatalf("exit %d\n%s", code, out)
-	}
-}
-
-type brokenWriter struct{}
-
-func (brokenWriter) Write([]byte) (int, error) { return 0, errors.New("broken pipe") }
-
-// A verdict nobody can read is not reported as one: output that cannot be
-// written is an environment error (3).
-func TestMainUnwritableOutputIsAnEnvironmentError(t *testing.T) {
-	c := cfg()
-	c.RequiredLaws = nil
-	d := cmdDeps(t, gateLayers(nil, nil), c)
-	var se bytes.Buffer
-	if code := Main(nil, d, brokenWriter{}, &se); code != 3 {
-		t.Fatalf("exit %d, want 3", code)
 	}
 }

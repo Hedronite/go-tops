@@ -2,6 +2,7 @@ package gate
 
 import (
 	"encoding/json"
+	"io/fs"
 	"sort"
 	"testing"
 
@@ -11,7 +12,7 @@ import (
 
 func enumOf(t *testing.T, def string) []string {
 	t.Helper()
-	b, err := gotops.FS.ReadFile("schema/core.schema.json")
+	b, err := fs.ReadFile(gotops.Files(), "schema/core.schema.json")
 	if err != nil {
 		t.Fatal(err)
 	}

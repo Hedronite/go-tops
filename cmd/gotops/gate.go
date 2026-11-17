@@ -1,15 +1,17 @@
 package main
 
 import (
-	"io"
+	"context"
+	"io/fs"
 	"os"
 	"path/filepath"
+
+	"go.yaml.in/yaml/v3"
 
 	gotops "github.com/Hedronite/go-tops"
 	"github.com/Hedronite/go-tops/internal/cli"
 	"github.com/Hedronite/go-tops/internal/gate"
 	"github.com/Hedronite/go-tops/internal/report"
-	"go.yaml.in/yaml/v3"
 )
 
 func init() {
@@ -20,12 +22,12 @@ func init() {
 	})
 }
 
-func runGate(args []string, stdout, stderr io.Writer) int {
-	return gate.Main(args, gate.CommandDeps{
+func runGate(env cli.Env, args []string) int {
+	return gate.Main(context.Background(), args, gate.CommandDeps{
 		LoadConfig:  loadGateConfig,
 		CI:          os.Getenv("CI") == "true",
-		ToolVersion: toolVersion,
-	}, stdout, stderr)
+		ToolVersion: packageVersion,
+	}, env.Stdout, env.Stderr)
 }
 
 // TEMPORARY bridge until G2's loader lands: a small read of go-tops.yaml and the
@@ -41,8 +43,10 @@ func loadGateConfig(dir string) (gate.Config, error) {
 		return gate.Config{}, err
 	}
 	var p rawConfig
-	if pb, err := gotops.FS.ReadFile("profiles/" + f.Class + ".yaml"); err == nil {
-		_ = yaml.Unmarshal(pb, &p)
+	if pb, err := fs.ReadFile(gotops.Files(), "profiles/"+f.Class+".yaml"); err == nil {
+		if err := yaml.Unmarshal(pb, &p); err != nil {
+			return gate.Config{}, err
+		}
 	}
 	c := gate.Config{Module: f.Module, Class: f.Class, Enforce: f.Enforce, Layers: map[string]gate.LayerConfig{}, Exemptions: f.Exemptions}
 	if f.Advisory != nil {

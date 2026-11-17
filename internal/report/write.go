@@ -5,13 +5,14 @@ package report
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 )
 
 // Protocol is the protocol version the report states.
-const Protocol = "0.4.0"
+const Protocol = "0.4.1"
 
 // DefaultPath is where the report goes unless go-tops.yaml says otherwise.
 const DefaultPath = ".go-tops/report.json"
@@ -155,19 +156,22 @@ func Write(path string, r Report) error {
 	_, werr := tmp.Write(b)
 	cerr := tmp.Close()
 	if werr != nil || cerr != nil {
-		_ = os.Remove(name)
-		if werr != nil {
-			return fmt.Errorf("report: write: %w", werr)
-		}
-		return fmt.Errorf("report: close: %w", cerr)
+		return removeAfter(name, errors.Join(werr, cerr), "write")
 	}
 	if err := os.Chmod(name, 0o644); err != nil {
-		_ = os.Remove(name)
-		return fmt.Errorf("report: %w", err)
+		return removeAfter(name, err, "chmod")
 	}
 	if err := os.Rename(name, path); err != nil {
-		_ = os.Remove(name)
-		return fmt.Errorf("report: %w", err)
+		return removeAfter(name, err, "rename")
 	}
 	return nil
+}
+
+// removeAfter reports err and, when the temp file cannot be removed either,
+// that too.
+func removeAfter(name string, err error, step string) error {
+	if rerr := os.Remove(name); rerr != nil {
+		err = errors.Join(err, rerr)
+	}
+	return fmt.Errorf("report: %s: %w", step, err)
 }

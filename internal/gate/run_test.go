@@ -254,7 +254,7 @@ func TestEmptyAndForbiddenResultsFail(t *testing.T) {
 		}
 		for _, l := range r.Report.Layers {
 			if l.ID == "tests" {
-				if msg, _ := l.Details["error"].(string); msg == "" || len(l.Details) != 1 {
+				if msg, ok := l.Details["error"].(string); !ok || msg == "" || len(l.Details) != 1 {
 					t.Errorf("%s result: details %v, want {error: why}", name, l.Details)
 				}
 			}
@@ -297,12 +297,12 @@ func TestBadLayerSet(t *testing.T) {
 // §12.3: the report names module, class, enforce, git state and the base.
 func TestReportHeader(t *testing.T) {
 	d := deps(gateLayers(nil, nil))
-	d.Exec.(*fakeExec).dirty = true
+	fx(t, d.Exec).dirty = true
 	c := cfg()
 	c.Exemptions = []report.Exemption{{Path: "a.go", Symbol: "F", Layer: "crap", Reason: "dispatch table, one call per arm", Owner: "platform", Expires: "2027-03-01"}}
 	r := mustRun(t, c, Options{MaxTier: 1, Base: "origin/release"}, d)
 	rep := r.Report
-	if rep.Protocol != "0.4.0" || rep.Module != "example.com/m" || rep.Class != "binary-cli" || rep.Enforce != "hard" || rep.ToolVersion != "0.0.0-dev" {
+	if rep.Protocol != "0.4.1" || rep.Module != "example.com/m" || rep.Class != "binary-cli" || rep.Enforce != "hard" || rep.ToolVersion != "0.0.0-dev" {
 		t.Errorf("header %+v", rep)
 	}
 	if rep.Git.Head != "abc1234" || !rep.Git.Dirty || rep.Git.Base != "origin/release" {
