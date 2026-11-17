@@ -253,3 +253,20 @@ func TestPlantDepguardTrueButLinterNotEnabled(t *testing.T) {
 		t.Fatalf("depguard enabled: %s: %s", r.Outcome, r.Reason)
 	}
 }
+
+// B17: hygiene tidies and diffs the adopter's own go.mod and nothing of tools/.
+// An adopter whose packages import each other has a go.mod with no requirement
+// for them and a tidy diff of none: a clean multi-package module passes every
+// check, with tools/go.mod beside it untouched.
+func TestPlantPackagesThatImportEachOther(t *testing.T) {
+	multi := module{
+		"main.go": "package main\n\nimport \"example.com/app/b\"\n\nfunc main() { _ = b.B() }\n",
+		"a/a.go":  "package a\n\n// A is a.\nfunc A() int { return 1 }\n",
+		"b/b.go":  "package b\n\nimport \"example.com/app/a\"\n\n// B is b.\nfunc B() int { return a.A() + 1 }\n",
+		"c/c.go":  "package c\n\nimport (\n\t\"example.com/app/a\"\n\t\"example.com/app/b\"\n)\n\n// C is c.\nfunc C() int { return a.A() + b.B() }\n",
+	}
+	r := plant(t, multi, gate.HygieneConfig{})
+	if r.Outcome != gate.Pass {
+		t.Fatalf("packages that import each other: %s: %s", r.Outcome, r.Reason)
+	}
+}
