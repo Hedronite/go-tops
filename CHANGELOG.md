@@ -4,6 +4,36 @@ All notable changes to this project are listed here. The protocol version and th
 
 ## [Unreleased]
 
+### Package (M1)
+
+- **The `gotops` CLI** (the root module `github.com/Hedronite/go-tops`: `cmd/gotops/`, `internal/`, `tools/`). Compiled from the step READYs; protocol 0.4.1 and 0.4.2 are under Changed. The package is unreleased (0.0.0).
+  - Scaffold (G0): the root module at `go 1.26`, with `embed.go` serving the schemas, profiles and AGENTS template; the `gotops` shell with a self-registering command registry, `version`, an unknown command exiting 2 and `--help` listing the commands; the kit's strict `.golangci.yml`; and `ci.yml` with Linux, macOS and language-floor legs, SHA-pinned actions and an aggregate `ci` job.
+  - `check` (G2):
+    - It validates `go-tops.yaml` against the embedded schema, and `go-tops.lock` and the ledger files against theirs. Each issue is a JSON-pointer line, and an invalid configuration exits 2.
+    - It enforces the semantic rules of §12.1: the class column bounds, dated reasons on disabled gates, required laws against the catalog, the advisory expiry, a valid and clean ratchet baseline, a present lock and no duplicate binary names. A config may tighten its class profile and never loosen it.
+    - The runtime dependencies are `santhosh-tekuri/jsonschema/v6` and `go.yaml.in/yaml/v3`, with a fuzz target over load and validate.
+  - `gate` runner (G3):
+    - It runs every enabled layer in range in §3.1 order, judges the laws last, writes `.go-tops/report.json` and exits by the §12.2 table. It takes `--max-tier`, `--fail-fast`, `--only`, `--dry-run`, `--base` and `--json`, and refuses `--dry-run` and `partial` ranges with exit 4 under `CI=true`.
+    - Under `enforce: advisory` a started run exits 0, the report keeps the honest outcome with `enforced: false` and `advisory_expires`, and the text says `NOT ENFORCED`.
+    - `internal/laws` holds the §8.2 table with a drift test; the laws layer is a stub in which every applicable law is `not-evaluated`. `config.Effective` merges the class defaults before the gate reads a config. The tool resolver runs module tools through `go tool -modfile`, downloaded binaries from `.go-tops/bin/<name>` then `PATH`, and reports `tool-missing` when a tool is absent.
+  - Hygiene gate (G4):
+    - It runs `go mod tidy -diff`, `go mod verify`, the toolchain pin, `golangci-lint fmt --diff`, one adopter-style lint run saved to `.go-tops/lint-style.json`, `govulncheck -json` judged from its findings (time-dependent, database timestamp recorded) and `go-licenses check`. With `deps.depguard: true` the lint config must enable depguard.
+    - `internal/lock` loads `go-tops.lock` against the lock schema and checks a downloaded binary's SHA-256 before it runs (exit 2 on a mismatch). `tools/go.mod` pins gotestsum v1.13.0, govulncheck v1.9.0 and go-licenses v2.0.1.
+  - Tests and coverage gates (G5, G5e):
+    - One `go test -json -race -shuffle=on -count=1 -coverprofile -coverpkg=./...` run, parsed natively. It fails on a failing test, a data race, a build failure, an unshuffled run or no test run, and records packages, tests, skips and the shuffle seed. It needs a C compiler (exit 3 without).
+    - Coverage is statements per package and in total from that run's profile. It fails below the class floor and on a missing, empty or block-less profile, merges duplicate blocks and excludes generated files. `internal/cover` reads the profile. The unit-plus-integration merge recipe (`-test.gocoverdir`, `covdata merge`, `textfmt`) is verified.
+    - The run overrides an inherited `GOFLAGS`, so `-skip`, `-short`, `-vet=off` and `-run` cannot hide tests. A race is read from the result (a failed test, or exit 66), not from a logged line. The zero-test rule and the `tests` figure count leaf tests only. The coverage gate fails when `gates.coverage.integration.enabled` is true, until the integration merge is implemented.
+  - `init` (G6): `gotops init --class <c>` for `binary-cli`, `binary-service` and `library-core` writes the §12.1 drop-in set, with the lock from embedded pins, an `AGENTS.md` block between markers and `GO-TOPS.md`. It never writes a baseline and never overwrites without `--force`.
+  - `report`, `lock`, `doctor`, `version` (G7):
+    - `report [--format text|json]` renders the last report, and `junit` and `sarif` exit 2 naming M7. There is one text renderer, which the gate prints.
+    - `lock --verify` re-checks the toolchain, each downloaded binary by its executable's SHA-256 and each module tool by `go version -m`; a mismatch exits 2 and a missing tool exits 1. `lock --update` re-hashes each pin for every platform and is refused with exit 4 under `CI=true`.
+    - `doctor` checks Go against the floor and the pin, a C compiler (exit 3 without one), tools, `GOFLAGS`, `GOTOOLCHAIN` and cgo; `version` lists the pinned tools.
+    - `init` enables depguard in the lint config when `deps.depguard` is true, its floor leg guards its toolchain, and `tools/go.mod` is tidied with `go -C tools mod tidy`.
+  - Self-host (G8):
+    - Go-TOPS gates itself at tier 1 under the bootstrap rule of §6.7. `go-tops.yaml` is `binary-cli` with `enforce: advisory`, with the `advisory` key (the laws layer, which judges the 16 required laws, lands at M5; expires 2027-03-31). CRAP and mutation are off with a reason and an `expires`, for M2 and M4. `go-tops.lock` pins the Go release and golangci-lint v2.15.0 with the SHA-256 of each archive and of each executable.
+    - `ci.yml` is the one `gate` job of §11. Ubuntu and macOS legs install the pinned golangci-lint, run `go run ./cmd/gotops gate` and upload `.go-tops/` with `if: always()`; a floor leg builds and tests on the floor release with a `GOVERSION` guard. A report-assertion step then fails unless hygiene, tests and coverage are `pass`, CRAP and mutation are `skip` with an unexpired `expires`, every required law is `not-evaluated` for `no_reader`, and the run is reported not enforced.
+    - The kit's lint config enables depguard with a strict allow list: the standard library, this module and the two runtime dependencies. `.go-tops/bin/` and the gate's saved lint output are ignored.
+
 ### Changed
 
 - **Protocol 0.4.2** (`GO_TOPS.md`, `schema/`, `profiles/`, `config/`, `scripts/docs/`). The three findings M1 raised while the CLI was built, bundled into one bump.
