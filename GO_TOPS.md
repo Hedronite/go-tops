@@ -1,24 +1,23 @@
 # Go-TOPS: Go Testing and Optimization Protocol Suite
 
-**Spec status:** Draft 0.3.0 · **Date:** 2026-11-14 · **Owner:** Hedronite
-**Modeled on:** [Rust-TOPS](https://github.com/Hedronite/rust-tops) (protocol 1.1.0, `cargo-tops` 0.2.0)
-**Companion doc:** `GO_BUILD_SUITE.md`
+**Spec status:** 0.4.0-dev (in progress; 0.3.0 was the last draft) · **Date:** 2026-11-17 · **Owner:** Hedronite
+**Modeled on:** [Rust-TOPS](https://github.com/Hedronite/rust-tops) (protocol 1.2.0 on `main`; the latest release tag, `cargo-tops` v0.3.0, carries protocol 1.1.0, and `main` holds package 0.4.0, untagged; read 2026-11-17)
 
-> **Changes from 0.2.0:** One CRAP cap per class; authorship marking removed (§5.2, §6.2).
+> **Changes from 0.2.0 to 0.3.0:** One CRAP cap per class; authorship marking removed (§5.2, §6.2).
 > Test jobs run with cgo, because `-race` requires it on Linux (§3.1, G-26). An enabled layer
 > with no command is `not-run` and fails the gate (§3.3, §7). The error-guard discount applies
 > in every class and only to guards that return the error; blank discards are caught (§6.3).
 > Enforcement modes, with `ratchet` the adopter default (§6.7). The Bend2 parity layer and Lean
 > recheck are removed; the native analyzers are the laws layer (§8.1). Protocol version bumped.
-
+>
 > **Changes from 0.1.0 to 0.2.0:** Hybrid laws architecture (native `go/analysis` primary floor + optional Bend2 parity layer + Lean recheck of catalog and pure invariants). Open decisions in §16 resolved where consensus was reached (err_guard_discount defaults, authorship trailers, Bend optional, etc.). Formal layers guidance added. Protocol version bumped.
-
+>
 > **How to read this.** Go-TOPS reuses Rust-TOPS's *shape* (a written spec, a JSON Schema,
 > per-class profiles, an orchestrator CLI, a CI floor, and a laws layer) and re-derives the
 > *content* for Go. Every place this spec intentionally differs from Rust-TOPS is called out in
 > §14 ("Deltas from Rust-TOPS"). Everything Rust-TOPS defines that is reused here is described
-> from the public repo page as captured in November 2026; confirm against the repo before
-> claiming parity. Values labeled **proposed** are design defaults to be tuned on real code.
+> from `rust-tops` `main` as read on 2026-11-17; confirm against the repo before claiming
+> parity. Values labeled **proposed** are design defaults to be tuned on real code.
 > Items marked **[verify]** name Go tools whose current behavior must be confirmed at pin time.
 
 ---
@@ -28,7 +27,7 @@
 **Go-TOPS** is "a protocol and drop-in kit for Go that is correct, dense, and fast." It has
 three parts, mirroring Rust-TOPS:
 
-1. **A written spec** (this document, destined to become `GO_TOPS.md`) defining gates, tiers,
+1. **A written spec** (this document, `GO_TOPS.md`) defining gates, tiers,
    classes, thresholds, and rules.
 2. **A JSON Schema** (`schema/go-tops.schema.json`, plus a gate-report schema) that makes the
    config and the report machine-checkable. When prose and schema disagree, fix the schema, then
@@ -36,7 +35,7 @@ three parts, mirroring Rust-TOPS:
 3. **Per-class profiles** (`profiles/*.yaml`) that set floors and requirements for different
    kinds of Go code.
 
-Plus a practice layer in `POLICIES.md` (human and agent working rules) and an orchestrator CLI,
+Plus a practice layer (human and agent working rules, §13 and `AGENTS.md`) and an orchestrator CLI,
 **`gotops`**, that runs the gates.
 
 ### 1.1 Goals
@@ -72,13 +71,19 @@ Plus a practice layer in `POLICIES.md` (human and agent working rules) and an or
 
 | Item | Value |
 |---|---|
-| Protocol version | **0.3.0** (draft; becomes 1.0.0 when the gate runs through tier 1 on the five launch classes) |
+| Protocol version | **0.4.0-dev** (in progress; 0.3.0 was the last draft; 1.0.0 is set by the criterion in §19) |
 | Package version | 0.0.0 (unreleased) |
 | Language floor ("MSRV" analogue) | `go 1.26.0` in `go.mod`; matrix tests floor and current (current: Go 1.27) |
 | Toolchain pin | `toolchain` directive in `go.mod` plus `GOTOOLCHAIN=local` in CI |
 | Tool lock | `go-tops.lock` (see §10) |
-| golangci-lint | v2 line; a version built with a Go at least as new as the project toolchain (v2.14.0 bundles gofumpt v0.12.0 and supports Go 1.27) |
-| Other tools | `gotestsum`, `govulncheck`, `benchstat`, mutation engine, `goleak`: pin exact versions at adoption **[verify]** |
+| golangci-lint | **v2.15.0** (exact; latest on 2026-11-17, released 2026-10-16; Go 1.27 support since v2.13.0) |
+| `gotestsum` | **v1.13.0** (exact; optional display wrapper over `go test -json`) |
+| `govulncheck` | **v1.9.0** (exact) |
+| `benchstat` | `golang.org/x/perf/cmd/benchstat` has no release tags: a pseudo-version is pinned at adoption **[verify]** G6 (R26 places it at tier 2) |
+| Mutation engine | `gremlins` **v0.6.0** (exact; the starting engine, 0.x, flags may change; accounting rules are G4's, R20) |
+| `goleak` | `go.uber.org/goleak` **v1.3.0** (exact; the leak check on Go 1.26; on 1.27 and later the `goroutineleak` profile in `runtime/pprof` is the stdlib alternative, and G5 states which layer uses which) |
+
+Tool versions were read from upstream release tags on 2026-11-17.
 
 Protocol and package versions are **separate planes**, as in Rust-TOPS: a package release can
 change code without changing the protocol, and a protocol change must bump the protocol version
@@ -845,7 +850,7 @@ class and its floors; the laws enabled; the survivor/ack ledgers; and the rules 
 
 ## 14. Deltas from Rust-TOPS
 
-| Area | Rust-TOPS (per public repo page) | Go-TOPS (this spec) | Why |
+| Area | Rust-TOPS (`rust-tops` `main`, read 2026-11-17) | Go-TOPS (this spec) | Why |
 |---|---|---|---|
 | Invocation | `cargo tops` external subcommand | `go tool gotops` / `gotops` | Go has no external-subcommand mechanism |
 | Test runner | `cargo nextest` + `cargo test --doc` | `gotestsum` over `go test` incl. `Example*` | Native equivalents |
@@ -856,14 +861,14 @@ class and its floors; the laws enabled; the survivor/ack ledgers; and the rules 
 | Deep layers | fuzz, Miri, Kani, loom, sanitizers, Callgrind (mostly unmapped) | fuzz, race, goleak, synctest, benchstat, pprof budgets (**mapped**) | Go's tools are in the stdlib/ecosystem and cheap to run |
 | Laws engine | Bend2 `LAWS.bend` (53 laws, 15 judged) | Native `go/analysis` multichecker (41 laws); no Bend or Lean layer | Analyzers judge the code itself; a proof over a fact table judges the table |
 | CRAP caps | Human and agent caps | One cap per class | A cap the author can select by marking is not a cap |
-| Unmapped layer | Prints `skip`; gate continues | `not-run`; fails the gate | An enabled layer that ran nothing proves nothing |
-| Enforcement | Absolute floors and caps | `hard`, `ratchet` (adopter default), `advisory` with a baseline file (§6.7) | Adopt on existing code without splitting functions to pass |
-| Tiers | Only tier 0 (laws) and default max tier 1 are stated publicly | Tiers 0–3 defined (proposed) | Make nightly and release layers explicit |
-| Classes | 11 in schema, 5 with profiles | 12 in schema, 5 with profiles (adds `tui-app`) | Hedronite ships TUIs and services |
-| `check` | Does not validate against the schema | Full JSON Schema validation | Close a stated gap |
+| Unmapped layer | `NotRun`; fails the gate | `not-run`; fails the gate | Same rule: an enabled layer that ran nothing proves nothing |
+| Enforcement | `gate` judges the coverage floors and the CRAP threshold on new and changed functions; a CRAP baseline holds existing ones (§2.1, §16); no mode setting | `hard`, `ratchet` (adopter default), `advisory`, with a baseline file (§6.7) | Adopt on existing code without splitting functions to pass |
+| Tiers | Tiers 0–5 with a cadence per layer (§3); `gate` default `--max-tier 1` | Tiers 0–3 defined in §3.2 | Four cadences cover Go's layers: laws, merge gate, nightly, release |
+| Classes | 11 in schema, 8 with profiles | 12 in schema, 5 with profiles (adds `tui-app`) | Hedronite ships TUIs and services |
+| `check` | Validates `rust-tops.yaml` against the schema | Full JSON Schema validation | Same rule |
 | Report | Optional report schema exists; CLI does not write it | Always writes `report.json` | Make results inspectable |
 | `init` | Does not write the lock file | Writes the lock file | First gate run is already pinned |
-| CI floor | Mutants/Darwin/fuzz jobs only as comments | Real jobs on tiers, off only by config | Unrun layers prove nothing |
+| CI floor | The drop-in runs `cargo tops gate --max-tier 1` with `fetch-depth: 0`; mutation and Darwin lanes are overlay comments | Real jobs on tiers, off only by config | Unrun layers prove nothing |
 | Missing tool | Missing mapped tool fails gate | Same; tools are resolved via `tool` directive + lock | Hermeticity |
 | Toolchain pin | `rust-toolchain.toml`, MSRV | `go` + `toolchain` directives, language-floor job | Go equivalent |
 | Reproducible env | Nix flake | Optional Nix flake (later) | Lower priority |
@@ -1046,11 +1051,11 @@ output and survivor ledger are published in CI artifacts.
 
 ## 20. Contributing, credits, license
 
-- **Contributing:** read this spec and the schemas first; follow `POLICIES.md` and `AGENTS.md`;
-  do not weaken laws; protocol-affecting PRs carry the `protocol-change` label.
+- **Contributing:** read this spec and the schemas first; follow the policies in §13 and
+  `AGENTS.md`; do not weaken laws; protocol-affecting PRs carry the `protocol-change` label.
 - **Credits:** Hedronite. Structure and many rules adapted from Rust-TOPS. CRAP is credited to
   the 2007 "Change Risk Anti-Patterns" metric (Savoia and Evans).
-- **License (proposed):** MIT OR Apache-2.0, matching Rust-TOPS.
+- **License:** MIT OR Apache-2.0 (`LICENSE-MIT`, `LICENSE-APACHE`), matching Rust-TOPS.
 
 ---
 
@@ -1072,12 +1077,21 @@ tier 3 (release)  reproducible build · binary govulncheck · SBOM/sig · API co
 
 ## Appendix B: Sources
 
-- Rust-TOPS repository page (<https://github.com/Hedronite/rust-tops>), as read November 2026
+The Rust-TOPS repository, the tool versions and the Go 1.27 APIs were read on 2026-11-17 (Go APIs against go1.27.4); other pages are cited as in 0.3.0.
+
+- Rust-TOPS repository (<https://github.com/Hedronite/rust-tops>), `main` at `77056c9`; latest release tag `v0.3.0` (2026-11-15)
 - Go coverage for integration tests (<https://go.dev/doc/build-cover>)
 - Go `tool` directive proposal (<https://go.googlesource.com/proposal/+/master/design/48429-go-tool-modules.md>)
 - `testing/synctest` (<https://pkg.go.dev/testing/synctest>)
 - gocyclo counting rules (<https://pkg.go.dev/github.com/fzipp/gocyclo>)
-- Mutation tools: gremlins (<https://github.com/go-gremlins/gremlins>), go-mutesting v2 fork
-  (<https://pkg.go.dev/github.com/jonbaldie/go-mutesting/v2>), mutest, ooze (ooze: <https://github.com/gtramontina/ooze>)
+- Mutation tools: gremlins v0.6.0, 2025-12-06 (<https://github.com/go-gremlins/gremlins>);
+  go-mutesting, maintained fork `avito-tech/go-mutesting` v2.3.1, 2025-12-26
+  (<https://github.com/avito-tech/go-mutesting>); mutest (<https://github.com/fchimpan/mutest>);
+  ooze (<https://github.com/gtramontina/ooze>)
 - CRAP tools: crap4go (<https://github.com/unclebob/crap4go>)
-- golangci-lint v2 notes (<https://golangci-lint.run>; community setup write-ups)
+- golangci-lint v2.15.0, 2026-10-16 (<https://golangci-lint.run>; release notes on
+  <https://github.com/golangci/golangci-lint/releases>)
+- Go 1.27 APIs named in the template: `synctest.Sleep`
+  (<https://pkg.go.dev/testing/synctest#Sleep>), `httptest.NewTestServer`
+  (<https://pkg.go.dev/net/http/httptest#NewTestServer>), the `goroutineleak` profile
+  (<https://pkg.go.dev/runtime/pprof>)

@@ -1,0 +1,21 @@
+name: docs
+on: pull_request
+permissions:
+  contents: write
+concurrency:
+  group: docs
+  cancel-in-progress: true
+jobs:
+  a:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo ok
+  b:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo ok
+  docs:
+    needs: [a]
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo done

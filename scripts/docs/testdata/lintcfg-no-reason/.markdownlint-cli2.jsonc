@@ -1,0 +1,9 @@
+{
+  "config": {
+    "default": true,
+    // Prose is written one paragraph per line in this fixture.
+    "MD013": false,
+    // short
+    "MD033": false
+  }
+}
