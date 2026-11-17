@@ -9,6 +9,7 @@
 | G-03 | Third law with a pipe \| in it | A | at | |
 
 The report states "1 of 3 laws judged", and 2 active laws remain.
+That is 1 active v0.1 law out of 3 catalog rows, retired rows included.
 Rust-TOPS has a sibling suite with 53 laws and 15 judged.
 
 **v0.1 target:** judge 1 law mechanically (the ✓ rows), mirroring Rust-TOPS's
@@ -22,6 +23,12 @@ approach of shipping a minority of laws.
 ```json
 { "catalog": 3, "judged": 1, "not_evaluated": 1 }
 ```
+
+The report derives its counts from the catalog and the law files:
+
+- `catalog`: every law row, retired ones included (3);
+- `active`: laws not retired (2);
+- `judged`: applicable laws with a verdict other than not-evaluated.
 
 ### 5.3 Profile file shape
 

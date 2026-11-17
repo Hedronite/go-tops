@@ -119,6 +119,10 @@ func TestPlantedCountsAlongsideSiblingNamesFail(t *testing.T) {
 		{"line-names-sibling-suite", "judge 1 law mechanically", "judge 2 law mechanically", "states v01 = 2; the catalog has v01 = 1"},
 		{"cell-names-sibling-suite", "native multichecker (3 laws);", "native multichecker (2 laws);", "states catalog = 2; the catalog has catalog = 3"},
 		{"report-not-evaluated", `"not_evaluated": 1`, `"not_evaluated": 2`, "states not_evaluated = 2; the catalog has not_evaluated = 1"},
+		{"catalog-rows-phrase", "out of 3 catalog rows", "out of 4 catalog rows", "states catalog = 4; the catalog has catalog = 3"},
+		{"singular-active-law", "1 active v0.1 law", "2 active v0.1 law", "states v01 = 2; the catalog has v01 = 1"},
+		{"field-bullet-catalog", "retired ones included (3);", "retired ones included (4);", "states catalog = 4; the catalog has catalog = 3"},
+		{"field-bullet-active", "laws not retired (2);", "laws not retired (3);", "states active = 3; the catalog has active = 2"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -265,18 +269,23 @@ func TestMaskCode(t *testing.T) {
 func TestReadStatements(t *testing.T) {
 	type s = statement
 	for line, want := range map[string][]s{
-		"The report states \"18 of 41 laws judged.\"":                                                         {{"v01", 18, ""}, {"catalog", 41, ""}},
-		"judge 18 laws mechanically (the rows)":                                                               {{"v01", 18, ""}},
-		"| **M3** | 18 laws judged (native) | \"18 of 41 judged\" |":                                          {{"v01", 18, ""}, {"v01", 18, ""}, {"catalog", 41, ""}},
-		"17 active v0.1 laws and 40 active laws":                                                              {{"v01", 17, ""}, {"active", 40, ""}},
-		"Law catalog (draft: 41 laws, `G-01`…`G-41`)":                                                         {{"catalog", 41, ""}, {"catalog", 41, ""}},
-		"Rust-TOPS 1.1.0 defines 53 laws":                                                                     nil,
-		"| Laws engine | Bend2 (53 laws, 15 judged) | native (41 laws) |":                                     {{"catalog", 41, ""}},
-		"**v0.1 target:** judge 18 laws mechanically (the rows), mirroring Rust-TOPS's":                       {{"v01", 18, ""}},
-		"| Laws engine | Bend2 (53 laws, 15 judged) | Native multichecker (41 laws); no Bend or Lean layer |": {{"catalog", 41, ""}},
-		`"catalog": 41, "judged": 18, "not_evaluated": 23`:                                                    {{"catalog", 41, ""}, {"v01", 18, ""}, {"not_evaluated", 23, ""}},
-		"Rust-TOPS defines 53 laws, this defines 41 laws":                                                     {{"catalog", 41, ""}},
-		"no counts here, only 3 of 5 things":                                                                  nil,
+		"The report states \"18 of 41 laws judged.\"":                                                              {{"v01", 18, ""}, {"catalog", 41, ""}},
+		"judge 18 laws mechanically (the rows)":                                                                    {{"v01", 18, ""}},
+		"| **M3** | 18 laws judged (native) | \"18 of 41 judged\" |":                                               {{"v01", 18, ""}, {"v01", 18, ""}, {"catalog", 41, ""}},
+		"17 active v0.1 laws and 40 active laws":                                                                   {{"v01", 17, ""}, {"active", 40, ""}},
+		"Law catalog (draft: 41 laws, `G-01`…`G-41`)":                                                              {{"catalog", 41, ""}, {"catalog", 41, ""}},
+		"Rust-TOPS 1.1.0 defines 53 laws":                                                                          nil,
+		"| Laws engine | Bend2 (53 laws, 15 judged) | native (41 laws) |":                                          {{"catalog", 41, ""}},
+		"**v0.1 target:** judge 18 laws mechanically (the rows), mirroring Rust-TOPS's":                            {{"v01", 18, ""}},
+		"| Laws engine | Bend2 (53 laws, 15 judged) | Native multichecker (41 laws); no Bend or Lean layer |":      {{"catalog", 41, ""}},
+		`"catalog": 41, "judged": 18, "not_evaluated": 23`:                                                         {{"catalog", 41, ""}, {"v01", 18, ""}, {"not_evaluated", 23, ""}},
+		"Rust-TOPS defines 53 laws, this defines 41 laws":                                                          {{"catalog", 41, ""}},
+		"- `catalog`: every law row, retired ones included (41);":                                                  {{"catalog", 41, ""}},
+		"- `active`: laws not retired (40);":                                                                       {{"active", 40, ""}},
+		"- `judged`: applicable laws with a verdict (not-evaluated is none)":                                       nil,
+		`report states "16 of 43 laws judged": 16 active v0.1 laws out of 43 catalog rows, retired rows included.`: {{"v01", 16, ""}, {"catalog", 43, ""}, {"v01", 16, ""}, {"catalog", 43, ""}},
+		"1 active v0.1 law out of 3 catalog rows, retired rows included.":                                          {{"v01", 1, ""}, {"catalog", 3, ""}},
+		"no counts here, only 3 of 5 things":                                                                       nil,
 	} {
 		got := readStatements(line)
 		if len(got) != len(want) {

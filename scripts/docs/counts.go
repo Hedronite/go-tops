@@ -138,7 +138,7 @@ var countPats = []countPat{
 	{regexp.MustCompile(`"judged":\s*(\d+)`), one("v01", 1)},
 	{regexp.MustCompile(`"not_evaluated":\s*(\d+)`), one("not_evaluated", 1)},
 	{regexp.MustCompile("`G-01`(?:…|\\.\\.\\.)`G-(\\d+)`"), one("catalog", 1)},
-	{regexp.MustCompile(`\b(\d+) active (v0\.1 )?laws\b`), func(m []string) []statement {
+	{regexp.MustCompile(`\b(\d+) active (v0\.1 )?laws?\b`), func(m []string) []statement {
 		n, _ := strconv.Atoi(m[1])
 		if m[2] != "" {
 			return []statement{{"v01", n, m[0]}}
@@ -148,6 +148,7 @@ var countPats = []countPat{
 	{regexp.MustCompile(`\b(\d+) laws? (?:judged|mechanically)\b`), one("v01", 1)},
 	{regexp.MustCompile(`\bjudge (\d+) laws\b`), one("v01", 1)},
 	{regexp.MustCompile(`\b(\d+) judged\b`), one("v01", 1)},
+	{regexp.MustCompile(`\b(\d+) catalog rows?\b`), one("catalog", 1)},
 	{regexp.MustCompile(`\b(\d+) laws\b`), one("catalog", 1)},
 }
 
@@ -186,12 +187,24 @@ func clauses(s string) [][2]int {
 	return append(out, [2]int{start, len(masked)})
 }
 
+// fieldBulletRe reads a report-field bullet such as
+//
+//   - `catalog`: every law row, retired ones included (43);
+//
+// whole, because its commas would otherwise split the number from its field.
+var fieldBulletRe = regexp.MustCompile("^\\s*[-*]\\s+`(catalog|active)`:[^(]*\\((\\d+)\\)")
+
 // readStatements returns the catalog counts a line states. A clause that names
 // a sibling suite is skipped, and only that clause: the numbers around it in
 // the same line or table cell are still read.
 func readStatements(line string) []statement {
 	var out []statement
 	for _, seg := range segments(line) {
+		if m := fieldBulletRe.FindStringSubmatch(seg); m != nil {
+			n, _ := strconv.Atoi(m[2])
+			out = append(out, statement{Qty: m[1], N: n, Text: m[0]})
+			continue
+		}
 		for _, c := range clauses(seg) {
 			out = append(out, readClause(seg[c[0]:c[1]])...)
 		}
