@@ -4,9 +4,10 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"sync"
+	"slices"
 
 	gotops "github.com/Hedronite/go-tops"
+	"github.com/Hedronite/go-tops/internal/laws"
 )
 
 // ErrNoProfile is returned by ProfileFor for a class that has no embedded
@@ -71,39 +72,31 @@ type LawInfo struct {
 	Tier int
 }
 
-// Laws answers questions about the law catalog. The runner's table (M1-G3,
-// internal/laws) is the real catalog; DefaultLaws stands in for it.
+// Laws answers questions about the law catalog. DefaultLaws is the real one:
+// the table of GO_TOPS.md §8.2 in internal/laws.
 type Laws interface {
 	// Lookup returns the law's facts for a class, and false when the ID is not
 	// in the catalog.
 	Lookup(id, class string) (LawInfo, bool)
 }
 
-// DefaultLaws is the stand-in catalog: the laws every launch profile requires,
-// which are the laws with a live reader in this release (§5.3), all at tier 1 or
-// below. Any other ID is reported as not in the catalog until the runner's
-// table replaces this.
-func DefaultLaws() Laws { return profileLaws{} }
+// DefaultLaws is the catalog of §8.2, held by internal/laws.
+func DefaultLaws() Laws { return catalogLaws{} }
 
-type profileLaws struct{}
+type catalogLaws struct{}
 
-var launchRequired = sync.OnceValue(func() map[string]bool {
-	set := map[string]bool{}
-	for _, class := range []string{"binary-cli", "binary-service", "library-core"} {
-		p, err := ProfileFor(class)
-		if err != nil {
-			continue
-		}
-		for _, id := range p.Laws.Required {
-			set[id] = true
-		}
-	}
-	return set
-})
-
-func (profileLaws) Lookup(id, _ string) (LawInfo, bool) {
-	if !launchRequired()[id] {
+// Lookup reads the §8.2 table. A law applies to a class when it is active and
+// the class is in its classes list (§8.3); it has a reader when an analyzer
+// or a tool judges it, not when it is attested or not yet implemented; its
+// tier is the tier of that reader (§3.2).
+func (catalogLaws) Lookup(id, class string) (LawInfo, bool) {
+	l, ok := laws.Lookup(id)
+	if !ok {
 		return LawInfo{}, false
 	}
-	return LawInfo{Applies: true, HasReader: true, Tier: 1}, true
+	return LawInfo{
+		Applies:   l.Active() && slices.Contains(l.Classes, class),
+		HasReader: l.Reader == laws.ReaderAnalyzer || l.Reader == laws.ReaderTool,
+		Tier:      l.Tier,
+	}, true
 }

@@ -8,7 +8,7 @@
 # unexpired `expires`, and every required law is `not-evaluated` for `no_reader`
 # (.github/workflows/ci.yml, "assert the report"). At M5 this file switches to
 # `enforce: hard` and the `advisory` key goes.
-protocol: "0.4.1"
+protocol: "0.4.2"
 version: "0.1.0"
 module: github.com/Hedronite/go-tops
 class: binary-cli
@@ -44,7 +44,7 @@ gates:
   mutation:
     enabled: false
     reason: the mutation layer lands at M4
-    expires: "2027-03-01"
+    expires: "2027-03-15"
 
 layers:
   fuzz:  { targets: ["./internal/config:FuzzLoad"] }

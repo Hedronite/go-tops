@@ -1,6 +1,6 @@
 # Go-TOPS: Go Testing and Optimization Protocol Suite
 
-**Spec status:** 0.4.1 (0.4.0 was the previous revision) · **Date:** 2026-11-17 · **Owner:** Hedronite
+**Spec status:** 0.4.2 (0.4.1 was the previous revision) · **Date:** 2026-11-17 · **Owner:** Hedronite
 **Modeled on:** [Rust-TOPS](https://github.com/Hedronite/rust-tops) (protocol 1.2.0 on `main`; the latest release tag, `cargo-tops` v0.3.0, carries protocol 1.1.0, and `main` holds package 0.4.0, untagged; read 2026-11-17)
 
 > **Changes from 0.2.0 to 0.3.0:** One CRAP cap per class; authorship marking removed (§5.2, §6.2).
@@ -75,7 +75,7 @@ Plus a practice layer (human and agent working rules, §13 and `AGENTS.md`) and 
 
 | Item | Value |
 |---|---|
-| Protocol version | **0.4.1** (0.4.0 was the previous revision; 1.0.0 is set by the criterion in §19) |
+| Protocol version | **0.4.2** (0.4.1 was the previous revision; 1.0.0 is set by the criterion in §19) |
 | Package version | 0.0.0 (unreleased) |
 | Language floor ("MSRV" analogue) | Go **1.26**, the oldest Go release still supported upstream (a policy: the floor moves when upstream drops support). The floor is a language version, compared in Go's own order (`go/version.Lang`), so a `go 1.26` and a `go 1.26.4` directive both meet it. Matrix tests floor and current (current: Go 1.27) |
 | Toolchain pin | The exact Go release in `go-tops.lock` (§10). `GOTOOLCHAIN=local` makes the `go` command use the toolchain it ships with and never reads the `toolchain` line, so a runner with another patch release would pass silently: the gate therefore checks that `go env GOVERSION` equals the pin (§3.1, G-33). A `toolchain` line is optional: with or without one, and whether the `go` line names a language version (`go 1.26`) or a patch release (`go 1.27.4`), the pin is the release in the lock |
@@ -405,7 +405,7 @@ its own fuzz globs in `layers.fuzz.targets`, which G-43 reads.
 ```yaml
 # profiles/binary-cli.yaml
 class: binary-cli
-protocol: "0.4.1"
+protocol: "0.4.2"
 gates:
   coverage: { statements_floor: 70 }
   crap: { cap: 10, complexity: { err_guard_discount: true, wrap_functions: [] } }
@@ -421,7 +421,7 @@ laws:
 ```yaml
 # profiles/binary-service.yaml
 class: binary-service
-protocol: "0.4.1"
+protocol: "0.4.2"
 gates:
   coverage: { statements_floor: 75 }
   crap: { cap: 10, complexity: { err_guard_discount: true, wrap_functions: [] } }
@@ -437,7 +437,7 @@ laws:
 ```yaml
 # profiles/library-core.yaml
 class: library-core
-protocol: "0.4.1"
+protocol: "0.4.2"
 gates:
   coverage: { statements_floor: 85 }
   crap: { cap: 8, complexity: { err_guard_discount: true, wrap_functions: [] } }   # provisional (§5.2)
@@ -466,9 +466,9 @@ laws:
 - Floors per class (§5.2) live in `go-tops.yaml` as `gates.coverage.statements_floor`.
 - Gate fails when the profile is missing or empty (`test -s`), or holds no block of a production
   file (§3.4, rule 5).
-- Coverage is computed on the module's own packages; generated files (`*.gen.go`,
-  `// Code generated ... DO NOT EDIT.`) are excluded by default, with an explicit allowlist for
-  inclusion.
+- Coverage is computed on the module's own packages. Generated files (`*.gen.go`,
+  `// Code generated ... DO NOT EDIT.`) are excluded unless `gates.coverage.exclude_generated` is
+  `false`; a per-file inclusion allowlist is roadmap work.
 
 ### 6.2 CRAP
 
@@ -1189,7 +1189,7 @@ depth fails.
 
 <!-- go-tops:example path=config/go-tops.example.yaml schema=schema/go-tops.schema.json -->
 ```yaml
-protocol: "0.4.1"            # must match the schema's protocol constant
+protocol: "0.4.2"            # must match the schema's protocol constant
 version: "0.1.0"             # this config's version (non-empty)
 module: github.com/acme/myapp
 class: binary-cli            # one of the schema's classes
@@ -1273,6 +1273,12 @@ and `layers.synctest` (a leak check is law G-42, and `synctest` tests run in the
 `layers.fuzz.tier` and `layers.fuzz.replay_seed_corpus` (seed replay is part of the test run, §7).
 A config that still sets one fails `check`, because the schema allows no unknown key.
 
+**Strict YAML.** `check` reads `go-tops.yaml`, `go-tops.lock` and the two ledgers as strict YAML,
+so that one text has one meaning in every YAML reader: no anchors, aliases or merge keys, no key
+repeated in a mapping, no key that is not a string, no second document, and no unquoted date (an
+unquoted `2027-03-01` is a timestamp, not the text the schema asks for, so a date is written in
+quotes). A file that breaks one of these fails `check`, exit 2, before the schema is consulted.
+
 Config files the drop-in set may include: `go-tops.yaml`, `go-tops.lock`, `AGENTS.md`,
 `.golangci.yml`, mutation-engine config, `.github/workflows/go-tops.yml`, `justfile`, `.go-tops/`
 (ledgers and report).
@@ -1295,12 +1301,14 @@ Purpose: make the gate reproducible, with one pin mechanism for each kind of too
   object.
 - **A downloaded binary** resolves to `.go-tops/bin/<name>` (gitignored), then to `PATH`.
   Whatever path is used, the gate checks the file's SHA-256 against `go-tops.lock` for the host
-  platform before it runs it, and a mismatch is exit 2 (§12.2).
+  platform before it runs it, and a mismatch is exit 2 (§12.2). The hash it compares is
+  `executable_sha256` where the entry has `extract` (the installed file is the executable, and an
+  archive hash cannot verify it), and `sha256` where it has not.
 - **`gotops lock --verify`** re-checks every pin. For a module tool it builds the binary and
   reads the module version with `go version -m` (a `go install` build reports its own version as
   `dev`, so `--version` text is never compared), then compares it with `tools/go.mod`. For a
-  downloaded binary it compares the SHA-256, and for the toolchain it compares
-  `go env GOVERSION`.
+  downloaded binary it compares the SHA-256 of the installed executable, as above, and for the
+  toolchain it compares `go env GOVERSION`.
 - **Trust model:** checksum-verified. Where an upstream release is mutable or unsigned, use
   trust-on-first-use and record that in the lock. `gotops lock --update` is a reviewed change,
   never an automatic one.
@@ -1317,16 +1325,17 @@ identical to the file and validates the file against the schema.
 | `binaries[].name`, `.version` | The tool and its exact release, with no leading `v` |
 | `binaries[].url` | An `https` URL template. The only placeholders are `{version}`, `{os}` and `{arch}` |
 | `binaries[].extract` | Optional. Where the executable sits inside the downloaded archive, as a template with the same placeholders. Absent when the download is the executable |
-| `binaries[].sha256` | The SHA-256 of the downloaded file, one per platform: `darwin/arm64`, `darwin/amd64`, `linux/amd64` and `linux/arm64`. All four are required |
+| `binaries[].sha256` | The SHA-256 of the downloaded file (the archive, when there is an `extract` path), one per platform: `darwin/arm64`, `darwin/amd64`, `linux/amd64` and `linux/arm64`. All four are required. It is what a download is checked against when it is fetched |
+| `binaries[].executable_sha256` | The SHA-256 of the executable inside the archive, one per platform, the same four keys. Required on every entry that has `extract`, and absent on one that has not |
 
 <!-- go-tops:example path=config/go-tops.example.lock schema=schema/lock.schema.json -->
 ```yaml
-protocol: "0.4.1"               # must match the schema protocol constant
+protocol: "0.4.2"               # must match the schema protocol constant
 toolchain: go1.27.4             # go env GOVERSION must equal this
 
 trust:
   mode: checksum
-  note: SHA-256 values copied from the upstream release checksum file
+  note: archive SHA-256 values copied from the upstream release checksum file; executable SHA-256 values computed from those verified archives
 
 binaries:
   - name: golangci-lint
@@ -1338,6 +1347,11 @@ binaries:
       darwin/amd64: 767b899a28285e88ded2823d5dcc4bc5ef681173eb2d80f029a7b17ee4ece3b8
       linux/amd64: 9b7fe6a6bf6334b98decf8d86b11415ea7889afdabdd1959fdce23af2a9ebcea
       linux/arm64: b4d8f17068b35ee6060cc2f69a16fb48740d706fbba81661c318649c114a6998
+    executable_sha256:
+      darwin/arm64: 71b89744ef6dd92dad9026b70489d1ad660da79ef90dfb5aabe995d916bec8a9
+      darwin/amd64: e04962742507a5f37a4002a7a8b2b549f6864f17807eb5d534d947f6311a051f
+      linux/amd64: d9af4564c05beb2f5e130119aec45e5e89d28e5017d558d3ca382659f2427894
+      linux/arm64: 14680d7674eb1fed0405446670e15dcffb74e979ef0dcd41f998c088fd6babfb
 ```
 
 ---
@@ -1434,7 +1448,7 @@ CI keeps the block identical to the file and validates the file against the sche
 <!-- go-tops:example path=config/gate-report.example.json schema=schema/gate-report.schema.json -->
 ```json
 {
-  "protocol": "0.4.1",
+  "protocol": "0.4.2",
   "tool_version": "0.0.0",
   "module": "github.com/acme/myapp",
   "class": "binary-cli",
@@ -1453,7 +1467,15 @@ CI keeps the block identical to the file and validates the file against the sche
   "layers": [
     {
       "id": "hygiene", "tier": 1, "outcome": "pass",
-      "details": { "golangci_lint": "v2.15.0", "findings": 0 }
+      "details": { "golangci_lint": "v2.15.0", "findings": 0,
+                   "tidy": { "outcome": "pass" },
+                   "verify": { "outcome": "pass" },
+                   "toolchain": { "outcome": "pass", "go_version": "go1.27.4", "pinned": "go1.27.4" },
+                   "format": { "outcome": "pass", "files": [] },
+                   "lint": { "outcome": "pass", "findings": 0, "by_linter": {} },
+                   "vulnerabilities": { "outcome": "pass", "db_last_modified": "2026-11-17T09:12:44Z", "time_dependent": true,
+                                        "fail_on": "reachable", "reachable": [], "other": 0 },
+                   "licenses": { "outcome": "pass", "allowed": ["MIT", "Apache-2.0", "BSD-3-Clause", "BSD-2-Clause", "ISC"] } }
     },
     {
       "id": "tests", "tier": 1, "outcome": "pass",
@@ -1530,13 +1552,21 @@ Report rules:
 - A CRAP violation with `"baseline": null` is a function with no entry in the ledger, so it is
   held to the cap. Otherwise `baseline` is its ledger score, and the function may not exceed it
   by more than 0.01 (§6.7).
-- `details` is required, and typed, for four layers whenever they ran (outcome `pass`, `fail` or
-  `vacuous`): tests (`packages`, `tests`, `race`, `skipped`,
+- `details` is required, and typed, for five layers whenever they ran (outcome `pass`, `fail` or
+  `vacuous`): hygiene (`golangci_lint`, a release such as `v2.15.0` or `unknown`; `findings` of the
+  adopter-style lint pass; and one object per check of gate 1, `tidy`, `verify`, `toolchain`
+  (`go_version`, `pinned`), `format` (`files`), `lint` (`findings`, `by_linter`),
+  `vulnerabilities` and `licenses` (`allowed`), and `depguard` only when `deps.depguard` is true,
+  each with an `outcome` of `pass`, `fail` or
+  `tool-missing` and a `message` that says why when it did not pass; `vulnerabilities` also
+  carries `db_last_modified`, `time_dependent: true`, `fail_on`, `reachable` (OSV IDs, with
+  `fixed_version` where known) and `other`, and it can change verdict with no code change,
+  because the database moves, §3.1), tests (`packages`, `tests`, `race`, `skipped`,
   `shuffle_seed`), coverage (`statements_pct`, `floor`, `profile_bytes`), CRAP (`cap`,
   `violations`, and `exempt` for functions scored under an exemption) and mutation (the counts of
   §6.4, with `timed_out` and `timed_out_keys` for mutants that hung, `dropped` for mutants
   that did not compile, and `exempt` for the survivor keys of mutants under a `mutation`
-  exemption). A layer of these four whose outcome is `fail` may carry `{ "error": "<text>" }`
+  exemption). A layer of these five whose outcome is `fail` may carry `{ "error": "<text>" }`
   instead, when its tool output was empty or did not parse: there is no measurement to report,
   and the layer is `fail`, never `not-run` (§3.4, rule 5). The error form is valid only with
   outcome `fail`, and its text has a non-space character. `exemptions` lists every exemption in
@@ -1650,7 +1680,7 @@ wrong; the config wins.
 
 ---
 
-## 16. Decisions (resolved for v0.4.1; remaining calibration items noted)
+## 16. Decisions (resolved for v0.4.2; remaining calibration items noted)
 
 1. **Complexity rule (`err_guard_discount`):** **true** in every class, for guards that only return the error (wrapped or not). errcheck `check-blank` and `check-type-assertions` are required, so discarding the error is not cheaper than handling it. Explicit in every profile. (§6.3) *Changed in 0.3.0; 0.2.0 turned it off for `library-core` and `concurrency-runtime`.*
 2. **Authorship marking:** None. One CRAP cap per class for every author. (§5.2, §6.2) *Changed in 0.3.0; 0.2.0 used an `Authored-By: agent` trailer that raised the cap.*
@@ -1683,6 +1713,9 @@ wrong; the config wins.
 29. **The kit's bootstrap:** until its laws layer judges the profile's required laws (M5), Go-TOPS runs `advisory` on itself, with the `advisory` key, an expiry at the M5 target and a CI that requires gates 1–3 `pass`; then it runs `hard`. (§6.7, §17, §19) *New in 0.4.1.*
 30. **The tool lock has a schema:** `schema/lock.schema.json` validates `go-tops.lock`, and `config/go-tops.example.lock` is a checked example. (§10, §18) *New in 0.4.1.*
 31. **What `gate` exits under `advisory`:** 0 for a run that starts; codes 2, 3 and 4 still apply. The report keeps the outcome the run would have under `hard`, with `summary.enforced` `false` and `summary.advisory_expires`. (§6.7, §12.2, §12.3) *New in 0.4.1.*
+32. **The lock pins the executable:** an entry with `extract` carries `executable_sha256` per platform, and the gate and `lock --verify` compare the installed executable with it, because the archive hash cannot verify an installed file. (§10) *New in 0.4.2.*
+33. **Strict YAML:** the files `check` reads are strict YAML, so one text has one meaning in every reader. (§9) *New in 0.4.2.*
+34. **Hygiene details are typed:** the hygiene layer reports `golangci_lint`, `findings` and one object per check of gate 1 (`tidy`, `verify`, `toolchain`, `format`, `lint`, `vulnerabilities`, `licenses`), each with its `outcome`, or `{error}` when it measured nothing. (§12.3) *New in 0.4.2.*
 
 ---
 
@@ -1755,10 +1788,10 @@ The schemas are files in `schema/`, JSON Schema 2020-12:
 
 | File | What it validates |
 |---|---|
-| `schema/go-tops.schema.json` | `go-tops.yaml` and the class profiles in `profiles/`: one shape for both. `additionalProperties: false` at every object, so an unknown key at any depth fails. Its `protocol` is the constant `0.4.1` |
+| `schema/go-tops.schema.json` | `go-tops.yaml` and the class profiles in `profiles/`: one shape for both. `additionalProperties: false` at every object, so an unknown key at any depth fails. Its `protocol` is the constant `0.4.2` |
 | `schema/gate-report.schema.json` | `.go-tops/report.json` (§12.3): every layer with its tier and outcome, every law with its verdict and reason code, the laws counts, the vulnerability database timestamp and the shuffle seed |
 | `schema/core.schema.json` | The definitions the configuration and report schemas share: layer outcomes, law verdicts, reason codes, run outcomes, enforcement modes, law IDs, the baseline ledger and the exemption record. Both `$ref` it and define none of these again. It is a local copy: the TOPS shared core will replace it by a checked sync |
-| `schema/lock.schema.json` | `go-tops.lock` (§10): the toolchain, the trust mode and the downloaded binaries, each with an exact version, a URL template and a SHA-256 for each of four platforms. `additionalProperties: false` at every object. Its `protocol` is the constant `0.4.1` |
+| `schema/lock.schema.json` | `go-tops.lock` (§10): the toolchain, the trust mode and the downloaded binaries, each with an exact version, a URL template and a SHA-256 for each of four platforms. `additionalProperties: false` at every object. Its `protocol` is the constant `0.4.2` |
 
 `schema/core.schema.json` also defines the entries of the two ledger files that `check`
 validates: `survivorEntry` for `.go-tops/survivors.yaml` (§6.4) and `ackEntry` for

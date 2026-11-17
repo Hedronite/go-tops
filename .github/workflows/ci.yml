@@ -54,6 +54,7 @@ jobs:
           - name: floor
             os: ubuntu-latest
             floor: true
+            lint_platform: linux-amd64
     runs-on: ${{ matrix.os }}
     steps:
       # fetch-depth 0: the mutation diff needs history (GO_TOPS.md §6.4).
@@ -69,6 +70,34 @@ jobs:
           cache-dependency-path: |
             go.sum
             tools/go.sum
+
+      # golangci-lint is installed before anything that runs the tests, on every leg:
+      # the hygiene tests run the real tool, and a test that ends tool-missing proves
+      # nothing. The tarball is checked against the SHA-256 pinned below (the same
+      # value as go-tops.lock's `sha256` for the platform), and the gate checks the
+      # installed executable against the lock's `executable_sha256` before it runs
+      # it, so a wrong file is a lock mismatch, not a quiet pass. The tool is found
+      # on PATH (GO_TOPS.md §10); a bump is a new hash here and a new lock entry.
+      - name: install golangci-lint v2.15.0
+        env:
+          VERSION: 2.15.0
+          PLATFORM: ${{ matrix.lint_platform }}
+        run: |
+          set -euo pipefail
+          case "${PLATFORM}" in
+            linux-amd64)  sha=9b7fe6a6bf6334b98decf8d86b11415ea7889afdabdd1959fdce23af2a9ebcea ;;
+            darwin-arm64) sha=d1e409481a8ca846c4bc97e781eb5cb1bd5c23353a0b3977a1cbda1b1b6447d5 ;;
+            *) echo "::error::no pinned hash for ${PLATFORM}"; exit 1 ;;
+          esac
+          archive="${RUNNER_TEMP}/golangci-lint.tar.gz"
+          curl --fail --silent --show-error --location --output "${archive}" \
+            "https://github.com/golangci/golangci-lint/releases/download/v${VERSION}/golangci-lint-${VERSION}-${PLATFORM}.tar.gz"
+          echo "${sha}  ${archive}" | shasum -a 256 -c -
+          mkdir -p "${RUNNER_TEMP}/golangci-lint"
+          tar -xzf "${archive}" --strip-components=1 -C "${RUNNER_TEMP}/golangci-lint"
+          echo "${RUNNER_TEMP}/golangci-lint" >> "${GITHUB_PATH}"
+      - name: golangci-lint version
+        run: golangci-lint version
 
       # --- the language-floor leg ---
       - name: toolchain is the floor release
@@ -88,29 +117,6 @@ jobs:
         run: go test -race -shuffle=on -count=1 ./...
 
       # --- the full gate legs ---
-      # The downloaded binary goes where the gate looks first, .go-tops/bin/, and
-      # the gate checks its SHA-256 against go-tops.lock before it runs it, so a
-      # wrong file here is a lock mismatch, not a quiet pass. The hash below is the
-      # one in go-tops.lock for the platform; the two must agree.
-      - name: install golangci-lint v2.15.0
-        if: ${{ !matrix.floor }}
-        env:
-          VERSION: 2.15.0
-          PLATFORM: ${{ matrix.lint_platform }}
-        run: |
-          set -euo pipefail
-          case "${PLATFORM}" in
-            linux-amd64)  sha=9b7fe6a6bf6334b98decf8d86b11415ea7889afdabdd1959fdce23af2a9ebcea ;;
-            darwin-arm64) sha=d1e409481a8ca846c4bc97e781eb5cb1bd5c23353a0b3977a1cbda1b1b6447d5 ;;
-            *) echo "::error::no pinned hash for ${PLATFORM}"; exit 1 ;;
-          esac
-          archive="${RUNNER_TEMP}/golangci-lint.tar.gz"
-          curl --fail --silent --show-error --location --output "${archive}" \
-            "https://github.com/golangci/golangci-lint/releases/download/v${VERSION}/golangci-lint-${VERSION}-${PLATFORM}.tar.gz"
-          echo "${sha}  ${archive}" | shasum -a 256 -c -
-          mkdir -p .go-tops/bin "${RUNNER_TEMP}/golangci-lint"
-          tar -xzf "${archive}" --strip-components=1 -C "${RUNNER_TEMP}/golangci-lint"
-          install "${RUNNER_TEMP}/golangci-lint/golangci-lint" .go-tops/bin/golangci-lint
       # The kit gates the code in this checkout, so it runs it with `go run`: no
       # tag of go-tops exists to pin, and tools/go.mod holds the module tools the
       # gate runs (gotestsum, govulncheck, go-licenses), not gotops itself. An
