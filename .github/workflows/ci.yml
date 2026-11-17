@@ -46,9 +46,6 @@ jobs:
       - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version: 1.27.x
-          # No go.sum exists until the first runtime dependency lands (M1-G2),
-          # and setup-go has nothing to key a cache on without one.
-          cache: false
       - name: build
         run: go build ./...
       # Tests run with cgo on: -race needs it on Linux (GO_TOPS.md §3.1).
@@ -99,7 +96,6 @@ jobs:
       - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version: ${{ env.FLOOR_GO }}
-          cache: false
       - name: toolchain is the floor release
         run: |
           set -euo pipefail
