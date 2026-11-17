@@ -8,13 +8,14 @@ import (
 	"regexp"
 )
 
-// The protocol version is stated four times and must be one value: the header
-// line of GO_TOPS.md, the "Protocol version" row of its section 2 table, and
-// the protocol constant of each schema the protocol ships.
+// The protocol version is stated in several places and must be one value: the
+// header line of GO_TOPS.md, the "Protocol version" row of its section 2 table,
+// and the protocol constant of each schema that has one (core.schema.json
+// holds shared definitions and has none).
 var (
 	headerVersionRe = regexp.MustCompile(`^\*\*Spec status:\*\*\s+(\S+)`)
 	protocolRowRe   = regexp.MustCompile(`^\|\s*Protocol version\s*\|\s*\*\*([^*]+)\*\*`)
-	versionSchemas  = []string{"schema/go-tops.schema.json", "schema/gate-report.schema.json"}
+	versionSchemas  = []string{"schema/go-tops.schema.json", "schema/gate-report.schema.json", "schema/lock.schema.json"}
 )
 
 type versionSource struct {

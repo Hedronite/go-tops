@@ -10,7 +10,7 @@ import (
 // JSON block must be a go-tops:example, so none can drift from its file or
 // skip the schema unchecked. A section runs from its heading to the next
 // heading of the same or a higher level, so its subsections are included.
-var exampleSections = []string{"5.3", "9", "12.3"}
+var exampleSections = []string{"5.3", "9", "10", "12.3"}
 
 var headingNumRe = regexp.MustCompile(`^(\d+(?:\.\d+)*)\.?(?:\s|$)`)
 
