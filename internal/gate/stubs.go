@@ -14,6 +14,10 @@ type stub struct {
 func (s stub) ID() string      { return s.id }
 func (s stub) Tier() int       { return s.tier }
 func (s stub) Needs() []string { return s.needs }
+
+// HasCommand is false: a stub is a layer with no command mapped (§3.3).
+func (stub) HasCommand() bool { return false }
+
 func (s stub) Run(context.Context, *Env) Result {
 	return NoCommand(s.id)
 }

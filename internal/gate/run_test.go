@@ -371,3 +371,31 @@ func TestVulnDBTimestampReachesTheReport(t *testing.T) {
 		t.Errorf("text does not say the layer is time-dependent:\n%s", r.Text)
 	}
 }
+
+// §3.3: not-run is "no command mapped" and not-reached is "has a command, but a
+// layer it needs did not pass". A layer with no command is not-run whatever its
+// needs did, and under --fail-fast; a layer with a command whose need is such a
+// layer is not-reached.
+func TestNoCommandIsNotRunWhateverItsNeeds(t *testing.T) {
+	c := cfg()
+	c.RequiredLaws = nil
+	mk := func() []Layer {
+		return []Layer{
+			&fakeLayer{id: "tests", tier: 1, res: res("tests", Fail)},
+			&fakeLayer{id: "coverage", tier: 1, needs: []string{"tests"}, noCmd: true},
+			&fakeLayer{id: "crap", tier: 1, needs: []string{"coverage"}, res: res("crap", Pass)},
+		}
+	}
+	o := layerOutcomes(mustRun(t, c, opts(), deps(mk())))
+	if o["tests"] != "fail" || o["coverage"] != "not-run" || o["crap"] != "not-reached" {
+		t.Fatalf("outcomes %v: coverage has no command so it is not-run although tests failed; crap has a command but its need did not pass", o)
+	}
+	o = layerOutcomes(mustRun(t, c, Options{MaxTier: 1, FailFast: true}, deps(mk())))
+	if o["coverage"] != "not-run" || o["crap"] != "not-reached" {
+		t.Fatalf("under --fail-fast: %v", o)
+	}
+	o = layerOutcomes(mustRun(t, c, Options{MaxTier: 1, Only: "crap"}, deps(mk())))
+	if o["coverage"] != "not-run" || o["crap"] != "not-reached" {
+		t.Fatalf("under --only crap: %v", o)
+	}
+}

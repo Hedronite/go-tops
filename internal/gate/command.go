@@ -85,6 +85,11 @@ func Main(ctx context.Context, args []string, d CommandDeps, stdout, stderr Prin
 
 	cfg, err := d.LoadConfig(d.Dir)
 	if err != nil {
+		var ee *EnvError
+		if errors.As(err, &ee) {
+			stderr.Printf("gotops gate: %v\n", err)
+			return ExitEnv
+		}
 		stderr.Printf("gotops gate: %v\n", &ConfigError{Err: err})
 		return ExitConfig
 	}
