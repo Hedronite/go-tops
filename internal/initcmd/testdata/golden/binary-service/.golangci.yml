@@ -1,0 +1,16 @@
+# Style only (GO_TOPS.md §8.1): no Go-TOPS law reads this file. The errcheck
+# settings match the law pass, so the editor and the gate agree.
+version: "2"
+
+linters:
+  default: standard
+  settings:
+    errcheck:
+      check-blank: true
+      check-type-assertions: true
+      exclude-functions:
+        - (io.ReadCloser).Close
+
+formatters:
+  enable:
+    - gofmt

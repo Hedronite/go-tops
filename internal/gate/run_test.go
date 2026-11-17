@@ -302,7 +302,7 @@ func TestReportHeader(t *testing.T) {
 	c.Exemptions = []report.Exemption{{Path: "a.go", Symbol: "F", Layer: "crap", Reason: "dispatch table, one call per arm", Owner: "platform", Expires: "2027-03-01"}}
 	r := mustRun(t, c, Options{MaxTier: 1, Base: "origin/release"}, d)
 	rep := r.Report
-	if rep.Protocol != "0.4.1" || rep.Module != "example.com/m" || rep.Class != "binary-cli" || rep.Enforce != "hard" || rep.ToolVersion != "0.0.0-dev" {
+	if rep.Protocol != report.Protocol || rep.Module != "example.com/m" || rep.Class != "binary-cli" || rep.Enforce != "hard" || rep.ToolVersion != "0.0.0-dev" {
 		t.Errorf("header %+v", rep)
 	}
 	if rep.Git.Head != "abc1234" || !rep.Git.Dirty || rep.Git.Base != "origin/release" {
@@ -362,12 +362,40 @@ func TestVulnDBTimestampReachesTheReport(t *testing.T) {
 	c := cfg()
 	c.RequiredLaws = nil
 	ls := gateLayers(nil, nil)
-	ls[0] = &fakeLayer{id: "hygiene", tier: 1, res: Result{Outcome: Pass, VulnDBTimestamp: "2026-11-17T09:12:44Z"}}
+	ls[0] = &fakeLayer{id: "hygiene", tier: 1, res: Result{Outcome: Pass, Details: details("hygiene"), VulnDBTimestamp: "2026-11-17T09:12:44Z"}}
 	r := mustRun(t, c, opts(), deps(ls))
 	if r.Report.VulnDBTimestamp == nil || *r.Report.VulnDBTimestamp != "2026-11-17T09:12:44Z" {
 		t.Fatalf("vuln_db_timestamp = %v", r.Report.VulnDBTimestamp)
 	}
 	if !strings.Contains(r.Text, "2026-11-17T09:12:44Z") || !strings.Contains(r.Text, "time-dependent") {
 		t.Errorf("text does not say the layer is time-dependent:\n%s", r.Text)
+	}
+}
+
+// §3.3: not-run is "no command mapped" and not-reached is "has a command, but a
+// layer it needs did not pass". A layer with no command is not-run whatever its
+// needs did, and under --fail-fast; a layer with a command whose need is such a
+// layer is not-reached.
+func TestNoCommandIsNotRunWhateverItsNeeds(t *testing.T) {
+	c := cfg()
+	c.RequiredLaws = nil
+	mk := func() []Layer {
+		return []Layer{
+			&fakeLayer{id: "tests", tier: 1, res: res("tests", Fail)},
+			&fakeLayer{id: "coverage", tier: 1, needs: []string{"tests"}, noCmd: true},
+			&fakeLayer{id: "crap", tier: 1, needs: []string{"coverage"}, res: res("crap", Pass)},
+		}
+	}
+	o := layerOutcomes(mustRun(t, c, opts(), deps(mk())))
+	if o["tests"] != "fail" || o["coverage"] != "not-run" || o["crap"] != "not-reached" {
+		t.Fatalf("outcomes %v: coverage has no command so it is not-run although tests failed; crap has a command but its need did not pass", o)
+	}
+	o = layerOutcomes(mustRun(t, c, Options{MaxTier: 1, FailFast: true}, deps(mk())))
+	if o["coverage"] != "not-run" || o["crap"] != "not-reached" {
+		t.Fatalf("under --fail-fast: %v", o)
+	}
+	o = layerOutcomes(mustRun(t, c, Options{MaxTier: 1, Only: "crap"}, deps(mk())))
+	if o["coverage"] != "not-run" || o["crap"] != "not-reached" {
+		t.Fatalf("under --only crap: %v", o)
 	}
 }

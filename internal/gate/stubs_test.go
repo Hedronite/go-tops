@@ -38,14 +38,11 @@ func TestEnabledStubsAreNotRunAndFail(t *testing.T) {
 	d.Layers = nil
 	r := mustRun(t, c, Options{MaxTier: 2}, d)
 	o := layerOutcomes(r)
+	// §3.3: a layer with no command is not-run, whatever its needs did. Every
+	// stub is such a layer, so none is not-reached.
 	for _, id := range []string{"hygiene", "tests", "coverage", "crap", "mutation", "allocs", "fuzz", "stress", "bench"} {
-		// coverage, crap and mutation need a layer that never passes
-		want := "not-run"
-		if id == "coverage" || id == "crap" || id == "mutation" {
-			want = "not-reached"
-		}
-		if o[id] != want {
-			t.Errorf("%s is %s, want %s", id, o[id], want)
+		if o[id] != "not-run" {
+			t.Errorf("%s is %s, want not-run", id, o[id])
 		}
 	}
 	if r.ExitCode != 1 || r.Report.LayerCounts.EnabledInRange != 9 || r.Report.LayerCounts.Ran != 0 {
@@ -53,8 +50,8 @@ func TestEnabledStubsAreNotRunAndFail(t *testing.T) {
 	}
 }
 
-// A stub reached on its own is not-run, not not-reached: --only crap pulls in
-// its needs, which are stubs, so they fail first.
+// --only crap pulls in the layers it needs; all three are stubs, so all three
+// are not-run (§3.3), and crap is not "not-reached".
 func TestDisabledStubsAreSkipWithReason(t *testing.T) {
 	c := cfg()
 	c.RequiredLaws = nil

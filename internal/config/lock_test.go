@@ -140,6 +140,12 @@ func TestLocksThatPass(t *testing.T) {
 		{"extract template", func(d doc) {
 			b := binaryDoc("golangci-lint")
 			b["extract"] = "golangci-lint-{version}-{os}-{arch}/golangci-lint"
+			b["executable_sha256"] = doc{
+				"darwin/arm64": sha("e"),
+				"darwin/amd64": sha("f"),
+				"linux/amd64":  sha("1"),
+				"linux/arm64":  sha("2"),
+			}
 			d["binaries"] = []any{b}
 		}},
 		{"pre-release version", func(d doc) {

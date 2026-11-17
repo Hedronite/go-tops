@@ -21,6 +21,20 @@ type Layer interface {
 	Run(ctx context.Context, env *Env) Result
 }
 
+// Commanded is implemented by a layer that can say it has no command mapped
+// yet. A layer that does not implement it has one. The runner asks before it
+// applies the needs rule: an enabled layer in range with no command is
+// not-run whatever its needs did, because not-reached is for a layer that has a
+// command (§3.3).
+type Commanded interface {
+	HasCommand() bool
+}
+
+func hasCommand(l Layer) bool {
+	c, ok := l.(Commanded)
+	return !ok || c.HasCommand()
+}
+
 // Preflighter is implemented by a layer that can find, before any layer runs,
 // that the run cannot start: a lock mismatch (*LockError, exit 2) or an
 // environment fault such as a missing C compiler (*EnvError, exit 3).
