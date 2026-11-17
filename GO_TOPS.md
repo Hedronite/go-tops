@@ -110,33 +110,90 @@ class requires them") with Go-appropriate equivalents (§7).
 
 ### 3.2 Tiers
 
-`gotops gate` runs every enabled layer **at or below `--max-tier`** (default **1**).
+`gotops gate` runs every enabled layer **at or below `--max-tier`** (default **1**). A layer or
+law above `--max-tier` is out of range: it is not run and is not counted against the run (§3.5).
 
-Rust-TOPS's public page states only that the laws layer is tier 0 and that the default max tier
-is 1; it does not define the other tiers. Go-TOPS therefore **proposes** a definition:
+Rust-TOPS defines tiers 0–5 (`RUST_TOPS.md` §3). Go-TOPS uses four:
 
 | Tier | Purpose | Typical runtime | Contents |
 |---|---|---|---|
-| **0** | Floor, always on | seconds | Laws layer; config/schema validation |
-| **1** | **Merge gate** (default) | minutes | Gates 1–5; class layers that are cheap (seed-corpus fuzz replay, leak checks, synctest tests) |
+| **0** | Floor, always on | seconds | Config and schema validation (`check`); the laws whose reader is `analyzer` |
+| **1** | **Merge gate** (default) | minutes | Gates 1–5; the laws whose reader is `tool`; class layers that run a command at tier 1. Seed-corpus fuzz replay, leak checks and `synctest` tests run inside the test run of gate 2 and are not layers (§7) |
 | **2** | **Deep / nightly** | tens of minutes to hours | Timed fuzzing; full-module mutation; long `-race -count=N` stress; benchmark regression vs baseline; full OS/arch/tag matrix |
 | **3** | **Release** | variable | Reproducible-build verification; vulnerability re-scan of the artifact (`govulncheck -mode=binary`); SBOM and signature checks; API-compat check (`gorelease`/`apidiff`-class **[verify]**) |
 
+**What `--max-tier 0` judges.** Tier 0 judges the laws whose reader is `analyzer`: each reads
+files itself (`go.mod`, the config, source syntax) and needs no other layer's output. It does
+not judge the laws whose reader is `tool`. Those map the output of a tier 1 layer (G-12 reads
+the lint JSON, G-40 the `govulncheck` output) and are judged at tier 1. In a `--max-tier 0` run
+they are out of range and listed as `not-evaluated` with reason `input_missing`, and they do not
+fail that run (§3.3). Exit 0 from `--max-tier 0` therefore means the tier 0 checks passed, not
+that the gate did.
+
 ### 3.3 Verdicts
 
-Every layer and law produces one verdict:
+<!-- tops-core:begin verdicts -->
+There are two vocabularies: **outcomes** for layers and **verdicts** for laws. They share no
+value, so a value never means two things.
 
-| Verdict | Meaning | Effect |
+**Casing.** Every enum value is lower case. Words in an outcome or a verdict are joined with `-`
+(`not-run`, `not-evaluated`), words in a reason code with `_` (`no_reader`), and JSON object keys
+use `snake_case`. Prose, config and the report spell each value the same way.
+
+**Layer outcomes** say what one layer did in one run.
+
+| Outcome | Meaning | Effect on the gate |
 |---|---|---|
-| `pass` | Evaluated and satisfied | none |
-| `Refuse` | Hard rule violated | **Fails the gate** |
-| `Ack` | Soft rule: needs a recorded acknowledgement (inline `//tops:ack G-NN reason="..."` or ledger entry) | Fails the gate if unacknowledged |
-| `skip` | The class does not require the layer, or `go-tops.yaml` sets it `enabled: false` | Printed with the reason; gate continues |
-| `not-run` | The layer is enabled but has no command mapped | **Fails the gate** |
-| `not-evaluated` | Reader or tool could not judge | Reported; **never counts as a pass** |
+| `pass` | The layer ran and its rule is met | none |
+| `fail` | The layer ran and its rule is broken | **fails** |
+| `skip` | The class does not require the layer, or `go-tops.yaml` sets it `enabled: false` with a `reason` | Printed with the reason; the layer is not enabled, so it is not counted |
+| `not-run` | The layer is enabled and in range but has no command mapped | **fails** |
+| `not-reached` | The layer is enabled and in range and has a command, but a layer it needs did not pass, or `--fail-fast` stopped the run before it (§3.5) | **fails** |
+| `vacuous` | The layer ran and had nothing to judge, in the one place this spec allows that: an empty mutation diff (§6.4) | Printed and counted for nothing: neither a pass nor a failure |
+| `tool-missing` | A tool the layer maps could not be found | **fails** |
 
-Hard rules encode as `Refuse`; soft rules as `Ack`. This is the same model Rust-TOPS uses for its
-laws.
+Everywhere else an empty result is `fail` (§3.4 rule 5).
+
+**Law verdicts** say what one law found.
+
+| Verdict | Meaning | Effect on the gate |
+|---|---|---|
+| `allow` | The law was judged and the code meets it | none |
+| `ack` | The law found an instance of a soft rule and the instance carries a recorded acknowledgement (below) | none, within the limit below |
+| `refuse` | The law found an instance it forbids, or an instance of a soft rule with no acknowledgement | **fails** |
+| `not-evaluated` | The law could not be judged. It carries one reason code | **fails** when the law is required (below); otherwise counted and never blocking |
+
+**Reason codes.** Every `not-evaluated` carries exactly one.
+
+| Code | Meaning |
+|---|---|
+| `no_reader` | No reader can judge the law in this run: it is `attested` and not yet attested, it is `tbd`, or its analyzer is not built |
+| `config_off` | The linter, setting or layer the law reads is switched off: a `tool` reader that finds errcheck, or its `check-blank` setting, off for G-12; a feeding layer set `enabled: false` |
+| `input_missing` | The output the reader needs was not produced: the layer that makes it was `not-run`, `not-reached` or `tool-missing`, or is above `--max-tier` |
+
+**Required laws.** The class profile's `laws.required` lists the laws the class cannot go
+without. A required law that is `not-evaluated` **fails the gate, whatever the reason**. A law
+outside the list that is `not-evaluated` is counted in the report and never blocks. A required
+law above `--max-tier` is out of range and does not fail that run (§3.2). Switching off the
+linter behind a required law therefore fails the gate, and a `not-evaluated` law is never read as
+`allow`.
+
+**Severity and acknowledgement.** Each law has a severity in §8.2: **R** or **A**. An instance of
+an R law is `refuse`. An instance of an A law is `ack` when it carries a recorded
+acknowledgement and `refuse` when it does not. A recorded acknowledgement is an inline
+`//tops:ack G-NN reason="…" owner="…"` comment, or an entry (law, file, reason, owner) in
+`.go-tops/acks.yaml` (`laws.ack_ledger`); both need a reason and an owner (§13 rule 6). Under
+`hard` an `ack` does not fail. Under `ratchet` the acknowledgements for a law in a file are
+counted against that file's `suppressions` entry for the law (§6.7): up to the entry they are
+`ack`, and when the count is above the entry the law's verdict for that file is `refuse`.
+<!-- tops-core:end verdicts -->
+
+**Keys.** The rules above add these configuration keys.
+
+| Key | Meaning |
+|---|---|
+| `laws.required` | Profile key: a list of law IDs, a subset of `laws.enable`. Each must have an `analyzer` or `tool` reader, because an `attested` or `tbd` law can never be judged. `go-tops.yaml` may add IDs and may not remove or override the profile's |
+| `enabled`, `reason` | On every layer. `enabled: false` is the only way to turn a layer off, and it requires a non-empty `reason`, which is printed with the `skip`. `check` fails an `enabled: false` with no `reason` |
 
 ### 3.4 Stated rules (policy)
 
@@ -150,8 +207,36 @@ These are inherited in spirit from Rust-TOPS and stated as protocol rules:
    change process (§13), never inline.
 4. **Schema precedence.** When prose and schema disagree, fix the schema first, then the prose.
 5. **No silent empties.** A coverage profile, CRAP report, or test result that is empty fails the
-   gate. A green run that measured nothing is a defect.
+   gate. A green run that measured nothing is a defect. `vacuous` is for the empty mutation diff
+   only (§3.3).
 6. **No dry gates in CI.** `--dry-run` and any "names-only" mode must be refused when `CI=true`.
+7. **Required means judged.** A law the profile requires that was not judged fails the gate,
+   whatever the reason (§3.3).
+
+### 3.5 Run order
+
+`gotops gate` runs **every** enabled layer in range, in the order of §3.1 with the laws last, so
+that one run shows every refusal. A layer that fails does not stop the layers that do not depend
+on it. This replaces the stop-at-the-first-failure behavior of §3.1.
+
+A layer that needs another is `not-reached` when the other is not `pass`:
+
+| Layer | Needs |
+|---|---|
+| Coverage | Tests |
+| CRAP | Coverage |
+| Mutation | Tests (green) |
+| A law whose reader is `tool` | The layer whose output it maps. Only that law is affected: it is `not-evaluated` with reason `input_missing`, and the laws layer still runs |
+
+Hygiene, tests and the class layers need nothing.
+
+- `--fail-fast` stops the run after the first layer that is `fail`, `not-run` or `tool-missing`.
+  Every enabled layer in range that has not run is then `not-reached`.
+- **Fewer ran than enabled fails.** The report records the number of layers enabled in range and
+  the number that ran (outcome `pass`, `fail` or `vacuous`). The gate fails when they differ.
+- `--only <layer>` runs that layer and the layers it needs. The others are out of range.
+- There is no `--changed`. The CRAP layer covers every production function on every run, and the
+  mutation layer is scoped by `--base` (§6.4).
 
 ---
 
@@ -337,14 +422,22 @@ Keep the key explicit in every config so scores are comparable across repos.
 
 ### 6.5 Law verdicts
 
-`Refuse` (fails), `Ack` (soft; needs acknowledgement), `not-evaluated` (never a pass). The report
-lists, per law, its reader (§8.2) so a reader can see what was actually judged.
+A law ends a run as `allow`, `ack`, `refuse` or `not-evaluated` with a reason code (§3.3). The
+report lists, per law, its reader (§8.2) so a reader can see what was actually judged, and for a
+`not-evaluated` law the reason. A required law that is `not-evaluated` fails the gate.
 
 ### 6.6 Gate report
 
+<!-- tops-core:begin report -->
 Unlike Rust-TOPS, whose CLI prints text and does not write the optional report object that its
-schema describes, `gotops gate` **always** writes `.go-tops/report.json` (and prints text). See
-§12.
+schema describes, `gotops gate` **always** writes `.go-tops/report.json` (and prints text). Every
+run that gets as far as running a layer writes it, whether the run passes, fails or was stopped by
+`--fail-fast`; a run refused before any layer runs (exit 2, 3 or 4) prints its reason and writes
+none. The report names every layer in range with its outcome and every law with its verdict
+(§3.3). It counts `not-run`, `not-reached`, `vacuous` and `not-evaluated` separately and never
+folds them into `pass` or `allow`. It records the numbers §3.5 and §3.3 judge by: layers enabled
+in range and layers that ran; laws required, judged and `not-evaluated` by reason. See §12.3.
+<!-- tops-core:end report -->
 
 ### 6.7 Enforcement modes
 
@@ -377,26 +470,44 @@ Baseline rules:
 ## 7. Class layers: Go equivalents of Rust's deep tools
 
 Rust-TOPS lists fuzz, Miri, Kani, loom, sanitizers, and Callgrind. Go has different failure
-modes and different tools:
+modes and different tools. **This section lists only layers that run a command.** A condition
+with no command of its own is a law with a decidable predicate (below), and anything that runs
+inside the single test run of gate 2 is part of that run, not a layer.
 
-| Rust-TOPS layer | Go-TOPS layer | Tool | Tier |
+| Rust-TOPS layer | Go-TOPS layer | Command | Tier |
 |---|---|---|---|
-| Property tests | Property tests | `rapid` / `gopter` **[verify]** | 1 |
-| Fuzz | Native fuzzing: replay seed corpus (tier 1), timed fuzz (tier 2) | `go test -fuzz` | 1 / 2 |
-| loom (concurrency model checking) | Deterministic concurrency tests; leak checks | `testing/synctest`; `goleak` **[verify]** | 1 |
-| Miri / sanitizers (UB detection) | Race detector (also enables pointer-safety checks); stress repetition | `go test -race -count=N`; `-msan`/`-asan` for cgo classes | 1 / 2 |
+| Fuzz | Timed fuzzing, one run per target | `go test -run='^$' -fuzz='^FuzzName$' -fuzztime=…` | 2 |
+| Miri / sanitizers (UB detection) | Stress repetition; sanitizer legs for cgo classes | `go test -race -count=N`; `go test -msan` / `-asan` | 2 |
 | Kani (formal) | *No Go equivalent.* Not a Go-TOPS layer, so it does not appear in config or the report | n/a | n/a |
-| Callgrind (perf) | Benchmark regression vs baseline; allocation budgets | `testing.B` (+ `b.Loop`), `benchstat`, pprof | 2 |
-| `cargo deny` | Dependency policy + vulnerabilities | `govulncheck`, `depguard`, license scan **[verify]**, `go mod verify` | 1 |
-| MSRV job | Language-floor job: build and test on `go` floor | CI matrix | 1 |
-| Feature matrix | Build-tag × `CGO_ENABLED` × OS/arch matrix | CI matrix | 2 |
+| Callgrind (perf) | Benchmark regression vs baseline; allocation budgets | `go test -run='^$' -bench=. -benchmem`, `benchstat` | 2 |
+| `cargo deny` | Dependency policy and vulnerabilities | `govulncheck ./...`, `golangci-lint run` (`depguard`), `go mod verify` | 1 |
+| MSRV job | Language-floor job: build and test on the `go` floor | `go test ./...` on the floor toolchain (CI matrix, §11) | 1 |
+| Feature matrix | Build-tag × `CGO_ENABLED` × OS/arch matrix | `go test ./...` per leg (CI matrix, §11) | 2 |
+
+**What is not a layer, and where it went.**
+
+| Was | Now |
+|---|---|
+| Property tests (`rapid` / `gopter` **[verify]**) | `Test*` functions in the single test run of gate 2 |
+| Seed-corpus fuzz replay | The test run: `go test` replays committed seeds whether or not `-fuzz` is set |
+| Deterministic concurrency tests (`testing/synctest`) | The test run. G-08 forbids `time.Sleep` as a wait |
+| Leak checks, "if goroutines" | Law **G-42** (§8.2): a package with a non-test `go` statement has a leak check in `TestMain` |
+| Fuzz targets, "for flag/arg parsers", "for request decoders" | Law **G-43** (§8.2): a fuzz target exists for each function matching a declared `layers.fuzz.targets` glob |
+| Race detection | A flag on the test run: `-race` |
+
+**Leak checks by Go version.** On Go 1.27 and later the `goroutineleak` profile in
+`runtime/pprof` is the standard-library leak check: it needs no dependency and reports goroutines
+that can never run again, but it can miss a leak that a global still reaches. On Go 1.26, the
+floor, the profile is not available and the check is `goleak` (`go.uber.org/goleak`). G-42
+accepts either form where the module's `go` directive allows it.
 
 **An enabled layer with no command is `not-run` and fails the gate**, and **a mapped tool that
-is missing fails the gate**. A layer drops out of a run only when the class does not require it
-or `go-tops.yaml` sets it `enabled: false`; either way it prints `skip` with the reason. `init`
-writes `enabled: false` for layers the class does not map, rather than leaving them enabled and
-empty. Because Go-TOPS resolves tools through the `tool` directive and the lock file, "missing
-tool" is rare and is a configuration error, not an environment accident.
+is missing is `tool-missing` and fails the gate** (§3.3). A layer drops out of a run only when
+the class does not require it or `go-tops.yaml` sets it `enabled: false` with a `reason`; either
+way it is `skip`, printed with the reason. `init` writes `enabled: false` with a reason for
+layers the class does not map, rather than leaving them enabled and empty. Because Go-TOPS
+resolves tools through the `tool` directive and the lock file, a missing tool is rare and is a
+configuration error, not an environment accident.
 
 ---
 
@@ -428,9 +539,9 @@ something the analyzers do not, and only through the protocol-change process (§
   - `tbd`: not yet implemented; reported `not-evaluated`.
 - **Honesty preserved.** A law with no fact reader (or missing tool) is reported `not-evaluated`, never as a pass.
 
-### 8.2 Law catalog (draft: 41 laws, `G-01`…`G-41`)
+### 8.2 Law catalog (draft: 43 laws, `G-01`…`G-43`)
 
-Severity: **R** = Refuse, **A** = Ack. Reader: **an** = analyzer, **tl** = delegated tool,
+Severity: **R** = a violation is `refuse`, **A** = a violation is `ack` when acknowledged and `refuse` when not (§3.3). Reader: **an** = analyzer, **tl** = delegated tool,
 **at** = attested, **tbd** = not yet implemented. "v0.1" marks laws targeted for the first
 mechanical release.
 
@@ -448,6 +559,7 @@ mechanical release.
 | G-08 | Tests never call `time.Sleep` to wait for concurrency; use `synctest` | R | an | ✓ |
 | G-09 | Fire-and-forget work from a request uses `context.WithoutCancel`, a bound, and a shutdown path | A | an (heuristic) | |
 | G-10 | (`tui-app`) The Bubble Tea model is mutated only inside `Update`; no model writes from goroutines or `tea.Cmd` closures | R | an | ✓ |
+| G-42 | A package with a `go` statement in non-test code has a leak check in `TestMain`: a call to `goleak.VerifyTestMain` or `goleak.VerifyNone`, or, where the module's `go` directive is 1.27 or later, a `pprof.Lookup("goroutineleak")` check after `m.Run`. The predicate is syntactic: goroutines that a called library starts are not seen | R | an | |
 
 **Errors**
 
@@ -500,6 +612,7 @@ mechanical release.
 | G-30 | Golden files change only via an explicit `-update` run and are reviewed | A | at | |
 | G-31 | Tests do not depend on wall clock, network, or unseeded randomness | R | an (heuristic) | |
 | G-32 | Benchmarks use `b.Loop` and report allocations | A | an | |
+| G-43 | Every function that matches a glob in `layers.fuzz.targets` has a `Fuzz*` function in its package that calls it, and a committed seed under `testdata/fuzz/`. A glob is a `go list` package pattern, a colon, and a function-name glob in `path.Match` syntax (`./internal/spec:Parse*`). G-29 is the `parser-codec` case | R | an + config | |
 
 **Build and determinism**
 
@@ -527,7 +640,7 @@ mechanical release.
 
 **v0.1 target:** judge 18 laws mechanically (the ✓ rows), mirroring Rust-TOPS's
 approach of shipping a minority of laws with real readers and reporting the rest honestly as
-`not-evaluated`. The report states the count, e.g., "18 of 41 laws judged."
+`not-evaluated`. The report states the count, e.g., "18 of 43 laws judged."
 
 ### 8.3 Law metadata
 
@@ -660,7 +773,7 @@ CI rules (carried from Rust-TOPS's lessons):
 | `init --class <c>` | Writes `go-tops.yaml`, `go-tops.lock`, `AGENTS.md`, drop-in configs, the class workflow, `justfile`, and the laws config. Refuses to overwrite without `--force`. |
 | `check` | Validates `go-tops.yaml` against the **JSON Schema** (full validation, an improvement over Rust-TOPS's partial checks), plus semantic checks: protocol id, non-empty version, module name, `crap.cap ≥ 1`, `library-core`/`concurrency-runtime` keep `unexplained_survivors_max = 0`, language floor ≤ current, `advisory` carries a dated exemption, and under `ratchet` the baseline file exists and is clean against `HEAD`. |
 | `baseline` | Writes `.go-tops/baseline.json` (§6.7) after a run in which every layer that feeds it passed. Refuses otherwise. The only command that writes the baseline. |
-| `gate` | Runs enabled layers at or below `--max-tier` (default 1). Options: `--max-tier N`, `--dry-run` (refused in CI), `--base <ref>`, `--changed`, `--keep-going`, `--json`, `--only <layer>`. Missing mapped tool fails. Laws run last. |
+| `gate` | Runs every enabled layer at or below `--max-tier` (default 1), in order, each judged (§3.5), laws last. Options: `--max-tier N`, `--fail-fast`, `--dry-run` (refused in CI), `--base <ref>`, `--json`, `--only <layer>`. A mapped tool that is missing is `tool-missing` and exits 1. Exit codes: §12.2. |
 | `laws [list \| run \| explain G-NN]` | Lists the catalog with readers, runs the laws layer alone, explains a law. |
 | `report [--format text \| json \| junit \| sarif]` | Renders the last report. |
 | `lock [--verify \| --update]` | Verifies or updates tool pins. |
@@ -670,13 +783,20 @@ CI rules (carried from Rust-TOPS's lessons):
 
 ### 12.2 Exit codes
 
-| Code | Meaning |
+<!-- tops-core:begin exit-codes -->
+One table maps every outcome and verdict (§3.3) to an exit code. Codes 2, 3 and 4 are decided
+before any layer runs. A run that starts returns 0 or 1.
+
+| Code | When |
 |---|---|
-| 0 | All evaluated layers passed (and no `Refuse`) |
-| 1 | Gate failed (`Refuse`, unmet floor, unexplained survivor, unacknowledged `Ack`) |
-| 2 | Config invalid or tool lock mismatch |
-| 3 | Environment error (missing tool, unreadable repo) |
-| 4 | Refused by policy (dry-run in CI) |
+| 0 | Every layer in range is `pass`, `skip` or `vacuous`; every law is `allow`, `ack` (within the ratchet limit, §3.3) or `not-evaluated` and either not required or out of range |
+| 1 | Any layer is `fail`, `not-run`, `not-reached` or `tool-missing`; any law is `refuse`; any required law in range is `not-evaluated`; fewer layers ran than are enabled in range; a ratchet limit (§6.7) is exceeded |
+| 2 | The configuration or its custody is invalid: a schema or semantic failure of `check` (including a missing or dirty baseline under `ratchet` and an expired `advisory`), or a tool lock mismatch |
+| 3 | An environment error that is not a missing tool: an unreadable repository, no C compiler where `-race` needs one |
+| 4 | Refused by policy: `--dry-run` or a names-only mode when `CI=true` |
+
+A missing tool has one code: 1.
+<!-- tops-core:end exit-codes -->
 
 ### 12.3 Report: `.go-tops/report.json`
 
@@ -695,34 +815,42 @@ Written on every `gate` run. Schema file: `schema/gate-report.schema.json`.
   "duration_ms": 184211,
   "layers": [
     {
-      "id": "tests", "tier": 1, "verdict": "pass",
+      "id": "tests", "tier": 1, "outcome": "pass",
       "details": { "packages": 41, "tests": 812, "race": true, "shuffle_seed": 91823 }
     },
     {
-      "id": "coverage", "tier": 1, "verdict": "pass",
+      "id": "coverage", "tier": 1, "outcome": "pass",
       "details": { "lines_pct": 78.4, "floor": 70, "profile_bytes": 48211 }
     },
     {
-      "id": "crap", "tier": 1, "verdict": "Refuse",
+      "id": "crap", "tier": 1, "outcome": "fail",
       "details": { "cap": 6,
         "violations": [ { "func": "ParseSpec", "file": "internal/spec/parse.go:41",
                           "cc": 14, "cov_pct": 52.0, "crap": 35.7, "baseline": null } ] }
     },
-    { "id": "mutation", "tier": 1, "verdict": "pass",
+    { "id": "mutation", "tier": 1, "outcome": "pass",
       "details": { "mutants": 63, "killed": 59, "survived_explained": 3, "survived_unexplained": 1, "max": 2 } }
   ],
+  "layer_counts": { "enabled_in_range": 4, "ran": 4 },
   "laws": {
-    "catalog": 41, "judged": 18, "not_evaluated": 23,
-    "results": [ { "id": "G-17", "verdict": "pass", "reader": "analyzer" } ]
+    "catalog": 43, "judged": 18, "required": 10, "required_not_evaluated": 0,
+    "not_evaluated": { "no_reader": 22, "config_off": 0, "input_missing": 3 },
+    "results": [
+      { "id": "G-17", "verdict": "allow", "reader": "analyzer" },
+      { "id": "G-28", "verdict": "not-evaluated", "reason": "no_reader", "reader": "attested" }
+    ]
   },
-  "summary": { "verdict": "fail", "failed": ["crap"] }
+  "summary": { "outcome": "fail", "exit_code": 1, "failed": ["crap"] }
 }
 ```
 
-Report rules: every layer present; skipped layers carry `verdict: "skip"` with a reason; an
-enabled layer with no command carries `verdict: "not-run"` and fails the run; `not_evaluated`
-is counted separately and never folded into `pass`. A CRAP violation with `"baseline": null`
-is a new function; otherwise `baseline` is the score it must not exceed.
+Report rules: every layer in range is present with an `outcome` from §3.3, and a `skip` carries
+its `reason`. A layer that is `not-run`, `not-reached` or `tool-missing` is present and fails the
+run. A law carries a `verdict`, and a `not-evaluated` law carries its reason code; the laws counts
+(`not_evaluated` by reason, `required_not_evaluated`) are separate and are never folded into
+`allow`. `layer_counts` holds the layers enabled in range and the layers that ran; the run fails
+when they differ (§3.5). A CRAP violation with `"baseline": null` is a new function; otherwise
+`baseline` is the score it must not exceed.
 
 ---
 
@@ -759,7 +887,7 @@ class and its floors; the laws enabled; the survivor/ack ledgers; and the rules 
 | Mutation | `cargo mutants --in-diff` | Pluggable engine adapter + diff filter | Go engines vary in diff support |
 | Deps/supply chain | `cargo deny check` | `govulncheck` + `depguard` + license scan + `go mod verify` | Go splits these concerns |
 | Deep layers | fuzz, Miri, Kani, loom, sanitizers, Callgrind (mostly unmapped) | fuzz, race, goleak, synctest, benchstat, pprof budgets (**mapped**) | Go's tools are in the stdlib/ecosystem and cheap to run |
-| Laws engine | Bend2 `LAWS.bend` (53 laws, 15 judged) | Native `go/analysis` multichecker (41 laws); no Bend or Lean layer | Analyzers judge the code itself; a proof over a fact table judges the table |
+| Laws engine | Bend2 `LAWS.bend` (53 laws, 15 judged) | Native `go/analysis` multichecker (43 laws); no Bend or Lean layer | Analyzers judge the code itself; a proof over a fact table judges the table |
 | CRAP caps | Human and agent caps | One cap per class | A cap the author can select by marking is not a cap |
 | Unmapped layer | Prints `skip`; gate continues | `not-run`; fails the gate | An enabled layer that ran nothing proves nothing |
 | Enforcement | Absolute floors and caps | `hard`, `ratchet` (adopter default), `advisory` with a baseline file (§6.7) | Adopt on existing code without splitting functions to pass |
@@ -941,7 +1069,7 @@ output and survivor ledger are published in CI artifacts.
 | **M0** spec | This doc + schemas + profiles for five classes | Reviewed; thresholds marked for calibration |
 | **M1** CLI skeleton | `init`, `check`, `gate` (tier 0–1: hygiene, tests, coverage, `report.json`) | Self-hosting green |
 | **M2** CRAP + mutation | Native CRAP; one mutation engine adapter; survivor ledger | Gate fails on a deliberately weak test |
-| **M3** laws v0.1 | 18 laws judged (native); `law-diff` CI | Report shows "18 of 41 judged" |
+| **M3** laws v0.1 | 18 laws judged (native); `law-diff` CI | Report shows "18 of 43 judged" |
 | **M4** deep layers | Fuzz, goleak, synctest, benchstat; tier 2 jobs | Nightly workflow green on examples |
 | **M5** release tier | Reproducible build, binary `govulncheck`, API-compat | Tier 3 passes on a tagged release |
 | **M6** protocol 1.0 | Calibrated thresholds; frozen law IDs; five classes proven on real repos | Three Hedronite repos adopt it |
