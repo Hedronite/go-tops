@@ -111,9 +111,14 @@ jobs:
           mkdir -p .go-tops/bin "${RUNNER_TEMP}/golangci-lint"
           tar -xzf "${archive}" --strip-components=1 -C "${RUNNER_TEMP}/golangci-lint"
           install "${RUNNER_TEMP}/golangci-lint/golangci-lint" .go-tops/bin/golangci-lint
+      # The kit gates the code in this checkout, so it runs it with `go run`: no
+      # tag of go-tops exists to pin, and tools/go.mod holds the module tools the
+      # gate runs (gotestsum, govulncheck, go-licenses), not gotops itself. An
+      # adopter runs the pinned build, `go tool -modfile=tools/go.mod gotops gate`
+      # (GO_TOPS.md §11).
       - name: gotops gate
         if: ${{ !matrix.floor }}
-        run: go tool -modfile=tools/go.mod gotops gate
+        run: go run ./cmd/gotops gate
       # Always: the report and the saved lint and coverage output are what you read
       # when the gate or the assertion below is red. Hidden files are off by default.
       - name: upload .go-tops
