@@ -9,7 +9,7 @@ The protocol text is [`GO_TOPS.md`](GO_TOPS.md). This file is the harness for wo
 
 ## State
 
-Protocol 0.4.0 in progress. Milestone M0: the spec. There is no Go code, no `go.mod`, no CLI and no CI yet. `go tool gotops` does not exist. Do not document, run or claim a command that has not landed.
+Protocol 0.4.0 in progress. Milestone M0: the spec. The only Go code is the docs checker in `scripts/docs/` (its own `go.mod`), and docs CI (`.github/workflows/docs.yml`) checks Markdown, links, counts, examples and markers. There is no root `go.mod`, no `gotops` CLI and no gate CI yet. `go tool gotops` does not exist. Do not document, run or claim a command that has not landed.
 
 Points from 0.3.0 that code must follow (see the change note at the top of `GO_TOPS.md`):
 

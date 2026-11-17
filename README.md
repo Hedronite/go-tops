@@ -7,7 +7,7 @@ A written spec, a JSON Schema, per-class profiles, a laws layer of `go/analysis`
 
 ## Status
 
-Draft. Protocol **0.3.0**. The package is unreleased (0.0.0). There is no code yet.
+Draft. Protocol **0.3.0**. The package is unreleased (0.0.0). The only code is the docs checker in `scripts/docs/`, which docs CI runs; there is no `gotops` yet.
 
 This repo is at milestone M0: the spec. `go tool gotops` does not exist yet, and nothing here is ready to copy into CI.
 
