@@ -393,7 +393,14 @@
           "then": {
             "properties": {
               "details": {
-                "$ref": "#/$defs/testsDetails"
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/testsDetails"
+                  },
+                  {
+                    "$ref": "#/$defs/errorDetails"
+                  }
+                ]
               }
             }
           }
@@ -437,7 +444,14 @@
           "then": {
             "properties": {
               "details": {
-                "$ref": "#/$defs/coverageDetails"
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/coverageDetails"
+                  },
+                  {
+                    "$ref": "#/$defs/errorDetails"
+                  }
+                ]
               }
             }
           }
@@ -481,7 +495,14 @@
           "then": {
             "properties": {
               "details": {
-                "$ref": "#/$defs/crapDetails"
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/crapDetails"
+                  },
+                  {
+                    "$ref": "#/$defs/errorDetails"
+                  }
+                ]
               }
             }
           }
@@ -525,7 +546,14 @@
           "then": {
             "properties": {
               "details": {
-                "$ref": "#/$defs/mutationDetails"
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/mutationDetails"
+                  },
+                  {
+                    "$ref": "#/$defs/errorDetails"
+                  }
+                ]
               }
             }
           }
@@ -600,6 +628,39 @@
                 "not": {
                   "const": "skip"
                 }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "id",
+              "details"
+            ],
+            "properties": {
+              "id": {
+                "enum": [
+                  "tests",
+                  "coverage",
+                  "crap",
+                  "mutation"
+                ]
+              },
+              "details": {
+                "required": [
+                  "error"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "outcome"
+            ],
+            "properties": {
+              "outcome": {
+                "const": "fail"
               }
             }
           }
@@ -844,6 +905,21 @@
             "type": "string",
             "minLength": 1
           }
+        }
+      }
+    },
+    "errorDetails": {
+      "description": "What a failed tests, coverage, CRAP or mutation layer carries when its tool output was empty or did not parse, so nothing was measured (section 3.4, rule 5).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "error"
+      ],
+      "properties": {
+        "error": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
         }
       }
     }

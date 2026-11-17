@@ -4,7 +4,7 @@
 This file is the contract between this repository and any AI coding agents (or human reviewers) working on it.
 
 **Class:** `{CLASS}`
-**Protocol:** Go-TOPS 0.3.0
+**Protocol:** Go-TOPS {PROTOCOL}
 **Module:** `{MODULE}`
 **Enforce:** `{ENFORCE}`
 
@@ -94,7 +94,7 @@ When generating or reviewing code, specifically check for and reject the followi
 go tool -modfile=tools/go.mod gotops gate
 ```
 
-The gate runs the test suite once, with the race detector, shuffling and coverage; coverage, CRAP and mutation read that run. It then runs the linters and the laws. Do not run them separately and call that done. Resolve all failures. A green gate is the definition of done.
+The gate runs hygiene first (tidy, verify, the toolchain pin, formatting, lint, vulnerabilities, licenses), then the test suite once, with the race detector, shuffling and coverage; coverage, CRAP and mutation read that run. The laws run last. Do not run them separately and call that done. Resolve all failures. A green gate is the definition of done.
 
 ---
 

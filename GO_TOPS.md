@@ -285,7 +285,7 @@ For a new repo, copy the drop-in set and replace the placeholders:
 | `go-tops.yaml` | Protocol config (§9) | `{MODULE}`, `{CLASS}` |
 | `go-tops.lock` | Pins for downloaded binaries and the Go toolchain (§10) | generated |
 | `tools/go.mod`, `tools/go.sum` | Pins for every module tool, run with `go tool -modfile=tools/go.mod` (§10) | generated |
-| `AGENTS.md` | Agent-facing commands and rules (template: `config/AGENTS.template.md`). `init` writes its block between `<!-- go-tops:begin -->` and `<!-- go-tops:end -->` | `{MODULE}`, `{CLASS}`, `{ENFORCE}`, `{COVERAGE_FLOOR}`, `{CRAP_CAP}` |
+| `AGENTS.md` | Agent-facing commands and rules (template: `config/AGENTS.template.md`). `init` writes its block between `<!-- go-tops:begin -->` and `<!-- go-tops:end -->` | `{PROTOCOL}`, `{MODULE}`, `{CLASS}`, `{ENFORCE}`, `{COVERAGE_FLOOR}`, `{CRAP_CAP}` |
 | `GO-TOPS.md` | Adoption record (§13) | generated |
 | `.golangci.yml` | The adopter's golangci-lint v2 config, **style only**: no law reads it (§8.1). It carries errcheck `check-blank`, `check-type-assertions` and the same `exclude-functions` list as the law pass (§8.1), so the editor and the gate agree | `{MODULE}` |
 | `.go-tops/baseline.json` | Ratchet baseline (§6.7); written by `gotops baseline`, not by hand | generated |
@@ -1293,6 +1293,9 @@ Purpose: make the gate reproducible, with one pin mechanism for each kind of too
   OS/arch, and the Go toolchain with its exact version. It is YAML, and
   `schema/lock.schema.json` (§18) validates it, with `additionalProperties: false` at every
   object.
+- **A downloaded binary** resolves to `.go-tops/bin/<name>` (gitignored), then to `PATH`.
+  Whatever path is used, the gate checks the file's SHA-256 against `go-tops.lock` for the host
+  platform before it runs it, and a mismatch is exit 2 (§12.2).
 - **`gotops lock --verify`** re-checks every pin. For a module tool it builds the binary and
   reads the module version with `go version -m` (a `go install` build reports its own version as
   `dev`, so `--version` text is never compared), then compares it with `tools/go.mod`. For a
@@ -1533,8 +1536,11 @@ Report rules:
   `violations`, and `exempt` for functions scored under an exemption) and mutation (the counts of
   §6.4, with `timed_out` and `timed_out_keys` for mutants that hung, `dropped` for mutants
   that did not compile, and `exempt` for the survivor keys of mutants under a `mutation`
-  exemption). `exemptions` lists every exemption in force on the day of the run, as
-  the records of §6.8.
+  exemption). A layer of these four whose outcome is `fail` may carry `{ "error": "<text>" }`
+  instead, when its tool output was empty or did not parse: there is no measurement to report,
+  and the layer is `fail`, never `not-run` (§3.4, rule 5). The error form is valid only with
+  outcome `fail`, and its text has a non-space character. `exemptions` lists every exemption in
+  force on the day of the run, as the records of §6.8.
 - The summary's `exit_code` is 0 or 1: a run refused before any layer runs writes no report
   (§12.2). `outcome` is the outcome the run would have under `hard` and is never rewritten.
   `enforced` is `false` exactly when `enforce` is `advisory`: then `exit_code` is 0 whatever the

@@ -74,6 +74,53 @@ func TestReportExitCodeFollowsOutcome(t *testing.T) {
 	}
 }
 
+// A failed tests, coverage, CRAP or mutation layer carries its figures or
+// {error}: empty or unparseable output is a fail with nothing to measure.
+func TestReportLayerErrorForm(t *testing.T) {
+	raw, err := os.ReadFile(reportExample)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ex := string(raw)
+	const crapLayer = `"id": "crap", "tier": 1, "outcome": "fail",`
+	start := strings.Index(ex, crapLayer)
+	if start < 0 {
+		t.Fatal("the example no longer has the crap layer this test edits")
+	}
+	// replace the crap layer details object (up to its closing brace line) with an error form
+	end := strings.Index(ex[start:], "\n    },\n    {\n      \"id\": \"mutation\"")
+	if end < 0 {
+		t.Fatal("the example no longer has the layout this test edits")
+	}
+	with := func(layer string) string { return ex[:start] + layer + ex[start+end:] }
+	failed := `"id": "crap", "tier": 1, "outcome": "fail",
+      "details": { "error": "crap report was empty" }`
+	if err := validateReport(t, with(failed)); err != nil {
+		t.Fatalf("a failed layer with the error form must validate: %v", err)
+	}
+	cases := []struct{ name, layer string }{
+		{"error-with-pass", strings.Replace(failed, `"outcome": "fail"`, `"outcome": "pass"`, 1)},
+		{"error-with-not-run", strings.Replace(failed, `"outcome": "fail"`, `"outcome": "not-run"`, 1)},
+		{"error-empty", strings.Replace(failed, "crap report was empty", "", 1)},
+		{"error-blank", strings.Replace(failed, "crap report was empty", "  ", 1)},
+		{"error-and-figures", strings.Replace(failed, `{ "error"`, `{ "cap": 10, "violations": [], "error"`, 1)},
+		{"error-unknown-key", strings.Replace(failed, `{ "error"`, `{ "bogus_key": 1, "error"`, 1)},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if err := validateReport(t, with(c.layer)); err == nil {
+				t.Fatal("the planted layer validated")
+			}
+		})
+	}
+	// every one of the four layers takes the form
+	for _, id := range []string{"tests", "coverage", "mutation"} {
+		if err := validateReport(t, with(strings.Replace(failed, `"id": "crap"`, `"id": "`+id+`"`, 1))); err != nil {
+			t.Errorf("%s with the error form must validate: %v", id, err)
+		}
+	}
+}
+
 func TestReportAdvisoryRun(t *testing.T) {
 	raw, err := os.ReadFile(reportExample)
 	if err != nil {
