@@ -382,7 +382,7 @@ must be clean against `HEAD`.
 | `packages` | package import path | statement coverage % and uncovered-statement count | A package under the floor fails only when its percentage falls **and** its uncovered-statement count rises. Deleting tested code can lower the percentage without raising the uncovered count, so it does not fail. A package at or over the floor, or absent, is held to the floor |
 | `findings` | linter, file | count of that linter's findings that no law maps | count ≤ value |
 | `laws` | law ID, file | count of `Refuse` findings for that law | count ≤ value; `Refuse` then means "no new instance" under `ratchet` and "none" under `hard` |
-| `suppressions` | linter and file for `//nolint`; law ID and file for `//tops:ack` | count of such comments | count ≤ value; absent means 0. No `hard` form: under `hard` a suppression needs only its reason (§13 rule 6) |
+| `suppressions` | linter and file for `//nolint`; law ID and file for `//tops:ack` comments and `.go-tops/acks.yaml` entries | count of such comments and entries | count ≤ value; absent means 0. No `hard` form: under `hard` a suppression needs only its reason (§13 rule 6) |
 | `exemptions` | none (one count per repo) | number of live exemption records (§6.8) | count ≤ value; absent means 0. No `hard` form: under `hard` an exemption is bounded by its expiry  |
 | `survivors` | file | count of unexplained survivors from the tier 2 whole-module mutation run (§6.4) | count ≤ value; absent means 0, so a legacy survivor is debt and a new one fails  |
 
@@ -439,7 +439,7 @@ command is a new function, and a new function meets the cap.
 #### First adoption of a legacy repo
 
 The repo has 100 production functions, 16 of them over the cap of 6 under the 0.3.0 counting
-rule (vigil's counts in the 2026-11 calibration probe), and no baseline. The ledger numbers
+rule (vigil's counts in `calibration/2026-11-probe/`), and no baseline. The ledger numbers
 below other than those two are illustrative. Every step passes by the rule named beside it; the
 measuring run is `baseline --init` itself, so no step is a red gate.
 
