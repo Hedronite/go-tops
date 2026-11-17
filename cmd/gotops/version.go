@@ -1,8 +1,11 @@
 package main
 
 import (
+	"os"
+
 	gotops "github.com/Hedronite/go-tops"
 	"github.com/Hedronite/go-tops/internal/cli"
+	"github.com/Hedronite/go-tops/internal/lock"
 )
 
 // packageVersion is the gotops package version, a separate plane from the
@@ -29,5 +32,23 @@ func runVersion(env cli.Env, args []string) int {
 		return cli.ExitEnvironment
 	}
 	env.Stdout.Printf("protocol %s\npackage %s\n", protocol, packageVersion)
+	printPins(env)
 	return 0
+}
+
+// printPins lists the toolchain and the tools pinned in go-tops.lock and
+// tools/go.mod of the working directory (GO_TOPS.md §12.1). Outside a repository
+// that pins nothing, it prints nothing.
+func printPins(env cli.Env) {
+	dir, err := os.Getwd()
+	if err != nil {
+		return
+	}
+	for _, p := range lock.Pins(dir) {
+		if p.Name == "toolchain" {
+			env.Stdout.Printf("toolchain %s (%s)\n", p.Version, p.Source)
+			continue
+		}
+		env.Stdout.Printf("tool %s %s (%s)\n", p.Name, p.Version, p.Source)
+	}
 }
