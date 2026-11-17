@@ -240,3 +240,16 @@ func TestPlantLintThatSavesNothing(t *testing.T) {
 		t.Errorf("lint step %v, want fail", got)
 	}
 }
+
+// B13.3 with the real tool: depguard true with a config that lacks the linter
+// fails exactly that check; with the linter enabled the same module passes.
+func TestPlantDepguardTrueButLinterNotEnabled(t *testing.T) {
+	r := plant(t, nil, gate.HygieneConfig{Depguard: true})
+	if msg := onlyFails(t, r, "depguard enabled"); !strings.Contains(msg, "depguard") {
+		t.Errorf("message %q", msg)
+	}
+	on := module{".golangci.yml": "version: \"2\"\nlinters:\n  default: none\n  enable: [errcheck, depguard]\n  settings:\n    depguard:\n      rules:\n        main:\n          deny:\n            - pkg: math/rand\n              desc: use crypto/rand\nformatters:\n  enable: [gofmt]\n"}
+	if r := plant(t, on, gate.HygieneConfig{Depguard: true}); r.Outcome != gate.Pass {
+		t.Fatalf("depguard enabled: %s: %s", r.Outcome, r.Reason)
+	}
+}

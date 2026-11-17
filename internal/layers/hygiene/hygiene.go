@@ -86,6 +86,11 @@ func (Layer) Run(ctx context.Context, env *gate.Env) gate.Result {
 		h.vulns(),
 		h.licenses(),
 	}
+	// deps.depguard: the dependency policy is judged by depguard in the lint
+	// pass (§3.1), so the adopter's lint config must enable it.
+	if env.Config.Hygiene.Depguard {
+		steps = append(steps, h.depguard())
+	}
 	return h.result(steps)
 }
 
@@ -112,6 +117,7 @@ var keys = map[string]string{
 	"golangci-lint run":        "lint",
 	"govulncheck -json":        "vulnerabilities",
 	"go-licenses check":        "licenses",
+	"depguard enabled":         "depguard",
 }
 
 func (h *run) note(key string, kv map[string]any) {
@@ -382,6 +388,52 @@ func summarizeLint(r lintResult) string {
 	}
 	first := r.Issues[0]
 	return fmt.Sprintf("%s; first: %s:%d %s", strings.Join(parts, ", "), first.Pos.Filename, first.Pos.Line, first.Text)
+}
+
+// depguard: with deps.depguard true, the adopter lint config must enable the
+// depguard linter, or the dependency policy is not enforced anywhere. The set of
+// enabled linters is what `golangci-lint linters --json` reports for the
+// config, so presets, `default:` and `disable:` are all resolved by the tool.
+func (h *run) depguard() step {
+	const name = "depguard enabled"
+	argv, err := h.tool(golangciLint)
+	if err != nil {
+		return missing(name, err)
+	}
+	args := append(append(append([]string{}, argv...), "linters"), h.lintConfigArgs()...)
+	out, err := h.exec(append(args, "--json")...)
+	if err != nil {
+		return cantStart(name, err)
+	}
+	if out.ExitCode != 0 {
+		return failed(name, "golangci-lint linters exited %d: %s", out.ExitCode, head(string(out.Stderr), 3))
+	}
+	if strings.TrimSpace(string(out.Stdout)) == "" {
+		return failed(name, "no output: the enabled linters are unknown")
+	}
+	var doc struct {
+		Enabled []struct {
+			Name string `json:"name"`
+		} `json:"Enabled"`
+	}
+	if err := jsonUnmarshal(out.Stdout, &doc); err != nil {
+		return failed(name, "output is not golangci-lint JSON: %v", err)
+	}
+	for _, l := range doc.Enabled {
+		if l.Name == "depguard" {
+			return passed(name)
+		}
+	}
+	return failed(name, "go-tops.yaml sets deps.depguard true, but the lint config %s does not enable the depguard linter", firstNonEmpty(h.env.Config.Hygiene.LintConfig, defaultLintConfig))
+}
+
+const defaultLintConfig = ".golangci.yml"
+
+func firstNonEmpty(a, b string) string {
+	if a != "" {
+		return a
+	}
+	return b
 }
 
 // licenses: `go-licenses check` against the allow list. The module's own

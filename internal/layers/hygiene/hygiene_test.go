@@ -86,6 +86,8 @@ func (f *fake) Run(_ context.Context, c gate.Cmd) (gate.Output, error) {
 		return out("all modules verified\n"), nil
 	case key == "go env GOVERSION":
 		return out("go1.27.4\n"), nil
+	case strings.HasPrefix(key, "golangci-lint linters"):
+		return out(`{"Enabled":[{"name":"depguard"},{"name":"errcheck"}],"Disabled":[]}`), nil
 	case strings.HasPrefix(key, "golangci-lint fmt --diff"):
 		return gate.Output{}, nil
 	case key == "golangci-lint version --short":
@@ -138,6 +140,12 @@ func steps(t *testing.T, r gate.Result) map[string]map[string]any {
 	t.Helper()
 	m := map[string]map[string]any{}
 	for name, key := range keys {
+		if key == "depguard" {
+			if e, ok := r.Details[key].(map[string]any); ok {
+				m[name] = e
+			}
+			continue // present only when deps.depguard is true
+		}
 		e, ok := r.Details[key].(map[string]any)
 		if !ok {
 			t.Fatalf("details.%s = %T, want a check entry (schema hygieneDetails)", key, r.Details[key])
@@ -563,5 +571,47 @@ func TestRunnerExitsTwoWithoutALock(t *testing.T) {
 	}
 	if f.count("go ") != 0 {
 		t.Errorf("a command ran before the exit: %v", f.calls)
+	}
+}
+
+// B13.3: deps.depguard true needs the depguard linter in the adopter's lint
+// config; the check is judged from the linters the tool reports enabled.
+func TestDepguardTrueNeedsTheLinterEnabled(t *testing.T) {
+	cfg := gate.Config{Hygiene: gate.HygieneConfig{Depguard: true, LintConfig: "ci/lint.yml"}}
+	f := newFake(t)
+	r := runLayer(t, f, cfg)
+	if r.Outcome != gate.Pass || len(steps(t, r)) != 8 {
+		t.Fatalf("outcome %s (%s), steps %d", r.Outcome, r.Reason, len(steps(t, r)))
+	}
+	if f.count("golangci-lint linters --config ci/lint.yml --json") != 1 {
+		t.Errorf("calls %v", f.calls)
+	}
+
+	f = newFake(t)
+	f.on("golangci-lint linters", out(`{"Enabled":[{"name":"errcheck"}],"Disabled":[{"name":"depguard"}]}`))
+	msg := onlyFails(t, runLayer(t, f, cfg), "depguard enabled")
+	if !strings.Contains(msg, "depguard") || !strings.Contains(msg, "ci/lint.yml") {
+		t.Errorf("message %q", msg)
+	}
+}
+
+func TestDepguardFalseRunsNoCheck(t *testing.T) {
+	f := newFake(t)
+	r := runLayer(t, f, gate.Config{Hygiene: gate.HygieneConfig{Depguard: false}})
+	if _, present := r.Details["depguard"]; present || f.count("golangci-lint linters") != 0 {
+		t.Fatalf("the depguard check ran with deps.depguard false: %v %v", r.Details["depguard"], f.calls)
+	}
+}
+
+func TestDepguardCheckFailsOnEmptyOrBrokenOutput(t *testing.T) {
+	cfg := gate.Config{Hygiene: gate.HygieneConfig{Depguard: true}}
+	for name, o := range map[string]gate.Output{
+		"empty": {}, "not JSON": out("oops"), "exit 3": {ExitCode: 3, Stderr: []byte("bad config")},
+	} {
+		f := newFake(t)
+		f.on("golangci-lint linters", o)
+		if msg := onlyFails(t, runLayer(t, f, cfg), "depguard enabled"); msg == "" {
+			t.Errorf("%s: no message", name)
+		}
 	}
 }
