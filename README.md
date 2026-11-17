@@ -16,7 +16,7 @@ This repo is at milestone M0: the spec. `go tool gotops` does not exist yet, and
 | **M0** spec | `GO_TOPS.md`, schemas, profiles for five launch classes |
 | M1 CLI | `init`, `check`, `gate` at tiers 0–1, `report.json`; Go-TOPS gates itself |
 | M2 | Native CRAP, one mutation-engine adapter, survivor ledger |
-| M3 | Laws v0.1: 19 of 41 laws judged by analyzers |
+| M3 | Laws v0.1: 18 of 41 laws judged by analyzers |
 | M4–M7 | Deep layers, release tier, protocol 1.0, extras |
 
 The full roadmap is in [`GO_TOPS.md` §19](GO_TOPS.md#19-roadmap).
