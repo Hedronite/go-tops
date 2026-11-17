@@ -35,6 +35,11 @@ func (Coverage) Needs() []string { return []string{TestsID} }
 // total (§6.7, hard): a package below it fails; a missing, empty or
 // block-less profile fails (§3.4 rule 5, §6.1).
 func (Coverage) Run(_ context.Context, env *gate.Env) gate.Result {
+	// Merging integration coverage is not part of this release. A config that
+	// turns it on must not read as a pass on unit coverage alone.
+	if env.Config.Coverage.IntegrationEnabled {
+		return failErr("gates.coverage.integration.enabled is true: integration merge not implemented in this release")
+	}
 	path := filepath.Join(env.Dir, filepath.FromSlash(ProfilePath))
 	raw, err := os.ReadFile(path)
 	if errors.Is(err, fs.ErrNotExist) {

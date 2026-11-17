@@ -66,13 +66,14 @@ func TestParseCountsPackagesTestsAndSkips(t *testing.T) {
 		[]ev{{Action: "pass", Package: "m/a"}},
 		[]ev{{Action: "output", Package: "m/b", Output: "?   \tm/b\t[no test files]\n"}, {Action: "skip", Package: "m/b"}},
 	)...))
-	if r.Packages != 1 || r.Tests != 3 || r.Skipped != 1 || r.Ran() != 2 {
-		t.Fatalf("%+v: want 1 package (m/b has no tests), 3 results of which 1 is a skip", r)
+	// leaves: TestAdd/sub and TestSkipped; TestAdd is the parent of a subtest
+	if r.Packages != 1 || r.Tests != 2 || r.Skipped != 1 || r.Ran() != 1 {
+		t.Fatalf("%+v: want 1 package (m/b has no tests) and 2 leaf tests of which 1 is a skip", r)
 	}
 	if !r.HasSeed || r.Seed != 111 {
 		t.Errorf("seed %d (%v)", r.Seed, r.HasSeed)
 	}
-	if len(r.FailedTests) != 0 || len(r.Races) != 0 || len(r.BuildErrors) != 0 {
+	if len(r.FailedTests) != 0 || len(r.BuildErrors) != 0 {
 		t.Errorf("%+v", r)
 	}
 }
@@ -120,15 +121,42 @@ func TestParseBuildFailure(t *testing.T) {
 	}
 }
 
-func TestParseFindsADataRace(t *testing.T) {
-	r := mustParse(t, stream(
-		seed("m/e", "9"),
-		ev{Action: "output", Package: "m/e", Test: "TestRace", Output: "WARNING: DATA RACE\n"},
-		ev{Action: "output", Package: "m/e", Test: "TestRace", Output: "WARNING: DATA RACE\n"},
-		ev{Action: "fail", Package: "m/e", Test: "TestRace"},
-	))
-	if len(r.Races) != 1 || r.Races[0] != "m/e" {
-		t.Fatalf("races %v: one entry per package", r.Races)
+// The race banner in a test's output is text, not a result: the parse reads
+// the result of the run. A test that logs it and passes has not raced.
+func TestParseIgnoresTheRaceBannerInOutput(t *testing.T) {
+	r := mustParse(t, stream(cat(
+		[]ev{seed("m/e", "9"), {Action: "output", Package: "m/e", Test: "TestLogs", Output: "WARNING: DATA RACE\n"}},
+		pass("m/e", "TestLogs"),
+		[]ev{{Action: "pass", Package: "m/e"}},
+	)...))
+	if len(r.FailedTests) != 0 || len(r.FailedPackages) != 0 || r.Ran() != 1 {
+		t.Fatalf("%+v", r)
+	}
+}
+
+// Leaves only: a parent test is not a test that ran when all it holds is a
+// skipped subtest, and a parent is not counted beside its subtests.
+func TestParseCountsLeavesOnly(t *testing.T) {
+	r := mustParse(t, stream(cat(
+		[]ev{seed("m/a", "1")},
+		[]ev{{Action: "run", Package: "m/a", Test: "TestP"}, {Action: "run", Package: "m/a", Test: "TestP/a"}, {Action: "skip", Package: "m/a", Test: "TestP/a"}, {Action: "pass", Package: "m/a", Test: "TestP"}},
+		[]ev{{Action: "pass", Package: "m/a"}},
+	)...))
+	if r.Tests != 1 || r.Skipped != 1 || r.Ran() != 0 {
+		t.Fatalf("a parent with only a skipped subtest: %d tests, %d skipped, %d ran; want 1, 1, 0", r.Tests, r.Skipped, r.Ran())
+	}
+	// two levels, one passing leaf and one skipped leaf
+	r = mustParse(t, stream(cat(
+		pass("m/a", "TestQ"), pass("m/a", "TestQ/x"), pass("m/a", "TestQ/x/deep"),
+		[]ev{{Action: "skip", Package: "m/a", Test: "TestQ/y"}},
+	)...))
+	if r.Tests != 2 || r.Skipped != 1 || r.Ran() != 1 || r.Packages != 1 {
+		t.Fatalf("%+v: want leaves TestQ/x/deep and TestQ/y", r)
+	}
+	// a name that merely starts with another is not its subtest
+	r = mustParse(t, stream(cat(pass("m/a", "TestR"), pass("m/a", "TestRx"))...))
+	if r.Tests != 2 {
+		t.Fatalf("TestR and TestRx are two tests: %d", r.Tests)
 	}
 }
 
