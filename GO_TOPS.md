@@ -466,9 +466,9 @@ laws:
 - Floors per class (§5.2) live in `go-tops.yaml` as `gates.coverage.statements_floor`.
 - Gate fails when the profile is missing or empty (`test -s`), or holds no block of a production
   file (§3.4, rule 5).
-- Coverage is computed on the module's own packages; generated files (`*.gen.go`,
-  `// Code generated ... DO NOT EDIT.`) are excluded by default, with an explicit allowlist for
-  inclusion.
+- Coverage is computed on the module's own packages. Generated files (`*.gen.go`,
+  `// Code generated ... DO NOT EDIT.`) are always excluded in this release; an allowlist that
+  includes some of them is roadmap work.
 
 ### 6.2 CRAP
 
