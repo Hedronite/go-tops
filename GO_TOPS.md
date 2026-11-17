@@ -226,9 +226,9 @@ All numbers are **proposed** defaults. Tune on real repositories before 1.0.
 
 | | `library-core` | `binary-cli` | `tui-app` | `binary-service` | `concurrency-runtime` |
 |---|---|---|---|---|---|
-| Line coverage floor | 85% | 70% | 65% (model/update logic) | 75% | 90% |
-| CRAP cap | 4 | 6 | 6 | 5 | 4 |
-| `unexplained_survivors_max` | **0** | 2 | 2 | 1 | **0** |
+| Statement coverage floor | 85% | 70% | 65% (model/update logic) | 75% | 90% |
+| CRAP cap | 8 (provisional) | 10 | none yet | 10 | none yet |
+| `unexplained_survivors_max` | **0** | **0** | **0** | **0** | **0** |
 | Race detector | required | required | required | required | required (+ stress) |
 | Leak detection (`goleak`) | if goroutines | if goroutines | required | required | required |
 | `synctest` for time/concurrency | if applicable | if applicable | if timers | if timers | required |
@@ -237,10 +237,23 @@ All numbers are **proposed** defaults. Tune on real repositories before 1.0.
 | API-compat check | tier 3 | no | no | no | tier 3 |
 | Extra laws | G-21–G-24 | G-41 | **G-10** | G-19, G-20 | G-01–G-09 |
 
-There is one CRAP cap per class. It does not depend on who wrote the code: the gate is the same
-for humans and agents (§1.1). Under `ratchet` (§6.7) the cap applies to new functions; existing
-functions must not get worse. The `binary-cli` cap of 6 matches Rust-TOPS's `binary-cli` human
-cap; the other values are new.
+There is one CRAP cap per class, the same for every author: the gate is the same for humans and
+agents (§1.1). What a cap means is stated in §6.2: at full coverage it is a ceiling on
+complexity. How the cap binds under each enforcement mode, including what an existing function
+above it may do, is stated once, in §6.7. `tui-app` and `concurrency-runtime` have no launch
+profile (§5.1), so no measured cap; a repo of either class states its own cap in `go-tops.yaml`.
+
+**Where the caps come from.** The caps are `binary-cli` 10, `binary-service` 10 and
+`library-core` 8, and the `library-core` value is **provisional**. They come from a measurement,
+not from another protocol: `calibration/2026-11-probe/` records a syntactic probe over five
+Hedronite Go repos, 761 production functions at 88% statement coverage with every suite green.
+Under the 0.4.0 rule (error guards discounted, guard bodies left out of coverage) 192 of the
+761 functions are over a cap of 6, 136 are over 8 and 90 are over 10. Of the functions over
+10, 67 are over it by complexity alone, which no test can change. A cap of 6 would fail about
+one function in four in well-covered repos; near 10 the coverage term starts to do work (§6.2,
+worked examples). `library-core` keeps the stricter value, as it did when the caps were 4 and 6,
+and it is provisional until slice M2-5 repeats the measurement with the native implementation. A higher number is not a weaker gate by itself: the ratchet (§6.7)
+and mutation (§6.4) carry the rest.
 
 ### 5.3 Profile file shape
 
@@ -277,7 +290,7 @@ laws:
 
 ### 6.2 CRAP
 
-```
+```text
 CRAP(f) = comp(f)² × (1 − cov(f))³ + comp(f)          cov(f) ∈ [0,1]
 ```
 
@@ -306,6 +319,42 @@ CRAP(f) = comp(f)² × (1 − cov(f))³ + comp(f)          cov(f) ∈ [0,1]
   the cap and the scope; it does not say which functions may exceed the cap under which mode.
 - **Implementation:** native (not shelled out), so the formula, counting rule, and thresholds are
   protocol-controlled. Existing tools (`crap4go`, `gaze`) are useful cross-checks **[verify]**.
+
+**Worked examples.** Every value is `CRAP = comp² × (1 − cov)³ + comp`, shown to one decimal;
+a function is judged on the unrounded value.
+
+| # | Case | Cap | `comp(f)` | Covered / total statements | `cov(f)` | `CRAP(f)` | Result |
+|---|---|---|---|---|---|---|---|
+| 1 | Complex and half-tested | 10 | 14 | 52 / 100 | 52.0% | 35.7 | fails |
+| 2 | Under the cap, tested enough | 10 | 8 | 70 / 100 | 70.0% | 9.7 | meets |
+| 3 | The same function, fewer tests | 10 | 8 | 68 / 100 | 68.0% | 10.1 | fails |
+| 4 | At the cap, fully covered | 10 | 10 | 40 / 40 | 100.0% | 10.0 | meets |
+| 5 | Above the cap, fully covered | 10 | 11 | 44 / 44 | 100.0% | 11.0 | fails at every coverage |
+| 6 | `library-core`, at the cap, fully covered | 8 | 8 | 40 / 40 | 100.0% | 8.0 | meets |
+| 7 | The same function, one statement short | 8 | 8 | 99 / 100 | 99.0% | 8.0 (8.000064) | fails: compared unrounded |
+| 8 | Three guards discounted, guard bodies untested, guard-neutral coverage | 8 | 6 | 14 / 17 | 82.4% | 6.2 | meets |
+| 9 | Row 8 with the guard bodies kept in coverage | 8 | 6 | 14 / 20 | 70.0% | 7.0 | meets, charged for what the discount forgave |
+| 10 | Row 8 with `err_guard_discount: false` | 8 | 9 | 14 / 20 | 70.0% | 11.2 | fails |
+| 11 | Dispatch table with `shape: table-switch` (§6.8) | 10 | 30 | 90 / 90 | 100.0% | 30.0 | over the cap; exempt, still printed |
+
+Rows 8 to 10 are one function of 20 statements: 3 sit in the bodies of guards that meet §6.3, and
+none of those 3 is covered; 14 of the other 17 are covered. Row 8 leaves the 3 out of both terms
+(14 of 17). Row 9 shows what leaving them in would charge (14 of 20). Row 10 turns the discount
+off, so the function has comp 9 and its guard bodies count.
+
+The coverage a function needs follows from the formula: it meets a cap when
+`cov(f) ≥ 1 − ((cap − comp(f)) / comp(f)²)^(1/3)`. Rounded up to 0.1%:
+
+| Cap | `comp(f)` | Minimum `cov(f)` |
+|---|---|---|
+| 10 | 5 | 41.6% |
+| 10 | 8 | 68.6% |
+| 10 | 9 | 76.9% |
+| 10 | 10 | 100.0% |
+| 8 | 5 | 50.7% |
+| 8 | 6 | 61.9% |
+| 8 | 7 | 72.7% |
+| 8 | 8 | 100.0% |
 
 Keys (G7 folds this table into §9 and the schema, then deletes it):
 
@@ -435,8 +484,12 @@ Keys (G7 folds this table into §9 and the schema, then deletes it):
 - **Allowance:** `unexplained_survivors_max` is **`0` in every class**. Any unexplained survivor
   fails the layer. The key stays in `go-tops.yaml` so the report states the limit; `0` is its only
   valid value.
-- Tier 2 runs the whole module on a schedule, with the same statuses, key and ledger; engine run
-  time can reach hours on large modules.
+- Tier 2 runs the whole module on a schedule, with the same statuses and key; engine run time can
+  reach hours on large modules. The unexplained survivors of that run are held by the `survivors`
+  ledger kind of §6.7: one count per file, and a count above the ledger's value fails. A legacy
+  survivor is debt that may only fall; a new survivor, or one in a file the ledger does not list,
+  fails (an absent entry means 0). The diff-scoped run at tier 1 has no such allowance:
+  `unexplained_survivors_max` stays 0.
 
 Keys (G7 folds this table into §9 and the schema, then deletes it):
 
