@@ -1,0 +1,153 @@
+# The kit's own lint config (golangci-lint v2.15.0, pinned in GO_TOPS.md §2).
+#
+# Style only (GO_TOPS.md §8.1): the laws layer runs its own pass under its own
+# embedded config and never reads this file, so nothing here can weaken a law.
+# The two law-shaped linters below (errcheck, errorlint) carry the same
+# settings the law table gives them, so the kit holds itself to what it asks of
+# adopters. Every linter has a reason; a linter is never turned off to make a
+# check pass, and a finding is fixed or carries `//nolint:<linter> // <reason>`.
+version: "2"
+
+run:
+  # The language floor of go.mod (GO_TOPS.md §2).
+  go: "1.26"
+  # Test files are linted like production code: the kit's tests are held to the
+  # same error handling as the code they check.
+  tests: true
+
+linters:
+  # Nothing is on by default, so every enabled linter is a choice with a reason
+  # below, and a golangci-lint upgrade cannot add or drop one silently.
+  default: none
+  enable:
+    # errcheck: G-12. An unchecked error is a silent failure. check-blank
+    # catches `_ = f.Close()` and `x, _ :=`; check-type-assertions catches
+    # `v := x.(T)` that panics. The one exclusion is a response body or a
+    # reader passed as io.ReadCloser; there is no exclusion for *os.File.
+    - errcheck
+    # errorlint: G-11. Wrapped errors must be matched with errors.Is and
+    # errors.As, and wrapped with %w, or a wrap anywhere upstream changes
+    # behaviour downstream.
+    - errorlint
+    # govet: the analyzers the toolchain ships (copylocks, lostcancel,
+    # printf, waitgroup and the rest of the default set). The kit has no
+    # reason to run fewer.
+    - govet
+    # staticcheck: correctness and API-misuse checks (it includes the stylecheck
+    # and gosimple families in golangci-lint v2) the compiler does not make.
+    - staticcheck
+    # unused: dead code is code that has to be read, tested and kept right.
+    - unused
+    # ineffassign: an assignment that is never read is usually a lost error.
+    - ineffassign
+    # gocritic: idiom and performance diagnostics, default set. They are the
+    # review comments a person would otherwise leave by hand.
+    - gocritic
+    # revive: exported names carry doc comments, and receivers, error strings
+    # and package comments follow the Go review conventions; a public package
+    # is read by adopters.
+    - revive
+    # misspell: the protocol is prose as much as code, and a typo in an error
+    # string or a flag description ships to every adopter.
+    - misspell
+    # unconvert: a conversion to the type a value already has is noise.
+    - unconvert
+    # nolintlint: AGENTS.md forbids `//nolint` without the linter name and a
+    # reason. This linter makes that a check and also fails a directive that no
+    # longer suppresses anything.
+    - nolintlint
+    # forbidigo: AGENTS.md "Forbidden". context.Background and context.TODO
+    # outside main, wiring and tests hide a missing context; time.Sleep in a
+    # test waits on a clock instead of the thing it means to wait for (use
+    # testing/synctest). The exclusions below scope each pattern.
+    - forbidigo
+    # usetesting: t.Context, t.TempDir, t.Setenv and t.Chdir replace the os and
+    # context calls that leak state between tests, which matters because the
+    # gate shuffles tests (-shuffle=on).
+    - usetesting
+
+  settings:
+    errcheck:
+      check-blank: true
+      check-type-assertions: true
+      exclude-functions:
+        - (io.ReadCloser).Close
+    errorlint:
+      errorf: true
+      asserts: true
+      comparison: true
+    forbidigo:
+      forbid:
+        - pattern: ^context\.(Background|TODO)$
+          msg: take a context from the caller; Background and TODO belong in main, wiring and tests only
+        - pattern: ^time\.Sleep$
+          msg: do not sleep in a test to wait on concurrency; use testing/synctest
+      analyze-types: true
+    nolintlint:
+      require-explanation: true
+      require-specific: true
+      allow-unused: false
+    revive:
+      rules:
+        - name: exported
+        - name: package-comments
+        - name: error-strings
+        - name: error-naming
+        - name: receiver-naming
+        - name: indent-error-flow
+        - name: var-naming
+        - name: unexported-return
+        - name: context-as-argument
+        - name: errorf
+        - name: empty-block
+        - name: unreachable-code
+
+  exclusions:
+    # Rules must be written out; none of the presets hides a finding.
+    generated: strict
+    presets: []
+    rules:
+      # context.Background and context.TODO are for main, wiring and tests.
+      - path: ^cmd/
+        linters: [forbidigo]
+        text: context\.(Background|TODO)
+      - path: _test\.go$
+        linters: [forbidigo]
+        text: context\.(Background|TODO)
+      # time.Sleep is forbidden in tests only; production code may back off.
+      - path-except: _test\.go$
+        linters: [forbidigo]
+        text: time\.Sleep
+
+formatters:
+  # gofmt is the baseline every Go file meets; gofumpt is gofmt plus the
+  # stricter layout rules (grouped declarations, no empty lines at block edges),
+  # so a diff never carries formatting churn; goimports keeps imports grouped
+  # standard, third party, then this module.
+  enable:
+    - gofmt
+    - gofumpt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/Hedronite/go-tops
+    gofumpt:
+      module-path: github.com/Hedronite/go-tops
+  exclusions:
+    generated: strict
+    paths:
+      # calibration/ is a frozen measurement record: its own module, its probe
+      # source and its results.json are what the recorded numbers came from, and
+      # `golangci-lint fmt` walks into nested modules. Reformatting the probe
+      # would change a file the record cites. Linters never reach it (nested
+      # module), so this is the one place it is named.
+      - ^calibration/
+
+issues:
+  # Report every finding. A cap would let a long list hide the one that matters.
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  # Report every finding on a line, not the first. The default keeps one per
+  # line, so a second violation hides behind the first until the first is fixed.
+  uniq-by-line: false

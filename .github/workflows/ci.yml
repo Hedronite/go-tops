@@ -1,0 +1,131 @@
+name: ci
+
+# Build, test and lint CI for the gotops CLI, until the CLI gates its own repo
+# (M1-G8 replaces this file with the one `gate` job of GO_TOPS.md §11). Read-only;
+# superseded runs are cancelled; every action is pinned by commit SHA (the
+# comment names the release). One aggregate job, `ci`, needs the rest: it is the
+# check a ruleset on main requires. The docs workflow (docs.yml) stays as it is.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: ubuntu
+            os: ubuntu-latest
+            lint_platform: linux-amd64
+            lint_sha256: 9b7fe6a6bf6334b98decf8d86b11415ea7889afdabdd1959fdce23af2a9ebcea
+          # macOS is a required leg: Darwin differs from Linux in cgo, paths and
+          # the toolchain (GO_TOPS.md §11). macos-latest runners are arm64.
+          - name: macos
+            os: macos-latest
+            lint_platform: darwin-arm64
+            lint_sha256: d1e409481a8ca846c4bc97e781eb5cb1bd5c23353a0b3977a1cbda1b1b6447d5
+    runs-on: ${{ matrix.os }}
+    steps:
+      # fetch-depth 0: the gate's mutation diff needs history (GO_TOPS.md §6.4),
+      # and the legs must match what the gate job will use.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version: 1.27.x
+          # No go.sum exists until the first runtime dependency lands (M1-G2),
+          # and setup-go has nothing to key a cache on without one.
+          cache: false
+      - name: build
+        run: go build ./...
+      # Tests run with cgo on: -race needs it on Linux (GO_TOPS.md §3.1).
+      - name: test
+        env:
+          CGO_ENABLED: "1"
+        run: go test -race -shuffle=on -count=1 ./...
+      # The release tarball is fetched and checked against the SHA-256 pinned in
+      # the matrix above before anything in it runs. The pin is exact (GO_TOPS.md
+      # §2); a new version means a new hash in this file, in a reviewed change.
+      - name: install golangci-lint v2.15.0
+        env:
+          VERSION: 2.15.0
+          PLATFORM: ${{ matrix.lint_platform }}
+          SHA256: ${{ matrix.lint_sha256 }}
+        run: |
+          set -euo pipefail
+          archive="${RUNNER_TEMP}/golangci-lint.tar.gz"
+          curl --fail --silent --show-error --location --output "${archive}" \
+            "https://github.com/golangci/golangci-lint/releases/download/v${VERSION}/golangci-lint-${VERSION}-${PLATFORM}.tar.gz"
+          echo "${SHA256}  ${archive}" | shasum -a 256 -c -
+          mkdir -p "${RUNNER_TEMP}/golangci-lint"
+          tar -xzf "${archive}" --strip-components=1 -C "${RUNNER_TEMP}/golangci-lint"
+          echo "${RUNNER_TEMP}/golangci-lint" >> "${GITHUB_PATH}"
+      - name: golangci-lint version
+        run: golangci-lint version
+      - name: golangci-lint run
+        run: golangci-lint run
+      - name: golangci-lint fmt
+        run: golangci-lint fmt --diff
+
+  # The language-floor leg: the module must still build and pass its tests on the
+  # oldest supported toolchain. The latest 1.26 patch release is named because the
+  # `go 1.26` line names a language version, not a release (GO_TOPS.md §2, §11).
+  floor:
+    name: floor
+    runs-on: ubuntu-latest
+    env:
+      GOTOOLCHAIN: go1.26.11
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version: 1.27.x
+          cache: false
+      - name: toolchain is the floor release
+        run: |
+          set -euo pipefail
+          got="$(go env GOVERSION)"
+          echo "GOVERSION=${got}"
+          test "${got}" = "${GOTOOLCHAIN}"
+      - name: build
+        run: go build ./...
+      - name: test
+        env:
+          CGO_ENABLED: "1"
+        run: go test -race -shuffle=on -count=1 ./...
+
+  ci:
+    name: ci
+    # Runs even when a dependency failed, was skipped or was cancelled, and
+    # fails unless every one of them succeeded: a skipped job must not pass.
+    if: ${{ always() }}
+    needs: [build, floor]
+    runs-on: ubuntu-latest
+    steps:
+      - name: every ci job succeeded
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "job results: ${RESULTS}"
+          for r in ${RESULTS}; do
+            if [ "${r}" != "success" ]; then
+              echo "::error::a ci job ended ${r}, not success"
+              exit 1
+            fi
+          done
