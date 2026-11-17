@@ -61,10 +61,13 @@ Plus a practice layer in `POLICIES.md` (human and agent working rules) and an or
 
 ### 1.3 Name and binary
 
-- Protocol: **Go-TOPS**. Binary: **`gotops`**. Repo (proposed): `github.com/Hedronite/go-tops`.
-- Go has no `cargo`-style external-subcommand mechanism, so there is no `go tops`. Run it with the
-  tool directive: `go get -tool github.com/Hedronite/go-tops/cmd/gotops@<ver>` then
-  `go tool gotops gate`. (Also installable with `go install`.)
+- Protocol: **Go-TOPS**. Binary: **`gotops`**. Repo: `github.com/Hedronite/go-tops`.
+- Go has no `cargo`-style external-subcommand mechanism, so there is no `go tops`. `gotops` is a
+  module tool, pinned in `tools/go.mod` with every other tool (§10), so the adopter's own `go.mod`
+  carries no tool dependency:
+  `go get -tool -modfile=tools/go.mod github.com/Hedronite/go-tops/cmd/gotops@<ver>`, then
+  `go tool -modfile=tools/go.mod gotops gate`. The `just` recipes in the drop-in hide the
+  `-modfile` flag. `go install` also works, for trying the tool; a gate runs the pinned build.
 
 ---
 
@@ -74,7 +77,7 @@ Plus a practice layer in `POLICIES.md` (human and agent working rules) and an or
 |---|---|
 | Protocol version | **0.3.0** (draft; becomes 1.0.0 when the gate runs through tier 1 on the five launch classes) |
 | Package version | 0.0.0 (unreleased) |
-| Language floor ("MSRV" analogue) | `go 1.26.0` in `go.mod`; matrix tests floor and current (current: Go 1.27) |
+| Language floor ("MSRV" analogue) | Go **1.26**, the oldest Go release still supported upstream (a policy: the floor moves when upstream drops support). The floor is a language version, compared in Go's own order (`go/version.Lang`), so a `go 1.26` and a `go 1.26.4` directive both meet it. Matrix tests floor and current (current: Go 1.27) |
 | Toolchain pin | `toolchain` directive in `go.mod` plus `GOTOOLCHAIN=local` in CI |
 | Tool lock | `go-tops.lock` (see §10) |
 | golangci-lint | v2 line; a version built with a Go at least as new as the project toolchain (v2.14.0 bundles gofumpt v0.12.0 and supports Go 1.27) |
@@ -94,16 +97,34 @@ Gates run in this order. A failing gate stops the run unless `--keep-going` is s
 
 | # | Gate | Command(s) | Pass condition |
 |---|---|---|---|
-| 1 | **Hygiene** | `go mod tidy -diff`; `go mod verify`; `golangci-lint fmt --diff`; `go vet ./...`; `golangci-lint run`; `govulncheck ./...`; dependency policy (`depguard`, license check) | All clean; no reachable vulnerability |
-| 2 | **Tests** | `CGO_ENABLED=1 gotestsum -- -race -shuffle=on -count=1 ./...` (includes `Example*` functions, the doc-test analogue). `-race` requires cgo on Linux; only darwin runs it without cgo | All pass; no race |
-| 3 | **Coverage** | tests with `-coverprofile -coverpkg=./...`; merge integration data (`go build -cover`, `GOCOVERDIR`, `go tool covdata`); then **`test -s`** on the merged profile | Profile exists and is non-empty; class floors met |
-| 4 | **CRAP** | native CRAP over merged profile + cyclomatic complexity | No function above its cap (§6) |
-| 5 | **Mutation (diff)** | mutation engine restricted to lines changed in `origin/main...HEAD` | Unexplained survivors ≤ `unexplained_survivors_max` |
-| 6 | **Class layers** | fuzz, leak detection, synctest-required tests, benchmark regression, cgo/unsafe checks, alloc budgets, as the class requires | Per-class (§5) |
+| 1 | **Hygiene** | `go mod tidy -diff`; `go mod verify`; `go env GOVERSION` equals the pinned toolchain (§2); `golangci-lint fmt --diff`; `golangci-lint run` as the adopter-style pass (the adopter's `.golangci.yml`, JSON saved to `.go-tops/lint-style.json`); `govulncheck -json ./...`; dependency policy (`depguard` in that lint pass; `go-licenses check` for the license allow list) | All clean; no reachable vulnerability |
+| 2 | **Tests** | **One run** feeds gates 2, 3 and 4: `CGO_ENABLED=1 go test -json -race -shuffle=on -count=1 -coverprofile=.go-tops/cover.out -coverpkg=./... ./...` (includes `Example*` functions, the doc-test analogue). `-race` requires cgo on Linux; only darwin runs it without cgo | All pass; no race; at least one test ran |
+| 3 | **Coverage** | the profile of that run, merged with integration data (`go build -cover`, `GOCOVERDIR`, `go tool covdata`); then **`test -s`** on the merged profile | Profile exists and is non-empty; class floors met, in statements (§6.1) |
+| 4 | **CRAP** | native CRAP over the same profile + cyclomatic complexity (§6.2) | No production function above its cap (§6.2, §6.7) |
+| 5 | **Mutation (diff)** | mutation engine restricted to lines changed against the merge base of `origin/main` (§6.4) | No unexplained survivor (`unexplained_survivors_max` is 0, §6.4) |
+| 6 | **Class layers** | fuzz, leak detection, synctest-required tests, benchmark regression, cgo/unsafe checks, alloc budgets, as the class requires. Allocation counts (`testing.AllocsPerRun`, `allocs/op`) are exact and gate at tier 1; time per op gates only at tier 2, on a named host, with `benchstat` significance | Per-class (§5) |
 | ★ | **Laws** | Go-TOPS analyzers (§8) | No `Refuse`; `not-evaluated` never counts as a pass |
 
 ★ The laws layer is **tier 0** (it defines the floor) but **executes last**, matching Rust-TOPS,
 where the laws layer is tier 0 and runs after the mapped commands.
+
+**One test run.** The suite runs once per gate run. Gate 2 parses the `go test -json` stream
+natively: zero tests fails, skips are recorded, and so is the shuffle seed (the `-test.shuffle
+<seed>` line each test binary prints). Gates 3 and 4 read the profile of the same run, so a
+test cannot pass in one gate and be absent from another. With `-race` the cover mode is `atomic`.
+`gotestsum` may wrap the same command for display; it is optional, and the gate reads the JSON,
+not the wrapper's output.
+
+**One lint pass per concern.** Gate 1 runs golangci-lint once, in the adopter's style, and saves
+the JSON. There is no standalone `go vet`: golangci-lint's `govet` runs the same analyzers. The
+laws layer runs its own pass with the kit's configuration (§8.1); the adopter's configuration
+never reaches a law.
+
+**The vulnerability layer is time-dependent.** `govulncheck` exits 0 with `-json` whatever it
+finds, so the gate judges the parsed findings. The report records the database timestamp
+(`db_last_modified` in the `config` message), and the layer is marked time-dependent: the same
+commit can pass today and fail tomorrow, because the database moved. `-db <url>` points
+`govulncheck` at a mirrored database, for a run that must be repeatable.
 
 Step 6 mirrors Rust-TOPS's step 6 ("property tests, fuzz, Miri, Kani, Callgrind when the crate
 class requires them") with Go-appropriate equivalents (§7).
@@ -164,27 +185,32 @@ For a new repo, copy the drop-in set and replace the placeholders:
 | File | Purpose | Placeholders |
 |---|---|---|
 | `go-tops.yaml` | Protocol config (§9) | `{MODULE}`, `{CLASS}` |
-| `go-tops.lock` | Tool pins and checksums (§10) | generated |
-| `AGENTS.md` | Agent-facing commands and rules (template: `config/AGENTS.template.md`) | `{MODULE}`, `{CLASS}`, `{ENFORCE}`, `{COVERAGE_FLOOR}`, `{CRAP_CAP}`, `{SURVIVORS_MAX}` |
-| `.golangci.yml` | golangci-lint v2 config; errcheck `check-blank` and `check-type-assertions` on (§6.3) | `{MODULE}` |
+| `go-tops.lock` | Pins for downloaded binaries and the Go toolchain (§10) | generated |
+| `tools/go.mod`, `tools/go.sum` | Pins for every module tool, run with `go tool -modfile=tools/go.mod` (§10) | generated |
+| `AGENTS.md` | Agent-facing commands and rules (template: `config/AGENTS.template.md`). `init` writes its block between `<!-- go-tops:begin -->` and `<!-- go-tops:end -->` | `{MODULE}`, `{CLASS}`, `{ENFORCE}`, `{COVERAGE_FLOOR}`, `{CRAP_CAP}`, `{SURVIVORS_MAX}` |
+| `GO-TOPS.md` | Adoption record (§13) | generated |
+| `.golangci.yml` | The adopter's golangci-lint v2 config, **style only**: no law reads it (§8.1). It carries errcheck `check-blank`, `check-type-assertions` and the same `exclude-functions` list as the law pass (§8.1), so the editor and the gate agree | `{MODULE}` |
 | `.go-tops/baseline.json` | Ratchet baseline (§6.7); written by `gotops baseline`, not by hand | generated |
 | `.gremlins.yaml` or engine config | Mutation settings **[verify]** | |
 | `.github/workflows/go-tops.yml` | CI floor (§11) | `{GO_FLOOR}`, `{GO_CURRENT}`, `{PRIMARY_PKG}` |
-| `go.mod` (`go`, `toolchain`, `tool` lines) | Toolchain pin | `{GO_FLOOR}` |
+| `.github/CODEOWNERS` | A fragment covering the files that can weaken the gate (§11) | `{OWNER}` |
+| `go.mod` | The `go` line (and, where the repo uses one, the `toolchain` line) | `{GO_FLOOR}` |
 | `justfile` | Front door recipes | |
 
 ### 4.2 Or install the orchestrator
 
 ```bash
-go get -tool github.com/Hedronite/go-tops/cmd/gotops@<ver>
-go tool gotops init --class binary-cli     # writes the drop-in set
-go tool gotops check                       # validates config
-go tool gotops gate                        # runs the gates (tier ≤ 1)
+mkdir tools && go mod init -modfile=tools/go.mod <module>/tools
+go get -tool -modfile=tools/go.mod github.com/Hedronite/go-tops/cmd/gotops@<ver>
+go tool -modfile=tools/go.mod gotops init --class binary-cli   # writes the drop-in set
+go tool -modfile=tools/go.mod gotops check                     # validates config
+go tool -modfile=tools/go.mod gotops gate                      # runs the gates (tier ≤ 1)
 ```
 
-`init` writes `go-tops.yaml`, `go-tops.lock`, `AGENTS.md`, drop-in configs, a class workflow, and
-the laws config, and (unlike Rust-TOPS, which does not write `rust-tops.lock`) generates the
-lock file so the first `gate` is already pinned.
+`init` writes the drop-in set above, pins the tools in `tools/go.mod`, and generates
+`go-tops.lock`, so the first `gate` is already pinned. It writes no laws config: the kit embeds
+it (§8.1). Where `AGENTS.md` already exists, `init` touches only the block between its markers
+(§12.1).
 
 ### 4.3 Nix (optional)
 
@@ -201,17 +227,18 @@ required layers, and CRAP caps. A repo declares one class per module (workspace 
 
 ### 5.1 Class catalog
 
-The schema permits twelve classes (Rust-TOPS's schema permits eleven). **Launch profiles** ship
-for the first five; the rest are schema-valid but profile-less until written, exactly as in
-Rust-TOPS where five of eleven classes have profiles.
+The schema permits twelve classes. **Launch profiles** ship for the three classes the Hedronite
+repos are: `binary-cli`, `binary-service` and `library-core`. The other nine, `tui-app` and
+`concurrency-runtime` among them, are schema-valid but profile-less until a repo needs one; such
+a repo sets `class` and states every threshold in its own `go-tops.yaml`.
 
 | Class | Typical code | Launch profile? |
 |---|---|---|
 | `library-core` (default) | Reusable library with a stable API | **Yes** |
 | `binary-cli` | Command-line programs | **Yes** |
-| `tui-app` | Bubble Tea (or similar) terminal programs | **Yes** |
+| `tui-app` | Bubble Tea (or similar) terminal programs | No (schema-valid; written when a repo needs it) |
 | `binary-service` | HTTP/gRPC services, exporters, daemons | **Yes** |
-| `concurrency-runtime` | Schedulers, pools, pipelines, queue/worker frameworks | **Yes** |
+| `concurrency-runtime` | Schedulers, pools, pipelines, queue/worker frameworks | No (schema-valid; written when a repo needs it) |
 | `library-util` | Small helper packages, low API stability | No |
 | `parser-codec` | Parsers, encoders/decoders, protocol code | No (high priority next) |
 | `unsafe-kernel` | Heavy `unsafe` / low-level memory code | No |
@@ -267,13 +294,26 @@ laws:
 
 ### 6.1 Coverage
 
-- Source: the merged profile from unit tests (`go test -coverprofile -coverpkg=./...`) and
-  integration runs (`go build -cover` + `GOCOVERDIR` + `go tool covdata merge/textfmt`).
-- Floors per class (§5.2) live in `go-tops.yaml`.
-- Gate fails when the profile is missing or empty (`test -s`).
+- Unit: **statements**, not lines. Go's profile counts statements (`NumStmt` per block), and
+  every coverage figure, floor and key in this spec is a percentage of statements. Go has no
+  native branch coverage (§15.2).
+- Source: the profile of the one test run (§3.1: `-coverprofile` with `-coverpkg=./...`), merged
+  with integration runs (`go build -cover` + `GOCOVERDIR` + `go tool covdata merge/textfmt`).
+  With `-race` the cover mode is `atomic`. The recipe for merging a `go test` profile with
+  `GOCOVERDIR` data is **[verify]** at M1; the route to test is
+  `go test -cover ... -args -test.gocoverdir=DIR`, then `covdata merge`, then `textfmt`.
+- Floors per class (§5.2) live in `go-tops.yaml` as `gates.coverage.statements_floor`.
+- Gate fails when the profile is missing or empty (`test -s`), or holds no block of a production
+  file (§3.4, rule 5).
 - Coverage is computed on the module's own packages; generated files (`*.gen.go`,
   `// Code generated ... DO NOT EDIT.`) are excluded by default, with an explicit allowlist for
   inclusion.
+
+Keys (G7 folds this table into §9 and the schema, then deletes it):
+
+| Key | Change |
+|---|---|
+| `gates.coverage.lines_floor` | **Renamed** `gates.coverage.statements_floor`. The report's `lines_pct` becomes `statements_pct` |
 
 ### 6.2 CRAP
 
@@ -419,20 +459,67 @@ something the analyzers do not, and only through the protocol-change process (§
   (vet, errcheck, bodyclose, noctx, contextcheck, gosec, depguard); the rest are custom.
 - **Readers.** Each law declares how it is judged:
   - `analyzer`: a Go-TOPS analyzer produces a verdict;
-  - `tool`: delegated to a named external tool, mapped into a verdict. A `tool` reader
-    reads the tool's effective configuration first. If the linter or setting the law depends
-    on is off (for example errcheck, or its `check-blank` setting, for G-12), the law is
-    `not-evaluated`, not `pass`;
+  - `tool`: delegated to a named external tool, mapped into a verdict. A delegated linter runs
+    in the law pass below, under the kit's own configuration, so the linter and every setting
+    the law depends on are on by construction;
   - `attested`: judged by human/agent attestation (e.g., oracle-first); reported
     `not-evaluated` until attested;
   - `tbd`: not yet implemented; reported `not-evaluated`.
 - **Honesty preserved.** A law with no fact reader (or missing tool) is reported `not-evaluated`, never as a pass.
 
+**The law pass.** The laws layer runs its delegated laws as its own golangci-lint pass, apart
+from the adopter-style pass of gate 1 (§3.1). `gotops` embeds the law configuration in the
+binary and writes it to `.go-tops/laws.golangci.yml` on every run. The pass is
+
+```bash
+golangci-lint run --config .go-tops/laws.golangci.yml --enable-only <linters in the table below> \
+  --output.json.path=.go-tops/lint-laws.json ./...
+```
+
+and each delegated law reads its findings from the saved JSON. The adopter's `.golangci.yml` is
+style only: the law pass never reads it, so no setting in it can weaken a law, and a law cannot
+go quiet because a linter was switched off. A pass that did not run leaves its laws
+`not-evaluated`; a result file that is missing or does not parse fails the layer (§3.4, rule 5);
+a run with no findings still writes a valid document. The pass is a second lint run over the
+same packages and shares the analysis cache with gate 1; its cost is measured at M5.
+
+**Law → linter → settings.** The settings belong to the kit. Changing one is a protocol change
+(§13).
+
+| Law | Linter | Kit-owned settings |
+|---|---|---|
+| G-02 | `govet` | `enable: [waitgroup]` |
+| G-07 | `govet` | `enable: [copylocks]` |
+| G-11 | `errorlint` | `errorf: true`, `asserts: true`, `comparison: true`. Matching on `err.Error()` is judged by a `gotops-laws` analyzer, not a linter |
+| G-12 | `errcheck` | `check-blank: true`, `check-type-assertions: true`, `exclude-functions: [(io.ReadCloser).Close, (*os.File).Close]` |
+| G-16 | `noctx`, `contextcheck` | defaults |
+| G-18 | `bodyclose`, `sqlclosecheck`, `rowserrcheck` | defaults |
+| G-37 | `gosec` | `includes: [G401, G404, G501, G505]` |
+
+`govet` runs with `disable-all: true` and exactly the analyzers its rows name. The G-12
+`exclude-functions` list is what gives a read-only `Close` a passing form: `defer r.Close()` on a
+reader passes, while `_ = f.Close()` and an unchecked `Write` still fail. A file written to is
+still checked by review (`AGENTS.md`). `init` writes the same list into the adopter's
+`.golangci.yml`. The delegated laws that are not golangci-lint linters are judged in gate 1:
+G-34 (`go mod tidy -diff`, `go mod verify`) and G-40 (`govulncheck`). Laws with an `analyzer`
+reader (G-08, G-17, G-19, G-25, G-38) and the facts G-26 and G-33 have no row here because no
+linter setting decides them.
+
+**Every enabled law has a fixture.** A law that has no fixture is not enabled.
+
+- A custom analyzer is tested with `analysistest` and `// want` comments in its `testdata/src/`.
+- A delegated linter is tested with a fixture module under `testdata/lints/` that breaks each
+  rule once, the violating line carrying `// want G-NN`. A test runs the law pass over that
+  module and diffs the findings against the markers: a marked line with no finding, or a finding
+  on an unmarked line, fails. This is what proves each row of the settings table fires.
+- Bumping a linter's pin re-runs the fixtures. That is the upkeep, and the point.
+
 ### 8.2 Law catalog (draft: 41 laws, `G-01`…`G-41`)
 
 Severity: **R** = Refuse, **A** = Ack. Reader: **an** = analyzer, **tl** = delegated tool,
 **at** = attested, **tbd** = not yet implemented. "v0.1" marks laws targeted for the first
-mechanical release.
+mechanical release. A retired law keeps its ID and its row, its Law cell begins `Retired`, and it
+counts in the catalog but is neither active nor v0.1.
 
 **Concurrency**
 
@@ -440,14 +527,14 @@ mechanical release.
 |---|---|---|---|---|
 | G-01 | Every `go` statement has a documented owner and an exit path (context, done channel, or finite work) | A | an (heuristic) | |
 | G-02 | `wg.Add` is never called inside the goroutine it counts | R | tl (vet family) | ✓ |
-| G-03 | Module language version ≥ 1.22 (per-iteration loop variables) | R | an | ✓ |
+| G-03 | Retired: absorbed by G-33. The language floor G-33 checks is above 1.22, where loop variables became per-iteration | R | an | |
 | G-04 | Channels are closed only by their owning sender, never by a receiver | A | an (heuristic) | |
 | G-05 | No unbuffered send that can strand a goroutine on early return (leak pattern) | A | an + goleak | |
 | G-06 | No mutex held across blocking I/O or channel operations | A | an (heuristic) | |
 | G-07 | Sync primitives are never copied | R | tl (vet `copylocks`) | ✓ |
 | G-08 | Tests never call `time.Sleep` to wait for concurrency; use `synctest` | R | an | ✓ |
 | G-09 | Fire-and-forget work from a request uses `context.WithoutCancel`, a bound, and a shutdown path | A | an (heuristic) | |
-| G-10 | (`tui-app`) The Bubble Tea model is mutated only inside `Update`; no model writes from goroutines or `tea.Cmd` closures | R | an | ✓ |
+| G-10 | (`tui-app`) The Bubble Tea model is mutated only inside `Update`; no model writes from goroutines or `tea.Cmd` closures | R | an | |
 
 **Errors**
 
@@ -505,7 +592,7 @@ mechanical release.
 
 | ID | Law | Sev | Reader | v0.1 |
 |---|---|---|---|---|
-| G-33 | `go` directive ≥ protocol floor; `toolchain` pinned | R | an | ✓ |
+| G-33 | The `go` directive's language version is at least the protocol floor, compared in Go's order (§2), and `go env GOVERSION` equals the pinned toolchain. A missing `toolchain` line is accepted when the `go` line names a patch release | R | an | ✓ |
 | G-34 | `go mod tidy -diff` is clean and `go mod verify` passes | R | tl | ✓ |
 | G-35 | Release builds are reproducible (`-trimpath`, no embedded timestamps) | A | tl (tier 3) | |
 
@@ -525,9 +612,11 @@ mechanical release.
 |---|---|---|---|---|
 | G-41 | (`binary-cli`) Exit codes are documented and stable; `--json` output matches a versioned schema | A | at | |
 
-**v0.1 target:** judge 18 laws mechanically (the ✓ rows), mirroring Rust-TOPS's
-approach of shipping a minority of laws with real readers and reporting the rest honestly as
-`not-evaluated`. The report states the count, e.g., "18 of 41 laws judged."
+**v0.1 target:** judge 16 laws mechanically (the ✓ rows: 16 active v0.1 laws; G-03 is retired
+into G-33, and G-10 waits for the `tui-app` profile), mirroring Rust-TOPS's approach of shipping
+a minority of laws with real readers and reporting the rest honestly as `not-evaluated`. The
+report states the count, e.g., "16 of 41 laws judged": 16 active v0.1 laws out of 41 catalog
+rows, retired rows included.
 
 ### 8.3 Law metadata
 
@@ -537,14 +626,35 @@ Each law lives in `laws/G-NN.yaml`:
 id: G-17
 title: "No context.Background outside main, wiring, and tests"
 severity: Refuse
+status: active            # active | retired | planned
 classes: [library-core, binary-service, concurrency-runtime, binary-cli, tui-app]
 reader: analyzer
 analyzer: gotops/ctxroot
+fixture: testdata/src/ctxroot
 allow_paths: ["cmd/**/main.go", "internal/app/wire*.go", "**/*_test.go"]
 rationale: >
   Detached contexts defeat cancellation and tracing; they hide leaks.
 fix: "Accept a context parameter and pass it down."
 ```
+
+**One applicability source.** A law applies to a class when the class is in the law file's
+`classes` list. Nothing else says which laws apply: a profile does not list laws, and
+`go-tops.yaml` does not enable or disable one. The report derives its counts from the catalog
+and that list:
+
+- `catalog`: every law row, retired ones included (41);
+- `applicable`: laws whose `status` is `active` and whose `classes` holds the class;
+- `judged`: applicable laws with a verdict other than `not-evaluated`.
+
+The class profile's `laws.required` names applicable laws whose verdict must be judged (§3.3);
+every id in it must be in the catalog and apply to the class. `fixture` names the fixture of the
+law (§8.1); an `active` law without one is invalid.
+
+Keys (G7 folds this table into §9 and the schema, then deletes it):
+
+| Key | Change |
+|---|---|
+| `laws.enable` | **Removed** from profile and config. Applicability is the `classes` list of each law file |
 
 ---
 
@@ -608,46 +718,60 @@ Config files the drop-in set may include: `go-tops.yaml`, `go-tops.lock`, `AGENT
 
 ---
 
-## 10. Tool lock: `go-tops.lock`
+## 10. Tool pins: `tools/go.mod` and `go-tops.lock`
 
-Purpose: make the gate reproducible. Contents:
+Purpose: make the gate reproducible, with one pin mechanism for each kind of tool.
 
-- Exact versions of Go, `golangci-lint`, `gotestsum`, `govulncheck`, `benchstat`, the mutation
-  engine, the secrets scanner, and `gotops` itself.
-- For downloaded binaries: URL template and SHA-256 per OS/arch.
-- For `tool`-directive tools: the module version (the `go.sum` entry provides the hash).
+- **Module tools** (`gotops`, `gotestsum`, `govulncheck`, `benchstat`, the mutation engine,
+  `go-licenses` v2.0.1) live in `tools/go.mod` as `tool` lines and are run with
+  `go tool -modfile=tools/go.mod <name>`. That file and its `go.sum` are the lock for them, and
+  the Go checksum database verifies them. The adopter's own `go.mod` and `go.sum` stay free of
+  tool dependencies. `go-tops.lock` does not repeat these versions.
+- **`go-tops.lock`** holds only what a module cannot: the downloaded binaries (golangci-lint,
+  for one; its project advises binary installs), each with its URL template and SHA-256 per
+  OS/arch, and the Go toolchain with its exact version.
+- **`gotops lock --verify`** re-checks every pin. For a module tool it builds the binary and
+  reads the module version with `go version -m` (a `go install` build reports its own version as
+  `dev`, so `--version` text is never compared), then compares it with `tools/go.mod`. For a
+  downloaded binary it compares the SHA-256, and for the toolchain it compares
+  `go env GOVERSION`.
 - **Trust model:** checksum-verified. Where an upstream release is mutable or unsigned, use
-  trust-on-first-use and record that in the lock (Rust-TOPS does this for Bend and Lean).
-  `gotops lock --verify` re-checks every pin; `gotops lock --update` is a reviewed change, never
-  an automatic one.
+  trust-on-first-use and record that in the lock. `gotops lock --update` is a reviewed change,
+  never an automatic one.
 
 ---
 
 ## 11. CI floor
 
-The drop-in workflow `.github/workflows/go-tops.yml` provides these jobs (placeholders
-`{GO_FLOOR}`, `{GO_CURRENT}`, `{PRIMARY_PKG}`):
+The drop-in workflow `.github/workflows/go-tops.yml` (placeholders `{GO_FLOOR}`, `{GO_CURRENT}`,
+`{PRIMARY_PKG}`) runs the same command a developer runs. It repeats no tool as a step: a job that
+runs tools one by one can be green while the gate is red.
 
-| Job | Content |
-|---|---|
-| `hygiene` | `go mod tidy -diff`, `go mod verify`, fmt check, vet, golangci-lint, govulncheck |
-| `tests` | `CGO_ENABLED=1 gotestsum -- -race -shuffle=on -count=1` on `{GO_FLOOR}` and `{GO_CURRENT}` |
-| `language-floor` | Build and test pinned at `go` floor (the MSRV analogue) |
-| `matrix` | Build-tag × `CGO_ENABLED=0/1` × GOOS/GOARCH (tier 2 on schedule; floor subset per PR) |
-| `coverage-crap` | Merged profile → CRAP; **fails if the profile or CRAP JSON is empty** |
-| `mutation-diff` | Diff-scoped mutation vs `origin/main...HEAD` |
-| `laws` | `gotops laws` (tier 0), uploads report |
-| `law-diff` | Separate workflow: fails PRs that weaken or remove a law without a protocol-change label |
-| `fuzz-nightly`, `bench-nightly`, `mutation-full` | Tier 2, scheduled |
-| `release-verify` | Tier 3, on tag: reproducible build, binary `govulncheck`, SBOM/signature check |
+| Job | Trigger | Content |
+|---|---|---|
+| `gate` | pull request, push to `main` | Checkout with `fetch-depth: 0` (the mutation diff needs history, §6.4); the pinned toolchain; `go tool -modfile=tools/go.mod gotops gate` (tier ≤ 1); upload `.go-tops/` (`report.json` and the saved lint and coverage output) with `if: always()`. Legs: `ubuntu-latest` at `{GO_CURRENT}` (the full gate); `macos-latest` at `{GO_CURRENT}` (the full gate); `ubuntu-latest` at `{GO_FLOOR}` with `GOTOOLCHAIN` set to the floor release and `--only tests` (build and test on the language floor) |
+| `deep` | schedule | `gotops gate --max-tier 2`: timed fuzzing, full-module mutation, long `-race -count=N` stress, benchmark time per op on a named host with `benchstat` significance, and the build-tag × `CGO_ENABLED=0/1` × GOOS/GOARCH matrix |
+| `release` | tag | `gotops gate --max-tier 3`: reproducible-build verification, binary `govulncheck`, SBOM and signature check |
 
 CI rules (carried from Rust-TOPS's lessons):
 
 - CI **refuses** `--dry-run` and any names-only mode.
-- The coverage job fails on an empty profile or empty CRAP output.
-- Unlike Rust-TOPS's drop-in workflow, which comments out the mutants, Darwin, and fuzz jobs,
-  Go-TOPS ships them as real jobs on the appropriate tier, disabled only by explicit config.
-- Pin actions by commit SHA; minimal `permissions:`; cache `GOMODCACHE`/`GOCACHE` by `go.sum`.
+- The gate fails on an empty coverage profile or empty CRAP output (§3.4), and so does CI.
+- **Every leg of `gate` is a required check.** The macOS leg is required wherever the kit runs on
+  Macs, which is every repo whose developers or users run macOS: Darwin differs from Linux in
+  cgo, paths and the toolchain, and a gate that only ran on Linux says nothing about the machine
+  a developer uses. A repo that never runs on macOS drops the leg by a CODEOWNERS-reviewed edit
+  of the workflow. There is **no Windows leg**: Go-TOPS judges no Windows-specific behavior, and
+  a repo that ships on Windows adds its own leg.
+- **No `law-diff` job in the adopter drop-in.** An adopter has no law files to diff. The risk on
+  the adopter's side is an edit to the files that set the gate, so the drop-in ships a CODEOWNERS
+  fragment covering `go-tops.yaml`, `.golangci.yml`, `.go-tops/`, `go-tops.lock`, `tools/` and
+  `.github/workflows/go-tops.yml`. The Go-TOPS repo keeps its own `law-diff` check, which fails
+  PRs that weaken or remove a law without a protocol-change label.
+- A layer the class requires runs in these jobs; none ships as a commented-out job. A layer is
+  off only by `enabled: false` with a reason (§7).
+- Pin actions by commit SHA; minimal `permissions:`; cache `GOMODCACHE`/`GOCACHE` by `go.sum` and
+  `tools/go.sum`.
 
 ---
 
@@ -657,14 +781,14 @@ CI rules (carried from Rust-TOPS's lessons):
 
 | Command | Behavior |
 |---|---|
-| `init --class <c>` | Writes `go-tops.yaml`, `go-tops.lock`, `AGENTS.md`, drop-in configs, the class workflow, `justfile`, and the laws config. Refuses to overwrite without `--force`. |
+| `init --class <c>` | Writes `go-tops.yaml`, `go-tops.lock`, `tools/go.mod` with its pins, the adopter's `.golangci.yml` (style only), the workflow, the CODEOWNERS fragment, `justfile` and the adoption record `GO-TOPS.md`. It writes no laws config: the kit embeds it. Where `AGENTS.md` exists it writes only between `<!-- go-tops:begin -->` and `<!-- go-tops:end -->`, replacing the block on a re-run and appending the pair when absent; one marker without the other is a configuration error. Where `AGENTS.md` is absent it creates the file with the block. Refuses to overwrite any other existing file without `--force`. |
 | `check` | Validates `go-tops.yaml` against the **JSON Schema** (full validation, an improvement over Rust-TOPS's partial checks), plus semantic checks: protocol id, non-empty version, module name, `crap.cap ≥ 1`, `library-core`/`concurrency-runtime` keep `unexplained_survivors_max = 0`, language floor ≤ current, `advisory` carries a dated exemption, and under `ratchet` the baseline file exists and is clean against `HEAD`. |
 | `baseline` | Writes `.go-tops/baseline.json` (§6.7) after a run in which every layer that feeds it passed. Refuses otherwise. The only command that writes the baseline. |
 | `gate` | Runs enabled layers at or below `--max-tier` (default 1). Options: `--max-tier N`, `--dry-run` (refused in CI), `--base <ref>`, `--changed`, `--keep-going`, `--json`, `--only <layer>`. Missing mapped tool fails. Laws run last. |
 | `laws [list \| run \| explain G-NN]` | Lists the catalog with readers, runs the laws layer alone, explains a law. |
 | `report [--format text \| json \| junit \| sarif]` | Renders the last report. |
-| `lock [--verify \| --update]` | Verifies or updates tool pins. |
-| `doctor` | Diagnoses environment: Go version vs floor, tool presence, `GOFLAGS`, cgo state. |
+| `lock [--verify \| --update]` | Verifies or updates tool pins (§10). `--verify` reads each module tool's version with `go version -m`, compares each downloaded binary's SHA-256, and compares `go env GOVERSION` with the pinned toolchain. `--update` is a reviewed change, never run in CI. |
+| `doctor` | Diagnoses environment: Go version against the floor (compared in Go's order, §2) and against the pinned toolchain, a C compiler (cgo is required for `-race`), tool presence, `GOFLAGS`, `GOTOOLCHAIN`, cgo state. |
 | `survivors [list \| explain \| expire]` | Manages the mutation survivor ledger. |
 | `version` | Protocol, package, and pinned-tool versions. |
 
@@ -736,15 +860,33 @@ Practice rules for humans and agents, enforced by review and, where possible, by
    protocol-change process: a PR that touches `laws/`, `schema/`, `profiles/`, or thresholds
    carries a `protocol-change` label and a changelog entry, and is reviewed by a protocol owner.
 4. Fix schema first, then prose.
-5. Explain every accepted mutation survivor (reason, owner, optional expiry).
+5. Explain every accepted mutation survivor (reason, owner, expiry).
 6. No `//nolint` without a reason; no `//tops:ack` without a reason and an owner.
 7. Agent-authored code meets the same gate and the same CRAP cap as human code.
 8. Do not edit generated files; fix the generator.
 9. Prefer deleting code to adding configuration.
 10. Keep `AGENTS.md` current: it is the contract between the repo and its agents.
 
-`AGENTS.md` (generated by `init`) lists: the `just` recipes; the exact `gotops` commands; the
-class and its floors; the laws enabled; the survivor/ack ledgers; and the rules above.
+`AGENTS.md` (written by `init` between `<!-- go-tops:begin -->` and `<!-- go-tops:end -->`, so
+existing agent instructions outside the markers survive) lists: the `just` recipes; the exact
+`gotops` commands; the class and its floors; the laws that apply to the class; the survivor/ack
+ledgers; and the rules above.
+
+**The adoption record `GO-TOPS.md`.** Every adopting repo keeps a `GO-TOPS.md` at its root: the
+one page a reader or an agent opens to learn what the repo adopted. It records:
+
+1. that the repo adopts Go-TOPS, with a link to <https://github.com/Hedronite/go-tops>;
+2. the protocol version adopted;
+3. the `gotops` version and the pinned tool versions, from `tools/go.mod` and `go-tops.lock`;
+4. the class and its thresholds, from `go-tops.yaml`;
+5. how to run the gate locally;
+6. where the baseline and the survivor ledger live, and how to refresh the baseline;
+7. every exemption in force (§6.8);
+8. known deviations from the protocol.
+
+`init` writes it with items 2 to 4 and 6 filled from the config. Keep it current when the
+config, an exemption or a ledger path changes. A record that disagrees with `go-tops.yaml` is
+wrong; the config wins.
 
 ---
 
@@ -782,7 +924,7 @@ class and its floors; the laws enabled; the survivor/ack ledgers; and the rules 
 | | Go alone | + Go-TOPS |
 |---|---|---|
 | Format, vet, lint | ✓ (manual) | pinned, config included |
-| Race-checked shuffled tests | manual | enforced |
+| Race-checked shuffled tests | manual | enforced, in one run that also feeds coverage and CRAP |
 | Merged unit + integration coverage | manual | automated, non-empty enforced |
 | Complexity-weighted risk (CRAP) | ✗ | native, capped per class |
 | Diff-scoped mutation testing | ✗ | adapter + survivor ledger |
@@ -790,6 +932,7 @@ class and its floors; the laws enabled; the survivor/ack ledgers; and the rules 
 | Reachability-based vulnerability gate | manual | enforced |
 | Machine-readable gate report | ✗ | `report.json` |
 | Agent contract | ✗ | `AGENTS.md` + policies |
+| One gate, locally and in CI | manual | `gotops gate`, one CI job |
 
 ### 15.2 What you do not get (v0.1 honesty)
 
@@ -798,9 +941,9 @@ class and its floors; the laws enabled; the survivor/ack ledgers; and the rules 
 - No formal-verification layer (Kani analogue); it is not a Go-TOPS layer.
 - Mutation testing quality depends on the chosen engine; engines are pre-1.0 or fork-maintained
   and may change flags between releases.
-- Only five of twelve classes have profiles at launch.
+- Only three of twelve classes have profiles at launch (`binary-cli`, `binary-service`, `library-core`).
 - Coverage statistics reflect statement coverage; Go has no native branch coverage.
-- No Windows/macOS-specific law coverage at v0.1; matrix jobs cover builds and tests only.
+- No platform-specific law coverage at v0.1: the gate runs on Linux and macOS and judges the same laws on both; there is no Windows leg.
 - Published `examples/` are not packaged as importable modules.
 
 ---
