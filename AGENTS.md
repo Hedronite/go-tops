@@ -17,7 +17,7 @@ Points from 0.3.0 that code must follow (see the change note at the top of `GO_T
 2. Test jobs run with `CGO_ENABLED=1`, because `-race` needs cgo on Linux. Builds and releases use `CGO_ENABLED=0`.
 3. An enabled layer with no command is `not-run` and fails the gate. Only `enabled: false` in config turns a layer off.
 4. The error-guard discount applies in every class, and only to guards that return the error. Blank discards (`_ =`, `x, _ :=`) are caught by errcheck `check-blank`.
-5. Adopters are gated by `ratchet` against `.go-tops/baseline.json`. This repo gates itself `hard`.
+5. Adopters are gated by `ratchet` against `.go-tops/baseline.json`. This repo gates itself `advisory` until the laws layer lands at M5 (§6.7, protocol 0.4.1): its CI asserts that hygiene, tests and coverage pass in the report, and `go-tops.yaml` switches to `hard` at M5.
 6. There is no Bend2 or Lean layer. The `go/analysis` analyzers are the laws layer.
 
 ## Do this

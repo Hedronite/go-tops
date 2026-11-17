@@ -13,6 +13,10 @@ junit.xml
 # Gate report is written on every run; the ledgers in .go-tops/ are tracked
 /.go-tops/report.json
 
+# Downloaded tool binaries: go-tops.lock pins them, the gate checks their SHA-256
+# (GO_TOPS.md §10)
+/.go-tops/bin/
+
 # Local workspace
 go.work
 go.work.sum

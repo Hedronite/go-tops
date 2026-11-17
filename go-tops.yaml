@@ -1,0 +1,51 @@
+# Go-TOPS gating its own repository (GO_TOPS.md §17).
+#
+# The kit runs `advisory` until the laws layer lands at M5 (GO_TOPS.md §6.7): the
+# 16 required laws stay `not-evaluated`, and a required law that is not
+# evaluated fails the gate (§3.3), so a `hard` run would be red by construction.
+# The kit's CI holds the gates that exist to the bar anyway: it fails unless
+# hygiene, tests and coverage are `pass`, CRAP and mutation are `skip` with an
+# unexpired `expires`, and every required law is `not-evaluated` for `no_reader`
+# (.github/workflows/ci.yml, "assert the report"). At M5 this file switches to
+# `enforce: hard` and the `advisory` key goes.
+protocol: "0.4.1"
+version: "0.1.0"
+module: github.com/Hedronite/go-tops
+class: binary-cli
+enforce: advisory
+
+advisory:
+  reason: the laws layer, which judges the 16 required laws, lands at M5
+  owner: "@VirtualMachinist"
+  expires: "2027-03-31"
+
+toolchain:
+  go_floor: "1.26"
+  go_current: "1.27"
+  cgo: false                 # builds and releases; test jobs run with cgo for -race
+
+gates:
+  hygiene:
+    golangci_lint: { config: .golangci.yml }
+    govulncheck:   { fail_on: reachable }
+    deps:          { licenses: { allow: [MIT, Apache-2.0, BSD-3-Clause, BSD-2-Clause, ISC] } }
+  tests:
+    race: true
+    shuffle: true
+    count: 1
+  coverage:
+    statements_floor: 70
+    exclude_generated: true
+  crap:
+    enabled: false
+    reason: native CRAP and the complexity count land at M2
+    expires: "2027-01-31"
+    cap: 10
+  mutation:
+    enabled: false
+    reason: the mutation layer lands at M4
+    expires: "2027-03-15"
+
+layers:
+  fuzz:  { targets: ["./internal/config:FuzzLoad"] }
+  bench: { enabled: false, reason: "binary-cli does not gate benchmarks" }

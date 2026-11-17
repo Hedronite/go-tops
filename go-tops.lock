@@ -1,0 +1,19 @@
+protocol: "0.4.1"               # must match the schema protocol constant
+toolchain: go1.27.4             # go env GOVERSION must equal this (GO_TOPS.md §2, §3.1)
+
+trust:
+  mode: checksum
+  note: SHA-256 values copied from the upstream release checksum file, golangci-lint-2.15.0-checksums.txt
+
+# Downloaded binaries only. Module tools (gotestsum, govulncheck, go-licenses and
+# gotops itself) are pinned in tools/go.mod (GO_TOPS.md §10).
+binaries:
+  - name: golangci-lint
+    version: "2.15.0"
+    url: https://github.com/golangci/golangci-lint/releases/download/v{version}/golangci-lint-{version}-{os}-{arch}.tar.gz
+    extract: golangci-lint-{version}-{os}-{arch}/golangci-lint
+    sha256:
+      darwin/arm64: d1e409481a8ca846c4bc97e781eb5cb1bd5c23353a0b3977a1cbda1b1b6447d5
+      darwin/amd64: 767b899a28285e88ded2823d5dcc4bc5ef681173eb2d80f029a7b17ee4ece3b8
+      linux/amd64: 9b7fe6a6bf6334b98decf8d86b11415ea7889afdabdd1959fdce23af2a9ebcea
+      linux/arm64: b4d8f17068b35ee6060cc2f69a16fb48740d706fbba81661c318649c114a6998
