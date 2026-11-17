@@ -366,7 +366,8 @@ the cap is held stricter than under `hard`.
 
 **The baseline is a debt ledger.** `.go-tops/baseline.json` lists only what is over the line
 today. Everything the ledger does not list is held to its `hard` rule, and an empty ledger means
-`hard` (plus the two limits with no `hard` form, which hold at 0). The file is tracked, written
+`hard`, with the suppression and exemption counts held at zero. That is stricter than `hard`,
+and it is allowed: a new suppression or exemption is a regression that needs the path below. The file is tracked, written
 with keys sorted and one entry per line so that parallel branches merge without conflict, and
 must be clean against `HEAD`.
 
