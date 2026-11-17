@@ -35,7 +35,7 @@ three parts, mirroring Rust-TOPS:
 3. **Per-class profiles** (`profiles/*.yaml`) that set floors and requirements for different
    kinds of Go code.
 
-Plus a practice layer in `POLICIES.md` (human and agent working rules) and an orchestrator CLI,
+Plus a practice layer (human and agent working rules, §13 and `AGENTS.md`) and an orchestrator CLI,
 **`gotops`**, that runs the gates.
 
 ### 1.1 Goals
