@@ -1151,7 +1151,9 @@ and that list:
 
 - `catalog`: every law row, retired ones included (43);
 - `applicable`: laws whose `status` is `active` and whose `classes` holds the class;
-- `judged`: applicable laws with a verdict other than `not-evaluated`.
+- `applicable_judged`: applicable laws with a verdict other than `not-evaluated`;
+- `judged` and `not_evaluated`: the active laws with and without a live reader in this release,
+  the same for every class: the "N of M laws judged" of §8.2 (§12.3).
 
 The class profile's `laws.required` names applicable laws whose verdict must be judged (§3.3);
 every id in it must be in the catalog and apply to the class. `fixture` names the fixture of the
