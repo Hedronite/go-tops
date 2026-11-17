@@ -136,19 +136,14 @@ func runLayer(t *testing.T, f *fake, cfg gate.Config) gate.Result {
 
 func steps(t *testing.T, r gate.Result) map[string]map[string]any {
 	t.Helper()
-	list, ok := r.Details["steps"].([]any)
-	if !ok {
-		t.Fatalf("details.steps = %T, want a list", r.Details["steps"])
-	}
 	m := map[string]map[string]any{}
-	for _, s := range list {
-		e, ok := s.(map[string]any)
+	for name, key := range keys {
+		e, ok := r.Details[key].(map[string]any)
 		if !ok {
-			t.Fatalf("step %T", s)
+			t.Fatalf("details.%s = %T, want a check entry (schema hygieneDetails)", key, r.Details[key])
 		}
-		name, ok := e["name"].(string)
-		if !ok {
-			t.Fatalf("step has no name: %v", e)
+		if e["outcome"] == nil {
+			t.Fatalf("details.%s has no outcome: %v", key, e)
 		}
 		m[name] = e
 	}
@@ -219,9 +214,14 @@ func TestAllClean(t *testing.T) {
 	if r.VulnDBTimestamp != "2026-11-17T09:12:44Z" {
 		t.Errorf("vuln db timestamp %q", r.VulnDBTimestamp)
 	}
-	v, ok := r.Details["vuln"].(map[string]any)
-	if !ok || v["time_dependent"] != true || v["db_last_modified"] != "2026-11-17T09:12:44Z" {
-		t.Errorf("vuln details %v: the layer must mark itself time-dependent and record the database timestamp", r.Details["vuln"])
+	v, ok := r.Details["vulnerabilities"].(map[string]any)
+	if !ok || v["time_dependent"] != true || v["db_last_modified"] != "2026-11-17T09:12:44Z" || v["fail_on"] != "reachable" {
+		t.Errorf("vulnerabilities %v: the check must mark itself time-dependent and record the database timestamp", r.Details["vulnerabilities"])
+	}
+	for _, k := range []string{"tidy", "verify", "toolchain", "format", "lint", "vulnerabilities", "licenses", "golangci_lint", "findings"} {
+		if _, ok := r.Details[k]; !ok {
+			t.Errorf("details lack %q (hygieneDetails requires it)", k)
+		}
 	}
 }
 
@@ -406,9 +406,9 @@ func TestImportedOnlyVulnerabilityDoesNotFail(t *testing.T) {
 	if r.Outcome != gate.Pass {
 		t.Fatalf("outcome %s: %s", r.Outcome, r.Reason)
 	}
-	v, ok := r.Details["vuln"].(map[string]any)
+	v, ok := r.Details["vulnerabilities"].(map[string]any)
 	if !ok || v["other"] != 1 {
-		t.Errorf("vuln details %v, want the unreached finding counted", r.Details["vuln"])
+		t.Errorf("vulnerabilities %v, want the unreached finding counted", r.Details["vulnerabilities"])
 	}
 }
 

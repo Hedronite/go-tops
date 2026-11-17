@@ -20,13 +20,22 @@ type vulnReport struct {
 	fixed          map[string]string
 }
 
-func (v *vulnReport) details() map[string]any {
+// extras are the figures the vulnerabilities entry adds to its outcome. The
+// check is time-dependent: the same commit can change verdict when the
+// database moves (§3.1).
+func (v *vulnReport) extras(failOn string) map[string]any {
+	if failOn == "" {
+		failOn = "reachable"
+	}
 	r := make([]any, 0, len(v.reachable))
 	for _, id := range v.reachable {
-		r = append(r, id)
+		e := map[string]any{"osv": id}
+		if f := v.fixed[id]; f != "" {
+			e["fixed_version"] = f
+		}
+		r = append(r, e)
 	}
-	// time_dependent: the same commit can change verdict when the database moves (§3.1).
-	return map[string]any{"db_last_modified": v.dbLastModified, "time_dependent": true, "reachable": r, "other": v.other}
+	return map[string]any{"db_last_modified": v.dbLastModified, "time_dependent": true, "fail_on": failOn, "reachable": r, "other": v.other}
 }
 
 // message is one object of govulncheck's -json stream.
@@ -113,6 +122,7 @@ func (h *run) vulns() step {
 		return failed(name, "%v", err)
 	}
 	h.vuln = v
+	h.note("vulnerabilities", v.extras(h.env.Config.Hygiene.FailOn))
 	if len(v.reachable) == 0 {
 		return passed(name)
 	}

@@ -192,9 +192,9 @@ func TestPlantUnreachedVulnerabilityPasses(t *testing.T) {
 	if r.Outcome != gate.Pass {
 		t.Fatalf("an unreached finding must not fail under fail_on: reachable: %s", r.Reason)
 	}
-	v, ok := r.Details["vuln"].(map[string]any)
+	v, ok := r.Details["vulnerabilities"].(map[string]any)
 	if !ok || v["other"] != 1 {
-		t.Errorf("vuln details %v, want the unreached finding counted", r.Details["vuln"])
+		t.Errorf("vulnerabilities %v, want the unreached finding counted", r.Details["vulnerabilities"])
 	}
 }
 

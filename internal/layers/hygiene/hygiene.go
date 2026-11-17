@@ -98,6 +98,27 @@ type run struct {
 	lintVersion string
 	findings    int
 	vuln        *vulnReport
+	// extra holds the figures a check adds to its entry in the details, by key.
+	extra map[string]map[string]any
+}
+
+// keys maps a check's command to its key in the details (B11, schema
+// hygieneDetails).
+var keys = map[string]string{
+	"go mod tidy -diff":        "tidy",
+	"go mod verify":            "verify",
+	"go env GOVERSION":         "toolchain",
+	"golangci-lint fmt --diff": "format",
+	"golangci-lint run":        "lint",
+	"govulncheck -json":        "vulnerabilities",
+	"go-licenses check":        "licenses",
+}
+
+func (h *run) note(key string, kv map[string]any) {
+	if h.extra == nil {
+		h.extra = map[string]map[string]any{}
+	}
+	h.extra[key] = kv
 }
 
 func (h *run) exec(argv ...string) (gate.Output, error) {
@@ -204,6 +225,9 @@ func (h *run) goVersion() step {
 		return cantStart(name, err)
 	}
 	got := strings.TrimSpace(string(out.Stdout))
+	if got != "" {
+		h.note("toolchain", map[string]any{"go_version": got, "pinned": h.lock.Toolchain})
+	}
 	switch {
 	case out.ExitCode != 0:
 		return failed(name, "exit %d: %s", out.ExitCode, head(string(out.Stderr), 3))
@@ -245,6 +269,11 @@ func (h *run) format() step {
 		files = append(files, m[1])
 	}
 	if len(files) > 0 {
+		list := make([]any, len(files))
+		for i, f := range files {
+			list[i] = f
+		}
+		h.note("format", map[string]any{"files": list})
 		return failed(name, "%d file(s) need formatting: %s", len(files), strings.Join(files, ", "))
 	}
 	return failed(name, "exit %d: %s", out.ExitCode, head(string(out.Stderr)+"\n"+diff, 3))
@@ -297,6 +326,15 @@ func (h *run) lint() step {
 		return failed(name, "%s: %v", LintJSON, err)
 	}
 	h.findings = len(res.Issues)
+	by := map[string]any{}
+	for _, is := range res.Issues {
+		n := 0
+		if v, ok := by[is.FromLinter].(int); ok {
+			n = v
+		}
+		by[is.FromLinter] = n + 1
+	}
+	h.note("lint", map[string]any{"findings": h.findings, "by_linter": by})
 	switch {
 	case h.findings > 0:
 		return failed(name, "%d finding(s): %s", h.findings, summarizeLint(res))
@@ -358,6 +396,11 @@ func (h *run) licenses() step {
 	if len(allow) == 0 {
 		allow = DefaultLicenses
 	}
+	list := make([]any, len(allow))
+	for i, a := range allow {
+		list[i] = a
+	}
+	h.note("licenses", map[string]any{"allowed": list})
 	args := append(append([]string{}, argv...), "check", "./...", "--allowed_licenses="+strings.Join(allow, ","))
 	if m := h.env.Config.Module; m != "" {
 		args = append(args, "--ignore", m)
@@ -372,16 +415,22 @@ func (h *run) licenses() step {
 	return failed(name, "a dependency is outside the allow list [%s]: %s", strings.Join(allow, ", "), head(string(out.Stderr)+"\n"+string(out.Stdout), 4))
 }
 
-// result folds the steps into the layer's outcome and details.
+// result folds the steps into the layer's outcome and the typed details of
+// schema hygieneDetails: one entry per check under its key, the lint version
+// and the style-lint finding count.
 func (h *run) result(steps []step) gate.Result {
 	var bad, absent []string
-	list := make([]any, 0, len(steps))
+	d := map[string]any{}
 	for _, s := range steps {
-		e := map[string]any{"name": s.name, "outcome": string(s.outcome)}
+		key := keys[s.name]
+		e := map[string]any{"outcome": string(s.outcome)}
 		if s.message != "" {
 			e["message"] = s.message
 		}
-		list = append(list, e)
+		for k, v := range h.extra[key] {
+			e[k] = v
+		}
+		d[key] = e
 		switch s.outcome {
 		case gate.Fail:
 			bad = append(bad, s.name+": "+s.message)
@@ -393,10 +442,10 @@ func (h *run) result(steps []step) gate.Result {
 	if version == "" {
 		version = "unknown"
 	}
-	d := map[string]any{"golangci_lint": version, "findings": h.findings, "steps": list}
+	d["golangci_lint"] = version
+	d["findings"] = h.findings
 	res := gate.Result{Details: d}
 	if h.vuln != nil {
-		d["vuln"] = h.vuln.details()
 		res.VulnDBTimestamp = h.vuln.dbLastModified
 	}
 	switch {
