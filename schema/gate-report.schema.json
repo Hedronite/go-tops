@@ -1,0 +1,130 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Go-TOPS gate report",
+  "description": "The file .go-tops/report.json, written by every gate run that gets as far as running a layer (§6.6, §12.3).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["protocol", "tool_version", "module", "class", "enforce", "git", "max_tier",
+               "started_at", "duration_ms", "layer_counts", "layers", "laws", "summary"],
+  "properties": {
+    "protocol": { "const": "0.4.0" },
+    "tool_version": { "type": "string", "minLength": 1 },
+    "module": { "type": "string", "minLength": 1 },
+    "class": { "type": "string", "minLength": 1 },
+    "enforce": { "$ref": "core.schema.json#/$defs/enforcementMode" },
+    "git": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["head", "base", "dirty"],
+      "properties": {
+        "head": { "type": "string", "minLength": 1 },
+        "base": { "type": "string", "minLength": 1 },
+        "dirty": { "type": "boolean" }
+      }
+    },
+    "max_tier": { "type": "integer", "minimum": 0, "maximum": 3 },
+    "started_at": { "type": "string", "format": "date-time" },
+    "duration_ms": { "type": "integer", "minimum": 0 },
+    "shuffle_seed": {
+      "description": "The seed of the shuffled test run; null when the tests did not run.",
+      "type": ["integer", "null"]
+    },
+    "vuln_db_timestamp": {
+      "description": "The timestamp of the vulnerability database govulncheck read; null when it did not run. The layer is time-dependent.",
+      "type": ["string", "null"],
+      "format": "date-time"
+    },
+    "layer_counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled_in_range", "ran"],
+      "properties": {
+        "enabled_in_range": { "type": "integer", "minimum": 0 },
+        "ran": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "layers": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/layer" }
+    },
+    "laws": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["catalog", "judged", "not_evaluated", "applicable", "required",
+                   "required_not_evaluated", "not_evaluated_by_reason", "out_of_range", "results"],
+      "properties": {
+        "catalog": { "description": "Rows in the law catalog (§8.2).", "type": "integer", "minimum": 0 },
+        "judged": { "description": "Laws with a live reader in this release: the number in \"N of M laws judged\".", "type": "integer", "minimum": 0 },
+        "not_evaluated": { "description": "Catalog laws without a live reader in this release.", "type": "integer", "minimum": 0 },
+        "applicable": { "description": "Laws the class enables in this run.", "type": "integer", "minimum": 0 },
+        "required": { "description": "Applicable laws the profile requires.", "type": "integer", "minimum": 0 },
+        "required_not_evaluated": { "description": "Required laws in range that ended not-evaluated. Above zero fails the gate.", "type": "integer", "minimum": 0 },
+        "not_evaluated_by_reason": {
+          "description": "Applicable laws that ended not-evaluated, by reason code.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["no_reader", "config_off", "input_missing"],
+          "properties": {
+            "no_reader": { "type": "integer", "minimum": 0 },
+            "config_off": { "type": "integer", "minimum": 0 },
+            "input_missing": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "out_of_range": {
+          "description": "Laws above max_tier. The run's verdict covers its range only.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "core.schema.json#/$defs/lawId" }
+        },
+        "results": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/lawResult" }
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["outcome", "exit_code", "failed"],
+      "properties": {
+        "outcome": { "$ref": "core.schema.json#/$defs/runOutcome" },
+        "exit_code": { "enum": [0, 1] },
+        "failed": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+      }
+    }
+  },
+  "$defs": {
+    "layer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "tier", "outcome"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+        "tier": { "type": "integer", "minimum": 0, "maximum": 3 },
+        "outcome": { "$ref": "core.schema.json#/$defs/outcome" },
+        "reason": { "type": "string", "minLength": 1 },
+        "details": { "description": "Layer-specific figures.", "type": "object" }
+      },
+      "if": { "required": ["outcome"], "properties": { "outcome": { "const": "skip" } } },
+      "then": { "required": ["reason"] }
+    },
+    "lawResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "verdict", "reader"],
+      "properties": {
+        "id": { "$ref": "core.schema.json#/$defs/lawId" },
+        "verdict": { "$ref": "core.schema.json#/$defs/verdict" },
+        "reader": { "enum": ["analyzer", "tool", "attested", "tbd"] },
+        "reason": { "$ref": "core.schema.json#/$defs/reasonCode" }
+      },
+      "allOf": [
+        {
+          "if": { "required": ["verdict"], "properties": { "verdict": { "const": "not-evaluated" } } },
+          "then": { "required": ["reason"] },
+          "else": { "not": { "required": ["reason"] } }
+        }
+      ]
+    }
+  }
+}

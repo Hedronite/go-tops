@@ -1,0 +1,13 @@
+# profiles/binary-cli.yaml
+class: binary-cli
+protocol: "0.4.0"
+gates:
+  coverage: { statements_floor: 70 }
+  crap: { cap: 10, complexity: { err_guard_discount: true, wrap_functions: [] } }
+  mutation: { unexplained_survivors_max: 0 }
+layers:
+  fuzz: { targets: [] }               # arg and flag parsers: the repo declares the globs (G-43)
+  bench: { enabled: false, reason: "binary-cli does not gate benchmarks" }
+laws:
+  enable: [G-11, G-12, G-16, G-17, G-18, G-19, G-33, G-34, G-40, G-41, G-42, G-43]
+  required: [G-11, G-12, G-16, G-17, G-18, G-19, G-33, G-34, G-40]

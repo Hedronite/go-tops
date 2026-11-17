@@ -1,0 +1,13 @@
+# profiles/library-core.yaml
+class: library-core
+protocol: "0.4.0"
+gates:
+  coverage: { statements_floor: 85 }
+  crap: { cap: 8, complexity: { err_guard_discount: true, wrap_functions: [] } }   # provisional (§5.2)
+  mutation: { unexplained_survivors_max: 0 }
+layers:
+  fuzz: { targets: [] }               # exported decoders: the repo declares the globs (G-43)
+  bench: { regression_pct: 5 }
+laws:
+  enable: [G-11, G-12, G-16, G-17, G-18, G-19, G-21, G-22, G-23, G-24, G-33, G-34, G-40, G-42, G-43]
+  required: [G-11, G-12, G-16, G-17, G-18, G-19, G-33, G-34, G-40]

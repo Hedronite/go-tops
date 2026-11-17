@@ -1,0 +1,60 @@
+{
+  "protocol": "0.4.0",
+  "tool_version": "0.0.0",
+  "module": "github.com/acme/myapp",
+  "class": "binary-cli",
+  "enforce": "ratchet",
+  "git": { "head": "abc1234", "base": "origin/main", "dirty": false },
+  "max_tier": 1,
+  "started_at": "2026-11-17T18:00:00Z",
+  "duration_ms": 184211,
+  "shuffle_seed": 91823,
+  "vuln_db_timestamp": "2026-11-17T09:12:44Z",
+  "layer_counts": { "enabled_in_range": 5, "ran": 5 },
+  "layers": [
+    {
+      "id": "hygiene", "tier": 1, "outcome": "pass",
+      "details": { "golangci_lint": "v2.15.0", "findings": 0 }
+    },
+    {
+      "id": "tests", "tier": 1, "outcome": "pass",
+      "details": { "packages": 41, "tests": 812, "race": true, "skipped": 3 }
+    },
+    {
+      "id": "coverage", "tier": 1, "outcome": "pass",
+      "details": { "statements_pct": 78.4, "floor": 70, "profile_bytes": 48211 }
+    },
+    {
+      "id": "crap", "tier": 1, "outcome": "fail",
+      "details": { "cap": 10,
+        "violations": [ { "func": "ParseSpec", "file": "internal/spec/parse.go:41",
+                          "cc": 14, "cov_pct": 52.0, "crap": 35.7, "baseline": null } ] }
+    },
+    {
+      "id": "mutation", "tier": 1, "outcome": "pass",
+      "details": { "mutants": 63, "killed": 60, "survived_explained": 3, "survived_unexplained": 0,
+                   "max": 0, "timed_out": 0, "dropped": 0 }
+    }
+  ],
+  "laws": {
+    "catalog": 43, "judged": 18, "not_evaluated": 25,
+    "applicable": 12, "required": 9, "required_not_evaluated": 0,
+    "not_evaluated_by_reason": { "no_reader": 3, "config_off": 0, "input_missing": 0 },
+    "out_of_range": [],
+    "results": [
+      { "id": "G-11", "verdict": "allow", "reader": "tool" },
+      { "id": "G-12", "verdict": "allow", "reader": "tool" },
+      { "id": "G-16", "verdict": "allow", "reader": "tool" },
+      { "id": "G-17", "verdict": "allow", "reader": "analyzer" },
+      { "id": "G-18", "verdict": "allow", "reader": "tool" },
+      { "id": "G-19", "verdict": "allow", "reader": "analyzer" },
+      { "id": "G-33", "verdict": "allow", "reader": "analyzer" },
+      { "id": "G-34", "verdict": "allow", "reader": "tool" },
+      { "id": "G-40", "verdict": "allow", "reader": "tool" },
+      { "id": "G-41", "verdict": "not-evaluated", "reason": "no_reader", "reader": "attested" },
+      { "id": "G-42", "verdict": "not-evaluated", "reason": "no_reader", "reader": "analyzer" },
+      { "id": "G-43", "verdict": "not-evaluated", "reason": "no_reader", "reader": "analyzer" }
+    ]
+  },
+  "summary": { "outcome": "fail", "exit_code": 1, "failed": ["crap"] }
+}
