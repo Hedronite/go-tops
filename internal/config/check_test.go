@@ -346,15 +346,15 @@ func TestConfigCannotLoosenTheProfile(t *testing.T) {
 	requirePass(t, writeModule(t, d, nil))
 }
 
-// The real catalog lands with the runner. Until then the stand-in accepts the
-// profile's laws and, through an injected catalog, each way a law can be refused.
+// The real catalog (internal/laws) accepts the profile's laws; an injected
+// catalog adds each way a law can be refused.
 type catalog map[string]config.LawInfo
 
-func (c catalog) Lookup(id, _ string) (config.LawInfo, bool) {
+func (c catalog) Lookup(id, class string) (config.LawInfo, bool) {
 	if info, ok := c[id]; ok {
 		return info, true
 	}
-	return config.DefaultLaws().Lookup(id, "")
+	return config.DefaultLaws().Lookup(id, class)
 }
 
 func TestRequiredLawsAreJudgedAgainstTheCatalog(t *testing.T) {
