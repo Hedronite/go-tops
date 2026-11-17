@@ -568,29 +568,138 @@ schema describes, `gotops gate` **always** writes `.go-tops/report.json` (and pr
 
 ### 6.7 Enforcement modes
 
+<!-- tops-core:begin enforcement -->
 The top-level key `enforce` sets how floors and caps are applied. Adopters default to
 `ratchet`. Go-TOPS runs `hard` on itself.
 
 | Mode | What fails |
 |---|---|
-| `hard` | Any function in scope above the CRAP cap; coverage below the floor; any lint finding |
-| `ratchet` | A new function above the cap; an existing function whose CRAP rises above its baseline; a package whose coverage falls below its baseline (or below the floor, once it has reached it); a per-linter, per-file finding count that rises; an `Ack` count that rises |
-| `advisory` | Nothing. Needs a dated exemption in `go-tops.yaml`; the report prints the run as not enforced |
+| `hard` | A production function above the CRAP cap; a package below its coverage floor; any lint finding; any `Refuse` finding; an unexplained mutation survivor |
+| `ratchet` | The `hard` rules, except where the ledger below holds an entry for the thing that failed: that entry's limit applies instead. Two further limits exist only here: suppression counts and the exemption count |
+| `advisory` | Nothing. Needs the `advisory` key (Keys, below); the report prints the run as not enforced. The baseline cannot be written |
 
-Baseline rules:
+**CRAP.** A function at or under the cap may change up to the cap. A function over the cap
+may not exceed its baseline score plus 0.01 (a rise of 0.01 or less is noise). A function absent
+from the baseline is new and meets the cap. So a function scoring 2 under a cap of 10 may rise to
+10, and one scoring 14.2 under a cap of 10 may not pass 14.21. Under `ratchet` no function within
+the cap is held stricter than under `hard`.
 
-- The baseline is `.go-tops/baseline.json`: CRAP per function, coverage per package, finding
-  counts per linter per file, and the ack count.
-- Only `gotops baseline` writes it, and only after a run in which every layer that feeds it
-  passed. The file is tracked and must be clean against `HEAD`.
-- Under `ratchet`, a missing baseline fails. Deleting the file is not a reset.
-- A function is identified by package path, receiver and name. A renamed function is a new
-  function. A new file starts at 0 findings; a deleted file's allowance does not move to
-  another file.
-- Lint counts are per linter, per file, not per module, so removing a finding in one file does
-  not pay for adding one in another.
-- Legacy findings stay in the baseline file. They are not wrapped in `//nolint` or
-  `//tops:ack` to zero the count.
+**The baseline is a debt ledger.** `.go-tops/baseline.json` lists only what is over the line
+today. Everything the ledger does not list is held to its `hard` rule, and an empty ledger means
+`hard`, with the suppression and exemption counts held at zero. That is stricter than `hard`,
+and it is allowed: a new suppression or exemption is a regression that needs the path below. The file is tracked, written
+with keys sorted and one entry per line so that parallel branches merge without conflict, and
+must be clean against `HEAD`.
+
+| Ledger kind | Entry key | Entry value | The ratchet checks |
+|---|---|---|---|
+| `functions` | function identity (below) | CRAP score when written | score ≤ value + 0.01. Only a function over the cap has an entry |
+| `packages` | package import path | statement coverage % and uncovered-statement count | A package under the floor fails only when its percentage falls **and** its uncovered-statement count rises. Deleting tested code can lower the percentage without raising the uncovered count, so it does not fail. A package at or over the floor, or absent, is held to the floor |
+| `findings` | linter, file | count of that linter's findings that no law maps | count ≤ value |
+| `laws` | law ID, file | count of `Refuse` findings for that law | count ≤ value; `Refuse` then means "no new instance" under `ratchet` and "none" under `hard` |
+| `suppressions` | linter and file for `//nolint`; law ID and file for `//tops:ack` comments and `.go-tops/acks.yaml` entries | count of such comments and entries | count ≤ value; absent means 0. No `hard` form: under `hard` a suppression needs only its reason (§13 rule 6) |
+| `exemptions` | none (one count per repo) | number of live exemption records (§6.8) | count ≤ value; absent means 0. No `hard` form: under `hard` an exemption is bounded by its expiry  |
+| `survivors` | file | count of unexplained survivors from the tier 2 whole-module mutation run (§6.4) | count ≤ value; absent means 0, so a legacy survivor is debt and a new one fails  |
+
+A finding is counted once: a finding that a law maps counts under `laws`, not under `findings`. A
+count is by file, never by module, so removing a finding in one file does not pay for adding one
+in another. A new file starts at 0; a deleted file's allowance does not move to another file.
+
+Beside the ledger the file holds `judged_laws`, the number of laws the run judged (applicable to
+the class, verdict other than `not-evaluated`). It is a floor, not a debt: the count may not fall
+between baseline and run, so a configuration edit cannot quietly shrink what is judged.
+
+**Writing the baseline.** Only `gotops baseline` writes the file (§12.1).
+
+- `baseline --init` writes the first ledger. It runs the layers that feed the ledger (tests,
+  coverage, CRAP, hygiene, the laws) as `gate` would and judges none of them: the ledger records
+  what was **measured**, not what **passed**. It writes when the tests are green and every
+  feeding layer produced non-empty output (a non-empty coverage profile, a CRAP report with at
+  least one production function, saved lint output). Red thresholds do not stop it; red tests or
+  an empty output do. It refuses when a ledger exists and under `advisory`. A repo with nothing
+  over the line gets a valid file with an empty ledger.
+- A ledger kind fed only by tier 2 (`survivors`) is recorded the same way, from a tier 2 run:
+  `baseline --init --kind survivors`. Until it is recorded, that kind is absent and holds at its
+  `hard` form.
+- Every later write only lowers. It lowers a value, removes an entry that is no longer over
+  the line, and raises `judged_laws`. It never adds an entry and never raises one.
+- Raising an entry, adding one, or lowering `judged_laws` needs
+  `baseline --accept-regression --reason <text> --owner <handle>` and a PR that carries the
+  `protocol-change` label. The flag records the change under `regressions` in the file. `gate`
+  compares the file with its copy at the diff base (§6.4) and fails a raised or added entry, or
+  a lowered `judged_laws`, that has no matching `regressions` record. A record is removed by the
+  write that pays the entry back to its earlier value.
+- **First ledger.** When the diff base has no `.go-tops/baseline.json`, the file is a first
+  ledger, and there is no copy to compare it with. `gate` accepts it without `regressions`
+  records only if every entry equals what this run measures (a `functions` value within 0.01;
+  counts, percentages and uncovered-statement counts exactly), no entry exists for anything the
+  run measures within the line, and `judged_laws` equals the run's count. That is what
+  `baseline --init` writes on that commit, so it is the only first ledger that passes. Any entry
+  above its measured value fails, so a hand-written ledger cannot carry extra allowance. A kind
+  that the base copy lacks (the tier 2 `survivors` kind, recorded later) is a first ledger for
+  that kind and is checked the same way against the run that recorded it.
+- Under `ratchet` a missing baseline fails; deleting the file is not a reset.
+- Legacy findings stay in the ledger. They are not wrapped in `//nolint` or `//tops:ack` to zero
+  the count: the `suppressions` limit holds that route shut.
+<!-- tops-core:end enforcement -->
+
+**Function identity.** A function is identified by import path, receiver type (if any)
+and name. Where that key occurs more than once in a package (several `init` functions, or
+`foo_linux.go` and `foo_darwin.go` twins; every `.go` file in the directory counts, whatever its
+build tags), the key adds the file's name, and where it still repeats within one file, its
+position in source order (`init#2`). A function moved to another file keeps its entry when
+`git diff -M` against the diff base pairs the two files and the receiver and name are unchanged.
+For any other rename or move, `baseline --rename <old-key> <new-key>` rewrites one key (function
+or package) and never changes a value; it refuses unless the old key has vanished from the code and
+the new key exists. The same command moves a key that gained a file name when a twin of the
+function was added. The result is reviewed as part of the PR. An unpaired rename without that
+command is a new function, and a new function meets the cap.
+
+**Keys.** The rules above add one configuration key. `enforce` and `baseline` are in §9 already.
+
+| Key | Meaning |
+|---|---|
+| `advisory.reason`, `advisory.owner`, `advisory.expires` | Required when `enforce: advisory` and invalid otherwise. `expires` is a date; `check` fails once it has passed. |
+
+#### First adoption of a legacy repo
+
+The repo has 100 production functions, 8 of them over the `binary-cli` cap of 10 under the 0.4.0
+rule, which counts coverage guard-neutral (vigil's counts in `calibration/2026-11-probe/`), and
+no baseline. The ledger numbers
+below other than those two are illustrative. Every step passes by the rule named beside it; the
+measuring run is `baseline --init` itself, so no step is a red gate.
+
+1. `gotops init --class binary-cli` writes `go-tops.yaml` with `enforce: ratchet`, and no
+   baseline (§12.1). `init` runs no gate, so there is nothing to fail.
+2. `gotops baseline --init` runs the feeding layers and judges none. Rule: measured, not
+   passed. Tests are green and the profile and the CRAP report are non-empty, so it writes
+   a ledger with 8 `functions` entries (each at its current score), no `packages` entry (every
+   package meets its floor), and whatever
+   `findings`, `laws`, `suppressions` and `exemptions` counts the code has today, for example 3
+   `//nolint` in two files. `judged_laws` is the run's count.
+3. The ledger and `go-tops.yaml` are committed on the adoption branch. Rule: the baseline is
+   tracked and clean against `HEAD`. The diff base, `origin/main`, has no baseline, so the
+   ledger is a first ledger (§6.7).
+4. `gotops check` passes: the file exists and is clean (§12.1).
+5. `gotops gate` passes. Rule: first ledger. Each entry equals this run's measurement, so no
+   `regressions` record is needed. Each of the 8 functions equals its entry (limit: entry +
+   0.01); the other 92 were at or under 10 when measured and are unchanged, so they meet the
+   cap; every count equals its entry; `judged_laws` equals its recorded value; no tier 2 kind
+   is judged at tier 1. This is the first green run, with no source edit.
+6. A later PR edits one of the 8 functions, which scores 21.0, to 21.005. Rule: a rise of 0.01
+   or less is noise. An edit to 22.0 fails by the same rule; that refusal is the rule working on
+   new debt, not an adoption step.
+7. A PR refactors one of the 8 down to 8. `gate` passes (the score fell), and
+   `gotops baseline` removes its entry (writes only lower). From then on it is held to the cap
+   of 10, like the other 92.
+8. A PR deletes tested code. In a package at or over its floor the PR passes while the package
+   stays at or over it. In a package the ledger lists as under its floor, the percentage may
+   fall but the uncovered-statement count does not rise, so the package does not fail.
+9. Before the nightly tier 2 job is enabled, one tier 2 run records the legacy survivors:
+   `gotops baseline --init --kind survivors`. The nightly then fails only on a survivor
+   that is new or in a file whose count rose.
+10. CI runs `gotops gate` (§11) on the adoption PR. The base still has no baseline, so the
+    first-ledger rule applies again and the run is green on step 5's commit.
 
 ### 6.8 Exemptions
 
@@ -1049,7 +1158,7 @@ CI rules (carried from Rust-TOPS's lessons):
 |---|---|
 | `init --class <c>` | Writes `go-tops.yaml`, `go-tops.lock`, `tools/go.mod` with its pins, the adopter's `.golangci.yml` (style only), the workflow, the CODEOWNERS fragment, `justfile` and the adoption record `GO-TOPS.md`. It writes no laws config: the kit embeds it. Where `AGENTS.md` exists it writes only between `<!-- go-tops:begin -->` and `<!-- go-tops:end -->`, replacing the block on a re-run and appending the pair when absent; one marker without the other is a configuration error. Where `AGENTS.md` is absent it creates the file with the block. Refuses to overwrite any other existing file without `--force`. |
 | `check` | Validates `go-tops.yaml` against the **JSON Schema** (full validation, an improvement over Rust-TOPS's partial checks), plus semantic checks: protocol id, non-empty version, module name, `crap.cap ≥ 1`, `library-core`/`concurrency-runtime` keep `unexplained_survivors_max = 0`, language floor ≤ current, `advisory` carries a dated exemption, and under `ratchet` the baseline file exists and is clean against `HEAD`. |
-| `baseline` | Writes `.go-tops/baseline.json` (§6.7) after a run in which every layer that feeds it passed. Refuses otherwise. The only command that writes the baseline. |
+| `baseline` | Writes `.go-tops/baseline.json` (§6.7), the only command that does. `--init` measures and writes the first ledger when the tests are green and every feeding layer produced non-empty output (thresholds may be red); `--init --kind survivors` records the tier 2 survivor counts the same way. A plain `baseline` only lowers entries and removes paid ones. `--accept-regression --reason <text> --owner <handle>` is the one way to raise an entry or lower `judged_laws` (the PR carries the `protocol-change` label). `--rename <old-key> <new-key>` moves one key. Refused under `advisory`, and `--init` is refused when a ledger exists. |
 | `gate` | Runs enabled layers at or below `--max-tier` (default 1). Options: `--max-tier N`, `--dry-run` (refused in CI), `--base <ref>`, `--changed`, `--keep-going`, `--json`, `--only <layer>`. Missing mapped tool fails. Laws run last. |
 | `laws [list \| run \| explain G-NN]` | Lists the catalog with readers, runs the laws layer alone, explains a law. |
 | `report [--format text \| json \| junit \| sarif]` | Renders the last report. |
