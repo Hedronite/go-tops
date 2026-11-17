@@ -108,11 +108,12 @@ Gates run in this order. How a run proceeds past a failing gate, and which gates
 | 3 | **Coverage** | the profile of that run, merged with integration data (`go build -cover`, `GOCOVERDIR`, `go tool covdata`); then **`test -s`** on the merged profile | Profile exists and is non-empty; class floors met, in statements (§6.1) |
 | 4 | **CRAP** | native CRAP over the same profile + cyclomatic complexity (§6.2) | No production function above its cap (§6.2, §6.7) |
 | 5 | **Mutation (diff)** | mutation engine restricted to lines changed against the merge base of `origin/main` (§6.4) | No unexplained survivor (`unexplained_survivors_max` is 0, §6.4) |
-| 6 | **Class layers** | fuzz, leak detection, synctest-required tests, benchmark regression, cgo/unsafe checks, alloc budgets, as the class requires. Allocation counts (`testing.AllocsPerRun`, `allocs/op`) are exact and gate at tier 1; time per op gates only at tier 2, on a named host, with `benchstat` significance | Per-class (§5) |
-| ★ | **Laws** | Go-TOPS analyzers (§8) | No `refuse`; `not-evaluated` never counts as a pass |
+| 6 | **Class layers** | the layers that run a command (§7): timed fuzzing, stress, benchmark regression, allocation budgets, sanitizer legs for cgo classes, as the class requires. Allocation counts (`allocs/op`) are exact and gate at tier 1; time per op gates only at tier 2, on a named host, with `benchstat` significance. Leak checks, seed replay and `synctest` tests run inside the test run of gate 2 and are not layers | Per-class (§5) |
+| ★ | **Laws** | Go-TOPS analyzers (§8) | No `refuse`; no required law is `not-evaluated` (§3.3) |
 
-★ The laws layer is **tier 0** (it defines the floor) but **executes last**, matching Rust-TOPS,
-where the laws layer is tier 0 and runs after the mapped commands.
+★ The laws layer defines the floor and **executes last**, matching Rust-TOPS, where the laws layer
+is tier 0 and runs after the mapped commands. Its laws with an `analyzer` reader are tier 0; its
+laws with a `tool` reader are tier 1 (§3.2).
 
 **One test run.** The suite runs once per gate run. Gate 2 parses the `go test -json` stream
 natively: zero tests fails, skips are recorded, and so is the shuffle seed (the `-test.shuffle
@@ -221,7 +222,7 @@ counted against that file's `suppressions` entry for the law (§6.7): up to the 
 
 | Key | Meaning |
 |---|---|
-| `laws.required` | Profile key: a list of law IDs, a subset of `laws.enable`. Each must have an `analyzer` or `tool` reader, because an `attested` or `tbd` law can never be judged, and each must be a law at tier 1 or below. `go-tops.yaml` may add IDs and may not remove or override the profile's |
+| `laws.required` | Profile key: a list of law IDs, a subset of the laws that apply to the class (§8.3). Each must have an `analyzer` or `tool` reader, because an `attested` or `tbd` law can never be judged, and each must be a law at tier 1 or below. `go-tops.yaml` may add IDs and may not remove or override the profile's |
 | `enabled`, `reason` | On every layer. `enabled: false` is the only way to turn a layer off, and it requires a non-empty `reason`, which is printed with the `skip`. `check` fails an `enabled: false` with no `reason` |
 
 ### 3.4 Stated rules (policy)
@@ -578,8 +579,8 @@ Keys (G7 folds this table into §9 and the schema, then deletes it):
 - **Diff outcomes:**
   - No merge base, or a shallow clone (`git rev-parse --is-shallow-repository` prints `true`):
     the layer is `fail`, and its message names the missing history and `fetch-depth: 0` (§11).
-  - No changed line in a production Go file: the layer is `vacuous`. It prints that it had
-    nothing to look at and counts for nothing: not as a pass, not as a failure.
+  - No changed line in a production Go file: the layer's outcome is `vacuous` (§3.3). It prints
+    that it had nothing to look at and counts for nothing: neither a pass nor a failure.
   - A non-empty diff that yields no mutants is a `pass` with `0 mutants` printed. An empty diff
     is the only vacuous case.
 - **Statuses:** every mutant the engine reports is mapped; a status that is not in this table is
@@ -895,7 +896,8 @@ inside the single test run of gate 2 is part of that run, not a layer.
 | Fuzz | Timed fuzzing, one run per target | `go test -run='^$' -fuzz='^FuzzName$' -fuzztime=…` | 2 |
 | Miri / sanitizers (UB detection) | Stress repetition; sanitizer legs for cgo classes | `go test -race -count=N`; `go test -msan` / `-asan` | 2 |
 | Kani (formal) | *No Go equivalent.* Not a Go-TOPS layer, so it does not appear in config or the report | n/a | n/a |
-| Callgrind (perf) | Benchmark regression vs baseline; allocation budgets | `go test -run='^$' -bench=. -benchmem`, `benchstat` | 2 |
+| Callgrind (perf) | Allocation budgets: allocation counts are exact, so they gate on any runner | `go test -run='^$' -bench=. -benchmem -benchtime=1x`, `allocs/op` against the budget; a `testing.AllocsPerRun` assertion runs inside the test run | 1 |
+| Callgrind (perf) | Benchmark regression vs baseline: time per op varies with the host, so it gates only on a named host with `benchstat` significance | `go test -run='^$' -bench=. -count=N`, `benchstat` | 2 |
 | `cargo deny` | Dependency policy and vulnerabilities | `govulncheck ./...`, `golangci-lint run` (`depguard`), `go mod verify` | 1 |
 | MSRV job | Language-floor job: build and test on the `go` floor | `go test ./...` on the floor toolchain (CI matrix, §11) | 1 |
 | Feature matrix | Build-tag × `CGO_ENABLED` × OS/arch matrix | `go test ./...` per leg (CI matrix, §11) | 2 |
@@ -922,7 +924,7 @@ is missing is `tool-missing` and fails the gate** (§3.3). A layer drops out of 
 the class does not require it or `go-tops.yaml` sets it `enabled: false` with a `reason`; either
 way it is `skip`, printed with the reason. `init` writes `enabled: false` with a reason for
 layers the class does not map, rather than leaving them enabled and empty. Because Go-TOPS
-resolves tools through the `tool` directive and the lock file, a missing tool is rare and is a
+pins tools in `tools/go.mod` and `go-tops.lock` (§10), a missing tool is rare and is a
 configuration error, not an environment accident.
 
 ---
@@ -935,7 +937,7 @@ Laws encode Go-specific hazards as named, numbered rules. Rust-TOPS 1.1.0 define
 (H-01…H-53) in a Bend2-based layer where 15 have fact readers judged by `bend` and 38 report
 `not-evaluated`. Go-TOPS uses the same honesty model (`refuse` fails, `ack` requires
 acknowledgement, `not-evaluated` never counts as a pass), implemented natively: the laws layer
-is a `go/analysis` multichecker (`gotops-laws`), tier 0, always on.
+is a `go/analysis` multichecker (`gotops-laws`). Its analyzer laws are tier 0 and always on; its delegated laws run in the law pass below, at tier 1 (§3.2).
 
 There is no Bend2 or Lean layer. A proof over a table of facts checks the table, not the code;
 the analyzers check the code. A formal layer is reconsidered only with evidence that it judges
