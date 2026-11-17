@@ -165,3 +165,13 @@ func TestMainAdvisory(t *testing.T) {
 		t.Fatalf("exit %d\n%s", code, out)
 	}
 }
+
+// An environment failure while loading the configuration (a repository check
+// cannot read) is exit 3, not 2.
+func TestMainLoadConfigEnvironmentErrorIsThree(t *testing.T) {
+	d := cmdDeps(t, gateLayers(nil, nil), cfg())
+	d.LoadConfig = func(string) (Config, error) { return Config{}, &EnvError{Err: errors.New("git: not a repository")} }
+	if code, _, _ := run(nil, d); code != 3 {
+		t.Fatalf("exit %d, want 3", code)
+	}
+}

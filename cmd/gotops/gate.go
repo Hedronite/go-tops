@@ -2,14 +2,13 @@ package main
 
 import (
 	"context"
-	"io/fs"
+	"errors"
+	"fmt"
 	"os"
-	"path/filepath"
+	"strings"
 
-	"go.yaml.in/yaml/v3"
-
-	gotops "github.com/Hedronite/go-tops"
 	"github.com/Hedronite/go-tops/internal/cli"
+	"github.com/Hedronite/go-tops/internal/config"
 	"github.com/Hedronite/go-tops/internal/gate"
 	"github.com/Hedronite/go-tops/internal/report"
 )
@@ -30,63 +29,77 @@ func runGate(env cli.Env, args []string) int {
 	}, env.Stdout, env.Stderr)
 }
 
-// TEMPORARY bridge until G2's loader lands: a small read of go-tops.yaml and the
-// embedded profile of its class. No schema validation and no semantic checks:
-// those are `check`.
+// loadGateConfig is `check` followed by the defaults of the class: the gate
+// runs on the effective configuration, so no cap or floor is ever absent.
+// Issues from check are a configuration failure (exit 2); a repository or file
+// that cannot be read is an environment failure (exit 3).
 func loadGateConfig(dir string) (gate.Config, error) {
-	b, err := os.ReadFile(filepath.Join(dir, "go-tops.yaml"))
+	res, err := config.Check(dir, config.Options{})
 	if err != nil {
-		return gate.Config{}, err
+		return gate.Config{}, &gate.EnvError{Err: err}
 	}
-	var f rawConfig
-	if err := yaml.Unmarshal(b, &f); err != nil {
-		return gate.Config{}, err
-	}
-	var p rawConfig
-	if pb, err := fs.ReadFile(gotops.Files(), "profiles/"+f.Class+".yaml"); err == nil {
-		if err := yaml.Unmarshal(pb, &p); err != nil {
-			return gate.Config{}, err
+	if len(res.Issues) > 0 {
+		lines := make([]string, len(res.Issues))
+		for i, is := range res.Issues {
+			lines[i] = is.String()
 		}
+		return gate.Config{}, errors.New("\n" + strings.Join(lines, "\n"))
 	}
-	c := gate.Config{Module: f.Module, Class: f.Class, Enforce: f.Enforce, Layers: map[string]gate.LayerConfig{}, Exemptions: f.Exemptions}
-	if f.Advisory != nil {
-		c.AdvisoryExpires = f.Advisory.Expires
+	eff, err := config.Effective(res.Config)
+	if err != nil {
+		return gate.Config{}, &gate.EnvError{Err: err}
 	}
-	c.RequiredLaws = append(append(c.RequiredLaws, p.Laws.Required...), f.Laws.Required...)
-	for id, lc := range map[string]*rawLayer{
-		"crap": f.Gates.Crap, "mutation": f.Gates.Mutation, "fuzz": f.Layers.Fuzz, "stress": f.Layers.Stress, "bench": f.Layers.Bench,
-	} {
-		if lc != nil && lc.Enabled != nil && !*lc.Enabled {
-			c.Layers[id] = gate.LayerConfig{Reason: lc.Reason, Expires: lc.Expires}
-		}
+	return toGateConfig(eff)
+}
+
+// toGateConfig turns an effective configuration into what the runner reads. It
+// fails when a key the runner needs is absent, which Effective rules out.
+func toGateConfig(e *config.Config) (gate.Config, error) {
+	g, l := e.Gates, e.Layers
+	if g.Crap.Cap == nil || g.Coverage.StatementsFloor == nil || g.Crap.Enabled == nil || g.Mutation.Enabled == nil ||
+		l.Fuzz.Enabled == nil || l.Stress.Enabled == nil || l.Bench.Enabled == nil {
+		return gate.Config{}, fmt.Errorf("the configuration is not effective: a key the gate reads is absent")
+	}
+	c := gate.Config{
+		Module:       e.Module,
+		Class:        e.Class,
+		Enforce:      e.Enforce,
+		Base:         g.Mutation.Base,
+		ReportPath:   e.Report.Path,
+		RequiredLaws: e.Laws.Required,
+		Layers: map[string]gate.LayerConfig{
+			"crap":     {Enabled: *g.Crap.Enabled, Reason: g.Crap.Reason, Expires: g.Crap.Expires},
+			"mutation": {Enabled: *g.Mutation.Enabled, Reason: g.Mutation.Reason, Expires: g.Mutation.Expires},
+			"fuzz":     {Enabled: *l.Fuzz.Enabled, Reason: l.Fuzz.Reason},
+			"stress":   {Enabled: *l.Stress.Enabled, Reason: l.Stress.Reason},
+			"bench":    {Enabled: *l.Bench.Enabled, Reason: l.Bench.Reason},
+		},
+		Hygiene: gate.HygieneConfig{
+			LintConfig: g.Hygiene.GolangciLint.Config,
+			VulnDB:     g.Hygiene.Govulncheck.DB,
+			FailOn:     g.Hygiene.Govulncheck.FailOn,
+			Depguard:   g.Hygiene.Deps.Depguard != nil && *g.Hygiene.Deps.Depguard,
+			Licenses:   g.Hygiene.Deps.Licenses.Allow,
+		},
+		Coverage: gate.CoverageConfig{
+			StatementsFloor:     *g.Coverage.StatementsFloor,
+			ExcludeGenerated:    g.Coverage.ExcludeGenerated != nil && *g.Coverage.ExcludeGenerated,
+			IntegrationEnabled:  g.Coverage.Integration.Enabled != nil && *g.Coverage.Integration.Enabled,
+			IntegrationPackages: g.Coverage.Integration.Packages,
+		},
+		Crap: gate.CrapConfig{
+			Cap:              *g.Crap.Cap,
+			ErrGuardDiscount: g.Crap.Complexity.ErrGuardDiscount != nil && *g.Crap.Complexity.ErrGuardDiscount,
+			WrapFunctions:    g.Crap.Complexity.WrapFunctions,
+		},
+	}
+	if e.Advisory != nil {
+		c.AdvisoryExpires = e.Advisory.Expires
+	}
+	for _, x := range e.Exemptions {
+		c.Exemptions = append(c.Exemptions, report.Exemption{
+			Path: x.Path, Symbol: x.Symbol, Layer: x.Layer, Shape: x.Shape, Reason: x.Reason, Owner: x.Owner, Expires: x.Expires,
+		})
 	}
 	return c, nil
-}
-
-type rawLayer struct {
-	Enabled *bool  `yaml:"enabled"`
-	Reason  string `yaml:"reason"`
-	Expires string `yaml:"expires"`
-}
-
-type rawConfig struct {
-	Module   string `yaml:"module"`
-	Class    string `yaml:"class"`
-	Enforce  string `yaml:"enforce"`
-	Advisory *struct {
-		Expires string `yaml:"expires"`
-	} `yaml:"advisory"`
-	Gates struct {
-		Crap     *rawLayer `yaml:"crap"`
-		Mutation *rawLayer `yaml:"mutation"`
-	} `yaml:"gates"`
-	Layers struct {
-		Fuzz   *rawLayer `yaml:"fuzz"`
-		Stress *rawLayer `yaml:"stress"`
-		Bench  *rawLayer `yaml:"bench"`
-	} `yaml:"layers"`
-	Laws struct {
-		Required []string `yaml:"required"`
-	} `yaml:"laws"`
-	Exemptions []report.Exemption `yaml:"exemptions"`
 }
