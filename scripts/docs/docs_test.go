@@ -119,6 +119,10 @@ func TestPlantedCountsAlongsideSiblingNamesFail(t *testing.T) {
 		{"line-names-sibling-suite", "judge 1 law mechanically", "judge 2 law mechanically", "states v01 = 2; the catalog has v01 = 1"},
 		{"cell-names-sibling-suite", "native multichecker (3 laws);", "native multichecker (2 laws);", "states catalog = 2; the catalog has catalog = 3"},
 		{"report-not-evaluated", `"not_evaluated": 1`, `"not_evaluated": 2`, "states not_evaluated = 2; the catalog has not_evaluated = 1"},
+		{"catalog-rows-phrase", "out of 3 catalog rows", "out of 4 catalog rows", "states catalog = 4; the catalog has catalog = 3"},
+		{"singular-active-law", "1 active v0.1 law", "2 active v0.1 law", "states v01 = 2; the catalog has v01 = 1"},
+		{"field-bullet-catalog", "retired ones included (3);", "retired ones included (4);", "states catalog = 4; the catalog has catalog = 3"},
+		{"field-bullet-active", "laws not retired (2);", "laws not retired (3);", "states active = 3; the catalog has active = 2"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -154,6 +158,68 @@ func editFile(t *testing.T, root, rel, old, new string) {
 	}
 	if err := os.WriteFile(p, []byte(strings.Replace(string(data), old, new, 1)), 0o644); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// Every YAML or JSON block in sections 5.3, 9 and 12.3 must carry a marker.
+func TestUnmarkedBlocksInExampleSectionsFail(t *testing.T) {
+	const prose = "Prose only: no example block here."
+	cases := []struct{ name, old, new, reason string }{
+		{"yaml-in-section-9", "## 9. Configuration\n\n" + prose, "## 9. Configuration\n\n```yaml\nprotocol: \"0.4.0\"\n```", "fenced yaml block in section 9 has no go-tops:example marker"},
+		{"json-in-section-12.3", "### 12.3 Report\n\n" + prose, "### 12.3 Report\n\n```json\n{}\n```", "fenced json block in section 12.3 has no go-tops:example marker"},
+		{"yml-in-section-5.3", "### 5.3 Profile file shape\n\n" + prose, "### 5.3 Profile file shape\n\n```yml\na: 1\n```", "fenced yml block in section 5.3 has no go-tops:example marker"},
+		{"subsection-of-9", "## 9. Configuration\n\n" + prose, "## 9. Configuration\n\n### 9.1 Keys\n\n```yaml\na: 1\n```", "fenced yaml block in section 9 has no go-tops:example marker"},
+		{"section-renumbered", "### 12.3 Report", "### 12.4 Report", "section 12.3 not found"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			root := fixture(t, "")
+			editFile(t, root, "GO_TOPS.md", c.old, c.new)
+			code, out := runDocs(root)
+			if got := failedChecks(out); code != 1 || len(got) != 1 || got[0] != "examples" || !strings.Contains(out, c.reason) {
+				t.Fatalf("exit %d, want only examples failing with %q:\n%s", code, c.reason, out)
+			}
+		})
+	}
+}
+
+func TestMarkedAndOutOfSectionBlocksPass(t *testing.T) {
+	root := fixture(t, "")
+	editFile(t, root, "GO_TOPS.md", "## 9. Configuration\n\nProse only: no example block here.",
+		"## 9. Configuration\n\n<!-- go-tops:example path=examples/cfg.yaml schema=schema/cfg.schema.json -->\n\n```yaml\nprotocol: \"0.4.0\"\ntier: 1\n```")
+	editFile(t, root, "GO_TOPS.md", "## 10. After the example sections\n\nProse only.",
+		"## 10. After the example sections\n\n```yaml\nnot: an example section\n```")
+	code, out := runDocs(root)
+	if code != 0 || !strings.Contains(out, "3 examples") {
+		t.Fatalf("a marked block in section 9 and an unmarked one in section 10 must pass, exit %d:\n%s", code, out)
+	}
+}
+
+// The protocol version is one value in the header, the section 2 row and both
+// schema constants; changing any one fails only the version check.
+func TestVersionDisagreementFails(t *testing.T) {
+	cases := []struct{ name, file, old, new, reason string }{
+		{"header-dev", "GO_TOPS.md", "0.4.0 (fixture) \u00b7", "0.4.0-dev (fixture) \u00b7", `says "0.4.0-dev"`},
+		{"section-2-row", "GO_TOPS.md", "**0.4.0** (fixture)", "**0.3.0** (fixture)", `section 2 row says "0.3.0"`},
+		{"go-tops-schema", "schema/go-tops.schema.json", `"0.4.0"`, `"0.5.0"`, `schema/go-tops.schema.json protocol const says "0.5.0"`},
+		{"gate-report-schema", "schema/gate-report.schema.json", `"0.4.0"`, `"0.3.0"`, `schema/gate-report.schema.json protocol const says "0.3.0"`},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			root := fixture(t, "")
+			editFile(t, root, c.file, c.old, c.new)
+			code, out := runDocs(root)
+			if got := failedChecks(out); code != 1 || len(got) != 1 || got[0] != "version" || !strings.Contains(out, c.reason) {
+				t.Fatalf("exit %d, want only version failing with %q:\n%s", code, c.reason, out)
+			}
+		})
+	}
+}
+
+func TestMissingSchemaFailsVersion(t *testing.T) {
+	root := fixture(t, "", "schema/gate-report.schema.json")
+	if code, out := runDocs(root); code != 1 || !strings.Contains(out, "schema/gate-report.schema.json: not found") {
+		t.Fatalf("exit %d:\n%s", code, out)
 	}
 }
 
@@ -231,18 +297,23 @@ func TestMaskCode(t *testing.T) {
 func TestReadStatements(t *testing.T) {
 	type s = statement
 	for line, want := range map[string][]s{
-		"The report states \"18 of 41 laws judged.\"":                                                         {{"v01", 18, ""}, {"catalog", 41, ""}},
-		"judge 18 laws mechanically (the rows)":                                                               {{"v01", 18, ""}},
-		"| **M3** | 18 laws judged (native) | \"18 of 41 judged\" |":                                          {{"v01", 18, ""}, {"v01", 18, ""}, {"catalog", 41, ""}},
-		"17 active v0.1 laws and 40 active laws":                                                              {{"v01", 17, ""}, {"active", 40, ""}},
-		"Law catalog (draft: 41 laws, `G-01`…`G-41`)":                                                         {{"catalog", 41, ""}, {"catalog", 41, ""}},
-		"Rust-TOPS 1.1.0 defines 53 laws":                                                                     nil,
-		"| Laws engine | Bend2 (53 laws, 15 judged) | native (41 laws) |":                                     {{"catalog", 41, ""}},
-		"**v0.1 target:** judge 18 laws mechanically (the rows), mirroring Rust-TOPS's":                       {{"v01", 18, ""}},
-		"| Laws engine | Bend2 (53 laws, 15 judged) | Native multichecker (41 laws); no Bend or Lean layer |": {{"catalog", 41, ""}},
-		`"catalog": 41, "judged": 18, "not_evaluated": 23`:                                                    {{"catalog", 41, ""}, {"v01", 18, ""}, {"not_evaluated", 23, ""}},
-		"Rust-TOPS defines 53 laws, this defines 41 laws":                                                     {{"catalog", 41, ""}},
-		"no counts here, only 3 of 5 things":                                                                  nil,
+		"The report states \"18 of 41 laws judged.\"":                                                              {{"v01", 18, ""}, {"catalog", 41, ""}},
+		"judge 18 laws mechanically (the rows)":                                                                    {{"v01", 18, ""}},
+		"| **M3** | 18 laws judged (native) | \"18 of 41 judged\" |":                                               {{"v01", 18, ""}, {"v01", 18, ""}, {"catalog", 41, ""}},
+		"17 active v0.1 laws and 40 active laws":                                                                   {{"v01", 17, ""}, {"active", 40, ""}},
+		"Law catalog (draft: 41 laws, `G-01`…`G-41`)":                                                              {{"catalog", 41, ""}, {"catalog", 41, ""}},
+		"Rust-TOPS 1.1.0 defines 53 laws":                                                                          nil,
+		"| Laws engine | Bend2 (53 laws, 15 judged) | native (41 laws) |":                                          {{"catalog", 41, ""}},
+		"**v0.1 target:** judge 18 laws mechanically (the rows), mirroring Rust-TOPS's":                            {{"v01", 18, ""}},
+		"| Laws engine | Bend2 (53 laws, 15 judged) | Native multichecker (41 laws); no Bend or Lean layer |":      {{"catalog", 41, ""}},
+		`"catalog": 41, "judged": 18, "not_evaluated": 23`:                                                         {{"catalog", 41, ""}, {"v01", 18, ""}, {"not_evaluated", 23, ""}},
+		"Rust-TOPS defines 53 laws, this defines 41 laws":                                                          {{"catalog", 41, ""}},
+		"- `catalog`: every law row, retired ones included (41);":                                                  {{"catalog", 41, ""}},
+		"- `active`: laws not retired (40);":                                                                       {{"active", 40, ""}},
+		"- `judged`: applicable laws with a verdict (not-evaluated is none)":                                       nil,
+		`report states "16 of 43 laws judged": 16 active v0.1 laws out of 43 catalog rows, retired rows included.`: {{"v01", 16, ""}, {"catalog", 43, ""}, {"v01", 16, ""}, {"catalog", 43, ""}},
+		"1 active v0.1 law out of 3 catalog rows, retired rows included.":                                          {{"v01", 1, ""}, {"catalog", 3, ""}},
+		"no counts here, only 3 of 5 things":                                                                       nil,
 	} {
 		got := readStatements(line)
 		if len(got) != len(want) {

@@ -22,9 +22,10 @@ type fence struct {
 }
 
 type heading struct {
-	Line int
-	Text string
-	Slug string
+	Line  int
+	Level int // 1 for "#" .. 6 for "######"
+	Text  string
+	Slug  string
 }
 
 // mdFile is one parsed Markdown file. Line numbers are 1-based; InFence[i]
@@ -144,7 +145,7 @@ func parseMarkdown(rel, text string) (*mdFile, []finding) {
 				f.Anchors[slug] = true
 			}
 			seen[slug]++
-			f.Headings = append(f.Headings, heading{Line: n, Text: text, Slug: slug})
+			f.Headings = append(f.Headings, heading{Line: n, Level: len(m[1]), Text: text, Slug: slug})
 		}
 		for _, m := range htmlIDRe.FindAllStringSubmatch(line, -1) {
 			f.Anchors[m[1]] = true

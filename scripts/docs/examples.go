@@ -43,9 +43,15 @@ func checkExamples(r *repo) checkResult {
 		res.Findings = append(res.Findings, fnd...)
 	}
 	schemas := map[string]*jsonschema.Schema{}
+	marked := map[string]map[int]bool{} // file -> opening line of each marked block
 	for _, ex := range all {
 		res.Findings = append(res.Findings, r.verifyExample(ex, schemas)...)
+		if marked[ex.Doc.Rel] == nil {
+			marked[ex.Doc.Rel] = map[int]bool{}
+		}
+		marked[ex.Doc.Rel][ex.Block.Open] = true
 	}
+	res.Findings = append(res.Findings, r.checkUnmarkedBlocks(marked)...)
 	res.Summary = fmt.Sprintf("%d examples", len(all))
 	if len(all) == 0 {
 		res.Summary = "0 examples found, nothing was compared or validated"
