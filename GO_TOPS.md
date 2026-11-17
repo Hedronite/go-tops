@@ -78,7 +78,7 @@ Plus a practice layer (human and agent working rules, §13 and `AGENTS.md`) and 
 | Protocol version | **0.4.0-dev** (in progress; 0.3.0 was the last draft; 1.0.0 is set by the criterion in §19) |
 | Package version | 0.0.0 (unreleased) |
 | Language floor ("MSRV" analogue) | Go **1.26**, the oldest Go release still supported upstream (a policy: the floor moves when upstream drops support). The floor is a language version, compared in Go's own order (`go/version.Lang`), so a `go 1.26` and a `go 1.26.4` directive both meet it. Matrix tests floor and current (current: Go 1.27) |
-| Toolchain pin | The exact Go release in `go-tops.lock` (§10). `GOTOOLCHAIN=local` makes the `go` command use the toolchain it ships with and never reads the `toolchain` line, so a runner with another patch release would pass silently: the gate therefore checks that `go env GOVERSION` equals the pin (§3.1, G-33). A `toolchain` line is optional, and a missing one is accepted when the `go` line names a patch release |
+| Toolchain pin | The exact Go release in `go-tops.lock` (§10). `GOTOOLCHAIN=local` makes the `go` command use the toolchain it ships with and never reads the `toolchain` line, so a runner with another patch release would pass silently: the gate therefore checks that `go env GOVERSION` equals the pin (§3.1, G-33). A `toolchain` line is optional: with or without one, and whether the `go` line names a language version (`go 1.26`) or a patch release (`go 1.27.4`), the pin is the release in the lock |
 | Tool pins | `tools/go.mod` for module tools; `go-tops.lock` for downloaded binaries and the toolchain (§10) |
 | golangci-lint | **v2.15.0** (exact; latest on 2026-11-17, released 2026-10-16; Go 1.27 support since v2.13.0) |
 | `gotestsum` | **v1.13.0** (exact; optional display wrapper over `go test -json`) |
@@ -1085,7 +1085,7 @@ counts in the catalog but is neither active nor v0.1.
 
 | ID | Law | Sev | Reader | v0.1 |
 |---|---|---|---|---|
-| G-33 | The `go` directive's language version is at least the protocol floor, compared in Go's order (§2), and `go env GOVERSION` equals the pinned toolchain. A missing `toolchain` line is accepted when the `go` line names a patch release | R | an | ✓ |
+| G-33 | The `go` directive's language version is at least the protocol floor, compared in Go's order (§2), and `go env GOVERSION` equals the pinned toolchain. The `toolchain` line is optional, because the pin is checked by `GOVERSION`, not by that line | R | an | ✓ |
 | G-34 | `go mod tidy -diff` is clean and `go mod verify` passes | R | tl | ✓ |
 | G-35 | Release builds are reproducible (`-trimpath`, no embedded timestamps) | A | tl (tier 3) | |
 
