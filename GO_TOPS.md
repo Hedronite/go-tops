@@ -1177,7 +1177,6 @@ depth fails.
 <!-- go-tops:example path=config/go-tops.example.yaml schema=schema/go-tops.schema.json -->
 ```yaml
 protocol: "0.4.0"            # must match the schema's protocol constant
-bogus_key: 1
 version: "0.1.0"             # this config's version (non-empty)
 module: github.com/acme/myapp
 class: binary-cli            # one of the schema's classes
