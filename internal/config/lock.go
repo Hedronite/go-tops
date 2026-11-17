@@ -6,13 +6,14 @@ import (
 	"strconv"
 )
 
-// lock validates go-tops.lock, when there is one, against schema/lock.schema.json
-// (GO_TOPS.md §10), and reports a binary name that appears twice, which JSON
-// Schema cannot say. A repo with no lock has nothing to check here: the hygiene
-// gate fails on the toolchain pin it cannot read.
+// lock validates go-tops.lock against schema/lock.schema.json (GO_TOPS.md §10),
+// and reports a binary name that appears twice, which JSON Schema cannot say.
+// The toolchain pin is the release in the lock (§2), so a repo with no lock has
+// no pin and no gate: a missing lock is an issue.
 func (c *checker) lock() error {
 	data, err := c.readRel(lockFile)
 	if errors.Is(err, fs.ErrNotExist) {
+		c.addTo(lockFile, "lock-missing", "", "not found: the toolchain pin is the release in go-tops.lock (§2, §10), so with no lock there is no gate")
 		return nil
 	}
 	if err != nil {

@@ -88,14 +88,18 @@ func writeFile(t *testing.T, dir, rel string, data []byte) {
 	}
 }
 
-// writeModule writes a module directory: go.mod, go-tops.yaml from d, and any
-// extra files (path to content).
+// writeModule writes a module directory: go.mod, go-tops.yaml from d, a valid
+// go-tops.lock unless files carries its own, and any extra files (path to
+// content).
 func writeModule(t *testing.T, d doc, files map[string]string) string {
 	t.Helper()
 	dir := t.TempDir()
 	writeFile(t, dir, "go.mod", []byte("module example.com/app\n\ngo 1.26\n"))
 	if d != nil {
 		writeFile(t, dir, "go-tops.yaml", mustYAML(t, d))
+	}
+	if _, own := files[lockName]; !own {
+		writeFile(t, dir, lockName, mustYAML(t, lockDoc(t)))
 	}
 	for rel, content := range files {
 		writeFile(t, dir, rel, []byte(content))

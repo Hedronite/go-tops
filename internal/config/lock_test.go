@@ -157,7 +157,25 @@ func TestLocksThatPass(t *testing.T) {
 	}
 }
 
-func TestNoLockIsNotAConfigIssue(t *testing.T) {
+// The toolchain pin is the release in the lock (§2): no lock, no gate.
+func TestMissingLockIsAnIssue(t *testing.T) {
+	for _, enforce := range []string{"hard", "ratchet", "advisory"} {
+		t.Run(enforce, func(t *testing.T) {
+			d := baseDoc(t)
+			d["enforce"] = enforce
+			if enforce == "advisory" {
+				d["advisory"] = doc{"reason": "the laws layer lands at M5", "owner": "x", "expires": "2027-06-01"}
+			}
+			dir := writeModule(t, d, nil)
+			if err := os.Remove(filepath.Join(dir, lockName)); err != nil {
+				t.Fatal(err)
+			}
+			expect(t, check(t, dir).Issues, want{file: lockName, rule: "lock-missing", pointer: ptr(""), contains: "no gate"})
+		})
+	}
+}
+
+func TestAPresentLockIsNotMissing(t *testing.T) {
 	requirePass(t, writeModule(t, baseDoc(t), nil))
 }
 

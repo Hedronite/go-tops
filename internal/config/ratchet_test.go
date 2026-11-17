@@ -115,6 +115,58 @@ func TestRatchetBaselineProblems(t *testing.T) {
 	}
 }
 
+// §6.7: the baseline is a debt ledger. Its content is validated against the
+// baseline definition of core.schema.json, clean or not.
+func TestRatchetBaselineContent(t *testing.T) {
+	const file = ".go-tops/baseline.json"
+	bw := func(rule, pointer string) want { return want{file: file, rule: rule, pointer: ptr(pointer)} }
+	tests := []struct {
+		name, content string
+		want          want
+	}{
+		{"empty object", "{}", bw("schema", "")},
+		{"not JSON", "{", bw("json", "")},
+		{"empty file", "", bw("json", "")},
+		{"two values", baselineJSON + baselineJSON, bw("json", "")},
+		{"judged_laws negative", `{"ledger":{},"judged_laws":-1}`, bw("schema", "/judged_laws")},
+		{"judged_laws not an integer", `{"ledger":{},"judged_laws":"many"}`, bw("schema", "/judged_laws")},
+		{"unknown ledger kind", `{"ledger":{"bogus":1},"judged_laws":0}`, bw("schema", "/ledger/bogus")},
+		{"unknown top-level key", `{"ledger":{},"judged_laws":0,"extra":1}`, bw("schema", "/extra")},
+		{"function score negative", `{"ledger":{"functions":{"a.F":-1}},"judged_laws":0}`, bw("schema", "/ledger/functions/a.F")},
+		{"package percentage above 100", `{"ledger":{"packages":{"a":{"statements_pct":101,"uncovered":1}}},"judged_laws":0}`, bw("schema", "/ledger/packages/a/statements_pct")},
+		{"exemption count zero", `{"ledger":{"exemptions":0},"judged_laws":0}`, bw("schema", "/ledger/exemptions")},
+		{"regression without an owner", `{"ledger":{},"judged_laws":0,"regressions":[{"kind":"functions","key":"a.F","from":1,"to":2,"reason":"three words here"}]}`, bw("schema", "/regressions/0")},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := ratchetRepo(t, ratchetDoc(t), map[string]string{file: tt.content})
+			expect(t, check(t, dir).Issues, tt.want)
+		})
+	}
+}
+
+func TestRatchetBaselineContentIsReportedEvenWhenDirty(t *testing.T) {
+	const file = ".go-tops/baseline.json"
+	dir := ratchetRepo(t, ratchetDoc(t), map[string]string{file: baselineJSON})
+	writeFile(t, dir, file, []byte("{}"))
+	issues := check(t, dir).Issues
+	expect(t, issues, want{rule: "baseline", pointer: ptr("/enforce"), contains: "differs from HEAD"})
+	expect(t, issues, want{file: file, rule: "schema", pointer: ptr("")})
+}
+
+func TestBaselineContentIsNotCheckedOutsideRatchet(t *testing.T) {
+	dir := writeModule(t, baseDoc(t), map[string]string{".go-tops/baseline.json": "{"})
+	requirePass(t, dir)
+}
+
+func TestARichBaselinePasses(t *testing.T) {
+	rich := `{"ledger":{"functions":{"internal/a.F":14.2},"packages":{"example.com/app/a":{"statements_pct":61.5,"uncovered":30}},` +
+		`"findings":{"revive":{"a.go":2}},"laws":{"G-12":{"a.go":1}},"suppressions":{"nolint":{"errcheck":{"a.go":1}},"ack":{"G-12":{"a.go":1}}},` +
+		`"exemptions":2,"survivors":{"a.go":1}},"judged_laws":16,` +
+		`"regressions":[{"kind":"functions","key":"internal/a.F","from":null,"to":14.2,"reason":"accepted for the migration","owner":"x"}]}`
+	requirePass(t, ratchetRepo(t, ratchetDoc(t), map[string]string{".go-tops/baseline.json": rich}))
+}
+
 func TestRatchetBaselineKeyPathIsContained(t *testing.T) {
 	d := ratchetDoc(t)
 	d["baseline"] = "../baseline.json"

@@ -2,8 +2,10 @@ package config
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"sync"
 
@@ -24,6 +26,7 @@ const (
 	schemaLock      = "lock.schema.json"
 	schemaSurvivors = "core.schema.json#/$defs/survivorsFile"
 	schemaAcks      = "core.schema.json#/$defs/acksFile"
+	schemaBaseline  = "core.schema.json#/$defs/baseline"
 )
 
 type compiledSchemas struct {
@@ -125,4 +128,25 @@ func collect(u *jsonschema.OutputUnit, file string, out *[]Issue) {
 	for i := range u.Errors {
 		collect(&u.Errors[i], file, out)
 	}
+}
+
+// parseJSON decodes one JSON document into the value the schema validator takes.
+// The string is why it could not, or "".
+func parseJSON(data []byte) (any, string) {
+	if len(data) > maxBytes {
+		return nil, fmt.Sprintf("larger than %d bytes", maxBytes)
+	}
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.UseNumber()
+	var v any
+	if err := dec.Decode(&v); err != nil {
+		if errors.Is(err, io.EOF) {
+			return nil, "the file is empty"
+		}
+		return nil, "invalid JSON: " + err.Error()
+	}
+	if _, err := dec.Token(); !errors.Is(err, io.EOF) {
+		return nil, "more than one JSON value, or text after the first"
+	}
+	return v, ""
 }

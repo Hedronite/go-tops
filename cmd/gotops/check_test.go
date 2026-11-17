@@ -43,10 +43,23 @@ func module(t *testing.T, config string) string {
 		}
 	}
 	write("go.mod", "module example.com/app\n\ngo 1.26\n")
+	write("go-tops.lock", goodLock(t))
 	if config != "" {
 		write("go-tops.yaml", config)
 	}
 	return dir
+}
+
+func goodLock(t *testing.T) string {
+	t.Helper()
+	p, err := gotops.Protocol()
+	if err != nil {
+		t.Fatal(err)
+	}
+	sha := strings.Repeat("a", 64)
+	return "protocol: \"" + p + "\"\ntoolchain: go1.27.4\ntrust: {mode: checksum, note: copied from the upstream checksum file}\n" +
+		"binaries:\n  - name: golangci-lint\n    version: \"2.15.0\"\n    url: https://example.com/v{version}/{os}-{arch}.tar.gz\n    sha256:\n" +
+		"      darwin/arm64: " + sha + "\n      darwin/amd64: " + sha + "\n      linux/amd64: " + sha + "\n      linux/arm64: " + sha + "\n"
 }
 
 func goodConfig(t *testing.T) string {
@@ -108,6 +121,37 @@ func TestCheckExits3WhenRatchetCannotReadAGitRepository(t *testing.T) {
 	code, _, stderr := gotopsIn(t, dir, "check")
 	if code != 3 {
 		t.Errorf("exit = %d, want 3; stderr %q", code, stderr)
+	}
+}
+
+func TestCheckExits2WithNoLock(t *testing.T) {
+	dir := module(t, goodConfig(t))
+	if err := os.Remove(filepath.Join(dir, "go-tops.lock")); err != nil {
+		t.Fatal(err)
+	}
+	code, _, stderr := gotopsIn(t, dir, "check")
+	if code != 2 || !strings.Contains(stderr, "go-tops.lock") || !strings.Contains(stderr, "lock-missing") {
+		t.Errorf("exit %d, stderr %q", code, stderr)
+	}
+}
+
+func TestCheckExits2OnAnInvalidBaselineUnderRatchet(t *testing.T) {
+	dir := module(t, strings.Replace(goodConfig(t), "enforce: hard", "enforce: ratchet", 1))
+	if err := os.MkdirAll(filepath.Join(dir, ".go-tops"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".go-tops", "baseline.json"), []byte("{}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{{"init", "-q"}, {"add", "-A"}, {"-c", "user.name=t", "-c", "user.email=t@example.com", "-c", "commit.gpgsign=false", "commit", "-q", "-m", "c"}} {
+		cmd := exec.CommandContext(t.Context(), "git", append([]string{"-C", dir}, args...)...)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	code, _, stderr := gotopsIn(t, dir, "check")
+	if code != 2 || !strings.Contains(stderr, "baseline.json") || !strings.Contains(stderr, "judged_laws") {
+		t.Errorf("exit %d, stderr %q", code, stderr)
 	}
 }
 

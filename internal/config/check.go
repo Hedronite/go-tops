@@ -387,8 +387,8 @@ func (c *checker) survivorDays(file string, v any) {
 	}
 }
 
-// baseline: under ratchet (the default for adopters) the baseline file exists
-// and is clean against HEAD (§6.7).
+// baseline: under ratchet (the default for adopters) the baseline file exists,
+// is clean against HEAD and is a valid ledger (§6.7).
 func (c *checker) baseline() error {
 	if c.cfg.Enforce != "" && c.cfg.Enforce != "ratchet" {
 		return nil
@@ -408,5 +408,29 @@ func (c *checker) baseline() error {
 	if problem != "" {
 		c.add("baseline", ptr, "under ratchet the baseline %s %s (§6.7)", rel, problem)
 	}
+	return c.baselineContent(rel)
+}
+
+// baselineContent validates the baseline file against the ledger definitions of
+// core.schema.json, whether or not it is clean: a ledger the gate cannot read
+// is not a ledger. A missing file was reported above.
+func (c *checker) baselineContent(rel string) error {
+	data, err := c.readRel(rel)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	v, why := parseJSON(data)
+	if why != "" {
+		c.addTo(rel, "json", "", "%s", why)
+		return nil
+	}
+	found, err := validate(schemaBaseline, rel, v)
+	if err != nil {
+		return err
+	}
+	c.issues = append(c.issues, found...)
 	return nil
 }
