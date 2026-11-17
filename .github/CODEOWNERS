@@ -1,0 +1,12 @@
+# The protocol, its schemas, profiles and config, the calibration record and
+# the workflows that check them. A change to any of these is a protocol change.
+# GitHub ignores a line whose owner lacks write access. The CODEOWNERS
+# errors API must return {"errors": []} before this file is a real gate.
+
+/GO_TOPS.md       @VirtualMachinist @NebuHedron
+/schema/          @VirtualMachinist @NebuHedron
+/profiles/        @VirtualMachinist @NebuHedron
+/config/          @VirtualMachinist @NebuHedron
+/calibration/     @VirtualMachinist @NebuHedron
+/scripts/         @VirtualMachinist @NebuHedron
+/.github/         @VirtualMachinist @NebuHedron
