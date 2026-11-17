@@ -116,3 +116,20 @@ func TestCoverageRunsNothing(t *testing.T) {
 		t.Fatalf("%s: %s", r.Outcome, r.Reason)
 	}
 }
+
+// B15: integration.enabled true must not read as a pass on unit coverage alone.
+func TestIntegrationEnabledFailsBecauseTheMergeIsNotImplemented(t *testing.T) {
+	env := profileEnv(t, seventy, 10)
+	env.Config.Coverage.IntegrationEnabled = true
+	r := Coverage{}.Run(context.Background(), env)
+	if r.Outcome != gate.Fail || !strings.Contains(r.Reason, "integration merge not implemented in this release") {
+		t.Fatalf("%s: %s", r.Outcome, r.Reason)
+	}
+	if msg, ok := r.Details["error"].(string); !ok || msg == "" {
+		t.Errorf("details %v, want {error}", r.Details)
+	}
+	env.Config.Coverage.IntegrationEnabled = false
+	if r := (Coverage{}).Run(context.Background(), env); r.Outcome != gate.Pass {
+		t.Fatalf("with integration off the same profile passes: %s", r.Outcome)
+	}
+}

@@ -91,8 +91,8 @@ func TestTheCommandIsTheOneOfSection31(t *testing.T) {
 	if got := strings.Join(c.Argv, " "); got != want {
 		t.Errorf("argv\n got %s\nwant %s", got, want)
 	}
-	if len(c.Env) != 1 || c.Env[0] != "CGO_ENABLED=1" {
-		t.Errorf("env %v, want CGO_ENABLED=1: -race needs cgo", c.Env)
+	if len(c.Env) != 2 || c.Env[0] != "CGO_ENABLED=1" || c.Env[1] != "GOFLAGS=-count=1" {
+		t.Errorf("env %v, want CGO_ENABLED=1 (-race needs cgo) and GOFLAGS=-count=1 (an inherited GOFLAGS must not reach the run)", c.Env)
 	}
 }
 
@@ -127,7 +127,8 @@ func TestZeroTestsFails(t *testing.T) {
 	}
 }
 
-// G5d: a race is a failure, even if every test reported pass.
+// G5d: a race the detector finds outside any test exits 66, and that fails
+// the run even when every test reported pass.
 func TestRaceFails(t *testing.T) {
 	out := gate.Output{ExitCode: 66, Stdout: stream(cat(
 		[]ev{seed("m/e", "9")}, pass("m/e", "TestRace"),
@@ -296,5 +297,45 @@ func TestOneRunFeedsBothLayers(t *testing.T) {
 	}
 	if got["tests"] != "pass" || got["coverage"] != "pass" {
 		t.Fatalf("layers %v\n%s", got, run.Text)
+	}
+}
+
+// The race banner printed by a passing test is text. The run passes.
+func TestPassingTestThatLogsTheRaceBannerPasses(t *testing.T) {
+	out := gate.Output{Stdout: stream(cat(
+		[]ev{seed("m/e", "9"), {Action: "output", Package: "m/e", Test: "TestLogs", Output: "WARNING: DATA RACE\n"}},
+		pass("m/e", "TestLogs"),
+		[]ev{{Action: "pass", Package: "m/e"}},
+	)...)}
+	env, _ := newEnv(t, answer(out))
+	if r := (Tests{}).Run(context.Background(), env); r.Outcome != gate.Pass {
+		t.Fatalf("%s: %s", r.Outcome, r.Reason)
+	}
+}
+
+// A parent test whose only subtest is skipped is no test that ran: the zero-test
+// rule counts leaves. The tests figure counts leaves too.
+func TestParentWithOnlyASkippedSubtestIsNoTest(t *testing.T) {
+	out := gate.Output{Stdout: stream(cat(
+		[]ev{seed("m/a", "1")},
+		[]ev{{Action: "run", Package: "m/a", Test: "TestP"}, {Action: "run", Package: "m/a", Test: "TestP/a"}, {Action: "skip", Package: "m/a", Test: "TestP/a"}, {Action: "pass", Package: "m/a", Test: "TestP"}},
+		[]ev{{Action: "pass", Package: "m/a"}},
+	)...)}
+	env, _ := newEnv(t, answer(out))
+	r := Tests{}.Run(context.Background(), env)
+	if r.Outcome != gate.Fail || !strings.Contains(r.Reason, "no test ran") {
+		t.Fatalf("%s: %s", r.Outcome, r.Reason)
+	}
+}
+
+func TestTestsFigureCountsLeaves(t *testing.T) {
+	out := gate.Output{Stdout: stream(cat(
+		[]ev{seed("m/a", "1")}, pass("m/a", "TestA"), pass("m/a", "TestA/x"), pass("m/a", "TestA/y"), pass("m/a", "TestB"),
+		[]ev{{Action: "pass", Package: "m/a"}},
+	)...)}
+	env, _ := newEnv(t, answer(out))
+	r := Tests{}.Run(context.Background(), env)
+	if r.Outcome != gate.Pass || r.Details["tests"] != 3 || r.Details["skipped"] != 0 {
+		t.Fatalf("%s %v: want 3 leaf tests (TestA/x, TestA/y, TestB)", r.Outcome, r.Details)
 	}
 }

@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
-	"sort"
 	"strconv"
 	"strings"
 )
@@ -25,14 +24,13 @@ type event struct {
 
 // Result is what the gate keeps of one `go test -json` run.
 type Result struct {
-	Packages    int      // packages with at least one test result
-	Tests       int      // every test result, subtests and skipped ones included
-	Skipped     int      // results that are skips
+	Packages    int      // packages with at least one leaf test
+	Tests       int      // leaf tests: a test with no subtest, skipped ones included
+	Skipped     int      // leaf tests that are skips
 	FailedTests []string // "package.Test" of each failed test, in order
 	// FailedPackages are packages that failed with no failing test of their
 	// own: a build failure, a panic in TestMain, a race after the tests.
 	FailedPackages []string
-	Races          []string // packages whose output holds a data race report
 	BuildErrors    []string // compiler output lines, without the "# package" headers
 	Seed           int64    // the -test.shuffle seed (see Parse)
 	HasSeed        bool
@@ -42,10 +40,7 @@ type Result struct {
 // Ran is the number of tests that ran: results that are not skips.
 func (r *Result) Ran() int { return r.Tests - r.Skipped }
 
-var (
-	seedRE = regexp.MustCompile(`^-test\.shuffle (\d+)$`)
-	raceRE = "WARNING: DATA RACE"
-)
+var seedRE = regexp.MustCompile(`^-test\.shuffle (\d+)$`)
 
 // Parse reads a `go test -json` stream. Each test binary shuffles with a seed
 // of its own, printed as "-test.shuffle <seed>"; the run records the seed of
@@ -58,9 +53,8 @@ func Parse(stream []byte) (*Result, error) {
 	res := &Result{}
 	pkgSeed := map[string]int64{}
 	var seedOrder, failedOrder []string
-	hasTests := map[string]bool{}
+	results := map[string]map[string]string{} // package, test: pass, fail or skip
 	failedTest := map[string]bool{}
-	raced := map[string]bool{}
 	sawJSON := false
 
 	sc := bufio.NewScanner(bytes.NewReader(stream))
@@ -94,10 +88,6 @@ func Parse(stream []byte) (*Result, error) {
 					seedOrder = append(seedOrder, e.Package)
 				}
 			}
-			if strings.Contains(e.Output, raceRE) && !raced[e.Package] {
-				raced[e.Package] = true
-				res.Races = append(res.Races, e.Package)
-			}
 		case "pass", "fail", "skip":
 			if e.Test == "" {
 				if e.Action == "fail" {
@@ -105,17 +95,13 @@ func Parse(stream []byte) (*Result, error) {
 				}
 				continue
 			}
-			res.Tests++
-			hasTests[e.Package] = true
-			switch e.Action {
-			case "skip":
-				res.Skipped++
-			case "fail":
-				name := e.Package + "." + e.Test
-				if !failedTest[name] {
-					failedTest[name] = true
-					res.FailedTests = append(res.FailedTests, name)
-				}
+			if results[e.Package] == nil {
+				results[e.Package] = map[string]string{}
+			}
+			results[e.Package][e.Test] = e.Action
+			if name := e.Package + "." + e.Test; e.Action == "fail" && !failedTest[name] {
+				failedTest[name] = true
+				res.FailedTests = append(res.FailedTests, name)
 			}
 		}
 	}
@@ -125,7 +111,12 @@ func Parse(stream []byte) (*Result, error) {
 	if !sawJSON {
 		return nil, fmt.Errorf("output is not go test JSON: %q", res.Stray)
 	}
-	res.Packages = len(hasTests)
+	for _, tests := range results {
+		leaves := countLeaves(tests, res)
+		if leaves > 0 {
+			res.Packages++
+		}
+	}
 
 	seen := map[string]bool{}
 	for _, p := range failedOrder {
@@ -137,7 +128,6 @@ func Parse(stream []byte) (*Result, error) {
 			res.FailedPackages = append(res.FailedPackages, p)
 		}
 	}
-	sort.Strings(res.Races)
 
 	// The seed: the first failed package that printed one, else the first to print one.
 	for _, p := range failedOrder {
@@ -160,4 +150,32 @@ func hasFailedTest(failed []string, pkg string) bool {
 		}
 	}
 	return false
+}
+
+// countLeaves adds the leaf tests of one package to res and returns how many
+// there are. A leaf is a test that no other test of the package has as its
+// parent: a name is a parent when another name starts with it and a "/". A
+// parent that only holds skipped subtests is not itself a test that ran, and
+// a subtest is counted once, not with its parent.
+func countLeaves(tests map[string]string, res *Result) int {
+	parents := map[string]bool{}
+	for name := range tests {
+		for i := 0; i < len(name); i++ {
+			if name[i] == '/' {
+				parents[name[:i]] = true
+			}
+		}
+	}
+	leaves := 0
+	for name, action := range tests {
+		if parents[name] {
+			continue
+		}
+		leaves++
+		res.Tests++
+		if action == "skip" {
+			res.Skipped++
+		}
+	}
+	return leaves
 }
