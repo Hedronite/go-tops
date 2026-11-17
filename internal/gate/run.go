@@ -36,6 +36,12 @@ type Deps struct {
 	Laws func(laws.Input) []laws.Result
 }
 
+// BinaryVerifier, when set, makes the verify hook of the default ToolResolver
+// for a repository: it checks a downloaded binary against go-tops.lock for the
+// host platform before the binary runs (§10). internal/lock supplies it from
+// the command wiring, so the runner does not import the lock.
+var BinaryVerifier func(dir string) func(name, path string) error
+
 // Run is the result of a gate run that got as far as a plan.
 type Run struct {
 	Report   report.Report
@@ -63,7 +69,11 @@ func Execute(ctx context.Context, cfg Config, opts Options, d Deps) (*Run, error
 		d.Exec = OS{}
 	}
 	if d.Tools == nil {
-		d.Tools = &ToolResolver{Dir: d.Dir, Exec: d.Exec, Binary: DefaultBinaries()}
+		r := &ToolResolver{Dir: d.Dir, Exec: d.Exec, Binary: DefaultBinaries()}
+		if BinaryVerifier != nil {
+			r.Verify = BinaryVerifier(d.Dir)
+		}
+		d.Tools = r
 	}
 	if d.Now == nil {
 		d.Now = time.Now
