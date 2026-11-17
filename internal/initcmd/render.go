@@ -149,7 +149,7 @@ func lockText(protocol string) string {
 }
 
 // toolsMod is tools/go.mod: the tool lines and their pinned versions (§10).
-// go mod tidy -modfile fills the indirect requirements and tools/go.sum.
+// go -C tools mod tidy fills the indirect requirements and tools/go.sum.
 func (in *inputs) toolsMod() string {
 	tools := append([]moduleTool(nil), moduleTools...)
 	if in.kitTool {
