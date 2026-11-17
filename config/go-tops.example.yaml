@@ -1,0 +1,54 @@
+protocol: "0.4.0"            # must match the schema's protocol constant
+version: "0.1.0"             # this config's version (non-empty)
+module: github.com/acme/myapp
+class: binary-cli            # one of the schema's classes
+enforce: ratchet             # hard | ratchet | advisory (§6.7); adopters default to ratchet
+baseline: .go-tops/baseline.json
+
+toolchain:
+  go_floor: "1.26"
+  go_current: "1.27"
+  cgo: false                 # builds and releases; true only for cgo-bridge.
+                             # Test jobs always run with cgo for -race (§3.1)
+
+gates:
+  hygiene:
+    golangci_lint: { config: .golangci.yml }
+    govulncheck:   { fail_on: reachable }
+    deps:          { depguard: true, licenses: { allow: [MIT, Apache-2.0, BSD-3-Clause, BSD-2-Clause, ISC] } }
+  tests:
+    race: true
+    shuffle: true
+    count: 1
+  coverage:
+    statements_floor: 70
+    exclude_generated: true
+    integration: { enabled: true, packages: ["./cmd/..."] }
+  crap:
+    cap: 10
+    complexity: { err_guard_discount: true, wrap_functions: [] }
+  mutation:
+    engine: gremlins          # gremlins | go-mutesting | mutest | overlay
+    base: origin/main
+    unexplained_survivors_max: 0
+    ledger: .go-tops/survivors.yaml
+
+layers:
+  fuzz:   { targets: ["./internal/spec:Parse*"], timed: { duration: 5m } }
+  stress: { count: 20 }
+  bench:  { enabled: false, reason: "binary-cli does not gate benchmarks" }
+
+laws:
+  ack_ledger: .go-tops/acks.yaml
+
+exemptions:
+  - path: internal/wire/dispatch.go
+    symbol: Server.handleOp
+    layer: crap
+    shape: table-switch
+    reason: opcode dispatch, every arm is one call; stays a table or answers to the cap
+    owner: platform
+    expires: "2027-03-01"
+
+report:
+  path: .go-tops/report.json

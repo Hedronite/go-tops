@@ -1,0 +1,383 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "TOPS core definitions (Go-TOPS local copy)",
+  "$comment": "A local copy of the definitions the TOPS shared core will own: layer outcomes, run outcomes, law verdicts, reason codes, enforcement modes, the baseline ledger, the exemption record and the survivor and acknowledgement entries. The shared core replaces this file by a checked sync. Go-TOPS schemas reference these definitions and do not repeat them.",
+  "$defs": {
+    "outcome": {
+      "description": "What one layer did in one run (§3.3).",
+      "enum": [
+        "pass",
+        "fail",
+        "skip",
+        "not-run",
+        "not-reached",
+        "vacuous",
+        "tool-missing"
+      ]
+    },
+    "runOutcome": {
+      "description": "The outcome of a whole run, in the report summary (§3.3). partial: nothing in range failed, but a required law was out of range.",
+      "enum": [
+        "pass",
+        "fail",
+        "partial"
+      ]
+    },
+    "verdict": {
+      "description": "What one law found in one run (§3.3).",
+      "enum": [
+        "allow",
+        "ack",
+        "refuse",
+        "not-evaluated"
+      ]
+    },
+    "reasonCode": {
+      "description": "Why a law is not-evaluated (§3.3).",
+      "enum": [
+        "no_reader",
+        "config_off",
+        "input_missing"
+      ]
+    },
+    "enforcementMode": {
+      "description": "How floors and caps are applied (§6.7).",
+      "enum": [
+        "hard",
+        "ratchet",
+        "advisory"
+      ]
+    },
+    "lawId": {
+      "type": "string",
+      "pattern": "^G-[0-9]{2}$"
+    },
+    "date": {
+      "description": "A calendar day, YYYY-MM-DD, UTC. The pattern checks the shape; check validates the day.",
+      "type": "string",
+      "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$"
+    },
+    "handle": {
+      "description": "A non-empty person or team handle.",
+      "type": "string",
+      "minLength": 1
+    },
+    "reasonText": {
+      "description": "At least three words.",
+      "type": "string",
+      "pattern": "^\\S+(\\s+\\S+){2,}$"
+    },
+    "exemption": {
+      "description": "One exemption record (§6.8). Expiry is required; there is no permanent exemption.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "layer",
+        "reason",
+        "owner",
+        "expires"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "symbol": {
+          "description": "Name for a package-level function, Type.Name for a method. No *, parentheses or type parameters.",
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)?$"
+        },
+        "layer": {
+          "enum": [
+            "crap",
+            "mutation"
+          ]
+        },
+        "shape": {
+          "enum": [
+            "table-switch"
+          ]
+        },
+        "reason": {
+          "$ref": "#/$defs/reasonText"
+        },
+        "owner": {
+          "$ref": "#/$defs/handle"
+        },
+        "expires": {
+          "$ref": "#/$defs/date"
+        }
+      },
+      "dependentRequired": {
+        "shape": [
+          "symbol"
+        ]
+      },
+      "if": {
+        "required": [
+          "shape"
+        ]
+      },
+      "then": {
+        "properties": {
+          "layer": {
+            "const": "crap"
+          }
+        }
+      }
+    },
+    "countByFile": {
+      "description": "A count per module-relative, slash-separated file path.",
+      "type": "object",
+      "additionalProperties": {
+        "type": "integer",
+        "minimum": 1
+      }
+    },
+    "countByNameAndFile": {
+      "description": "A count per name (a linter or a law ID), then per file.",
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/countByFile"
+      }
+    },
+    "ledger": {
+      "description": "The debt ledger (§6.7): only what is over the line. An absent entry is held to its hard rule.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "functions": {
+          "description": "CRAP score per function identity, for functions over the cap.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "packages": {
+          "description": "Per package import path, for packages under the coverage floor.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "statements_pct",
+              "uncovered"
+            ],
+            "properties": {
+              "statements_pct": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100
+              },
+              "uncovered": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          }
+        },
+        "findings": {
+          "description": "Findings of a linter that no law maps, per linter and file.",
+          "$ref": "#/$defs/countByNameAndFile"
+        },
+        "laws": {
+          "description": "Findings that make a law refuse, per law ID and file.",
+          "$ref": "#/$defs/countByNameAndFile"
+        },
+        "suppressions": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "nolint": {
+              "description": "//nolint comments, per linter and file.",
+              "$ref": "#/$defs/countByNameAndFile"
+            },
+            "ack": {
+              "description": "//tops:ack comments and acks.yaml entries, per law ID and file.",
+              "$ref": "#/$defs/countByNameAndFile"
+            }
+          }
+        },
+        "exemptions": {
+          "description": "The number of live exemption records in the repo.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "survivors": {
+          "description": "Unexplained survivors of the tier 2 whole-module mutation run, per file.",
+          "$ref": "#/$defs/countByFile"
+        }
+      }
+    },
+    "regression": {
+      "description": "One accepted regression, written by baseline --accept-regression.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "key",
+        "from",
+        "to",
+        "reason",
+        "owner"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "minLength": 1
+        },
+        "key": {
+          "type": "string",
+          "minLength": 1
+        },
+        "from": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "to": {
+          "type": "number"
+        },
+        "reason": {
+          "$ref": "#/$defs/reasonText"
+        },
+        "owner": {
+          "$ref": "#/$defs/handle"
+        }
+      }
+    },
+    "baseline": {
+      "description": "The file .go-tops/baseline.json (§6.7).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ledger",
+        "judged_laws"
+      ],
+      "properties": {
+        "ledger": {
+          "$ref": "#/$defs/ledger"
+        },
+        "judged_laws": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "regressions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/regression"
+          }
+        }
+      }
+    },
+    "slashPath": {
+      "description": "A module-relative path, slash-separated, with no leading slash, backslash or dot-dot element.",
+      "type": "string",
+      "pattern": "^[^/\\\\][^\\\\]*$",
+      "not": {
+        "pattern": "(^|/)\\.\\.(/|$)"
+      }
+    },
+    "survivorEntry": {
+      "description": "One entry of .go-tops/survivors.yaml (§6.4). All fields are required.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "file",
+        "function",
+        "mutator",
+        "line_hash",
+        "reason",
+        "owner",
+        "expires"
+      ],
+      "properties": {
+        "file": {
+          "$ref": "#/$defs/slashPath"
+        },
+        "function": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mutator": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Z_]*$"
+        },
+        "line_hash": {
+          "description": "SHA-256, in hex, of the normalized mutated line.",
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "reason": {
+          "$ref": "#/$defs/reasonText"
+        },
+        "owner": {
+          "$ref": "#/$defs/handle"
+        },
+        "expires": {
+          "$ref": "#/$defs/date"
+        }
+      }
+    },
+    "survivorsFile": {
+      "description": "The file .go-tops/survivors.yaml.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "survivors"
+      ],
+      "properties": {
+        "survivors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/survivorEntry"
+          }
+        }
+      }
+    },
+    "ackEntry": {
+      "description": "One entry of .go-tops/acks.yaml (§3.3): the acknowledgement of one law in one file.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "law",
+        "file",
+        "reason",
+        "owner"
+      ],
+      "properties": {
+        "law": {
+          "$ref": "#/$defs/lawId"
+        },
+        "file": {
+          "$ref": "#/$defs/slashPath"
+        },
+        "reason": {
+          "$ref": "#/$defs/reasonText"
+        },
+        "owner": {
+          "$ref": "#/$defs/handle"
+        }
+      }
+    },
+    "acksFile": {
+      "description": "The file .go-tops/acks.yaml.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "acks"
+      ],
+      "properties": {
+        "acks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ackEntry"
+          }
+        }
+      }
+    }
+  }
+}

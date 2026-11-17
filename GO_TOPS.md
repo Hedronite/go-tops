@@ -175,7 +175,7 @@ use `snake_case`. Prose, config and the report spell each value the same way.
 |---|---|---|
 | `pass` | The layer ran and its rule is met | none |
 | `fail` | The layer ran and its rule is broken | **fails** |
-| `skip` | The class does not require the layer, or `go-tops.yaml` sets it `enabled: false` with a `reason` | Printed with the reason; the layer is not enabled, so it is not counted |
+| `skip` | The class does not require the layer, or `go-tops.yaml` sets it `enabled: false` with a `reason` (a class layer of §7 needs no more; the `crap` and `mutation` gates also need an unexpired `expires`; `hygiene`, `tests` and `coverage` cannot be turned off) | Printed with the reason; the layer is not enabled, so it is not counted |
 | `not-run` | The layer is enabled and in range but has no command mapped | **fails** |
 | `not-reached` | The layer is enabled and in range and has a command, but a layer it needs did not pass, or `--fail-fast` stopped the run before it (§3.5) | **fails** |
 | `vacuous` | The layer ran and had nothing to judge, in the one place this spec allows that: an empty mutation diff (§6.4) | Printed and counted for nothing: neither a pass nor a failure |
@@ -225,13 +225,6 @@ acknowledgement and `refuse` when it does not. A recorded acknowledgement is an 
 counted against that file's `suppressions` entry for the law (§6.7): up to the entry they are
 `ack`, and when the count is above the entry the law's verdict for that file is `refuse`.
 <!-- tops-core:end verdicts -->
-
-**Keys.** The rules above add these configuration keys.
-
-| Key | Meaning |
-|---|---|
-| `laws.required` | Profile key: a list of law IDs, a subset of the laws that apply to the class (§8.3). Each must have an `analyzer` or `tool` reader, because an `attested` or `tbd` law can never be judged, and each must be a law at tier 1 or below. `go-tops.yaml` may add IDs and may not remove or override the profile's |
-| `enabled`, `reason` | On every layer. `enabled: false` is the only way to turn a layer off, and it requires a non-empty `reason`, which is printed with the `skip`. `check` fails an `enabled: false` with no `reason` |
 
 ### 3.4 Stated rules (policy)
 
@@ -375,7 +368,10 @@ agents (§1.1). What a cap means is stated in §6.2: at full coverage it is a ce
 complexity. How the cap binds under each enforcement mode, including what an existing function
 above it may do, is stated once, in §6.7. No class is uncapped: `tui-app` and
 `concurrency-runtime` have no launch profile (§5.1) and no measurement, so each takes 8, the
-strictest launch cap, as a provisional value until a repo of the class is measured.
+strictest launch cap, as a provisional value until a repo of the class is measured. A class
+with no column and no profile at all (`library-util`, `parser-codec`, `unsafe-kernel`,
+`cgo-bridge`, `codegen`, `embedded-tinygo` and `workspace-root`) takes the same provisional cap,
+8, and the strictest floor in the table above, 90%, until it has a profile.
 
 **Where the caps come from.** The launch caps are `binary-cli` 10, `binary-service` 10 and
 `library-core` 8. They come from a measurement, not from another protocol:
@@ -393,21 +389,64 @@ mutation (§6.4) carry the rest.
 
 ### 5.3 Profile file shape
 
+A profile is a file in `profiles/`. It has the same shape as `go-tops.yaml` (§9) and is
+validated by the same schema, `schema/go-tops.schema.json` (§18); it omits `module` and
+`version`. The three launch profiles follow. Docs CI keeps each block identical to its file and
+validates the file against the schema.
+
+A profile does not list which laws apply: that is the `classes` list of each law file (§8.3). It
+lists in `laws.required` the laws whose `not-evaluated` fails the gate (§3.3): the sixteen laws
+with a live reader in this release, the ✓ rows of §8.2. A law with no reader yet (G-41 is
+attested, G-42 and G-43 have no analyzer) applies to the class and is reported, and joins the
+required set when its reader lands. The CRAP caps and floors are those of §5.2. A repo declares
+its own fuzz globs in `layers.fuzz.targets`, which G-43 reads.
+
+<!-- go-tops:example path=profiles/binary-cli.yaml schema=schema/go-tops.schema.json -->
 ```yaml
 # profiles/binary-cli.yaml
 class: binary-cli
-protocol: "0.3.0"
+protocol: "0.4.0"
 gates:
-  coverage: { lines_floor: 70 }
-  crap:     { cap: 6, complexity: { err_guard_discount: true } }
-  mutation: { unexplained_survivors_max: 2, scope: diff }
+  coverage: { statements_floor: 70 }
+  crap: { cap: 10, complexity: { err_guard_discount: true, wrap_functions: [] } }
+  mutation: { unexplained_survivors_max: 0 }
 layers:
-  race: required
-  goleak: when-goroutines
-  synctest: when-timers
-  fuzz: { required_for: [arg-parsers], tier: 1, replay_seed_corpus: true }
+  fuzz: { targets: [] }               # arg and flag parsers: the repo declares the globs (G-43)
+  bench: { enabled: false, reason: "binary-cli does not gate benchmarks" }
 laws:
-  enable: [G-11, G-12, G-16, G-17, G-18, G-19, G-33, G-34, G-40, G-41]
+  required: [G-02, G-07, G-08, G-11, G-12, G-16, G-17, G-18, G-19, G-25, G-26, G-33, G-34, G-37, G-38, G-40]
+```
+
+<!-- go-tops:example path=profiles/binary-service.yaml schema=schema/go-tops.schema.json -->
+```yaml
+# profiles/binary-service.yaml
+class: binary-service
+protocol: "0.4.0"
+gates:
+  coverage: { statements_floor: 75 }
+  crap: { cap: 10, complexity: { err_guard_discount: true, wrap_functions: [] } }
+  mutation: { unexplained_survivors_max: 0 }
+layers:
+  fuzz: { targets: [] }               # request decoders: the repo declares the globs (G-43)
+  bench: { regression_pct: 5 }
+laws:
+  required: [G-02, G-07, G-08, G-11, G-12, G-16, G-17, G-18, G-19, G-25, G-26, G-33, G-34, G-37, G-38, G-40]
+```
+
+<!-- go-tops:example path=profiles/library-core.yaml schema=schema/go-tops.schema.json -->
+```yaml
+# profiles/library-core.yaml
+class: library-core
+protocol: "0.4.0"
+gates:
+  coverage: { statements_floor: 85 }
+  crap: { cap: 8, complexity: { err_guard_discount: true, wrap_functions: [] } }   # provisional (§5.2)
+  mutation: { unexplained_survivors_max: 0 }
+layers:
+  fuzz: { targets: [] }               # exported decoders: the repo declares the globs (G-43)
+  bench: { regression_pct: 5 }
+laws:
+  required: [G-02, G-07, G-08, G-11, G-12, G-16, G-17, G-18, G-19, G-25, G-26, G-33, G-34, G-37, G-38, G-40]
 ```
 
 ---
@@ -430,12 +469,6 @@ laws:
 - Coverage is computed on the module's own packages; generated files (`*.gen.go`,
   `// Code generated ... DO NOT EDIT.`) are excluded by default, with an explicit allowlist for
   inclusion.
-
-Keys (G7 folds this table into §9 and the schema, then deletes it):
-
-| Key | Change |
-|---|---|
-| `gates.coverage.lines_floor` | **Renamed** `gates.coverage.statements_floor`. The report's `lines_pct` becomes `statements_pct` |
 
 ### 6.2 CRAP
 
@@ -510,12 +543,6 @@ The coverage a function needs follows from the formula: it meets a cap when
 | 8 | 7 | 72.7% |
 | 8 | 8 | 100.0% |
 
-Keys (G7 folds this table into §9 and the schema, then deletes it):
-
-| Key | Change |
-|---|---|
-| `gates.crap.scope` | **Removed.** CRAP has no diff scope. A config that still sets it fails `check` |
-
 ### 6.3 Complexity counting rule
 
 Baseline (matches `gocyclo`): `1 + #(if) + #(for) + #(range) + #(case) + #(comm) + #(&&) + #(||)`.
@@ -564,13 +591,6 @@ therefore sets errcheck `check-blank: true` and `check-type-assertions: true`, a
 those settings (§8.1).
 
 Keep the key explicit in every config so scores are comparable across repos.
-
-Keys (G7 folds this table into §9 and the schema, then deletes it):
-
-| Key | Type | Default | Change |
-|---|---|---|---|
-| `gates.crap.complexity.err_guard_discount` | bool | `true` | Existing. Now also removes the guard's body from `cov(f)` |
-| `gates.crap.complexity.wrap_functions` | list of strings | `[]` | New. Wrap functions that count as `fmt.Errorf` with `%w` for the guard rule |
 
 ### 6.4 Mutation
 
@@ -648,13 +668,6 @@ Keys (G7 folds this table into §9 and the schema, then deletes it):
   fails (an absent entry means 0). The diff-scoped run at tier 1 has no such allowance:
   `unexplained_survivors_max` stays 0.
 
-Keys (G7 folds this table into §9 and the schema, then deletes it):
-
-| Key | Change |
-|---|---|
-| `gates.mutation.unexplained_survivors_max` | Existing. The only valid value is `0`, in every class |
-| `gates.mutation.ledger` | Existing (`.go-tops/survivors.yaml`). Entry fields are now the record above, `expires` required |
-
 ### 6.5 Law verdicts
 
 A law ends a run as `allow`, `ack`, `refuse` or `not-evaluated` with a reason code (§3.3). The
@@ -686,7 +699,7 @@ The top-level key `enforce` sets how floors and caps are applied. Adopters defau
 |---|---|
 | `hard` | A production function above the CRAP cap; a package below its coverage floor; any lint finding; any law verdict `refuse`; an unexplained mutation survivor |
 | `ratchet` | The `hard` rules, except where the ledger below holds an entry for the thing that failed: that entry's limit applies instead. Two further limits exist only here: suppression counts and the exemption count |
-| `advisory` | Nothing. Needs the `advisory` key (Keys, below); the report prints the run as not enforced. The baseline cannot be written |
+| `advisory` | Nothing. Needs the `advisory` key (§9); the report prints the run as not enforced. The baseline cannot be written |
 
 **CRAP.** A function at or under the cap may change up to the cap. A function over the cap
 may not exceed its baseline score plus 0.01 (a rise of 0.01 or less is noise). A function absent
@@ -764,12 +777,6 @@ or package) and never changes a value; it refuses unless the old key has vanishe
 the new key exists. The same command moves a key that gained a file name when a twin of the
 function was added. The result is reviewed as part of the PR. An unpaired rename without that
 command is a new function, and a new function meets the cap.
-
-**Keys.** The rules above add one configuration key. `enforce` and `baseline` are in §9 already.
-
-| Key | Meaning |
-|---|---|
-| `advisory.reason`, `advisory.owner`, `advisory.expires` | Required when `enforce: advisory` and invalid otherwise. `expires` is a date; `check` fails once it has passed. |
 
 #### First adoption of a legacy repo
 
@@ -888,12 +895,6 @@ function.
 run, is the `exemptions` ledger kind of §6.7: one count per repo. Under `ratchet` that count may
 only fall, so a new exemption is a regression that §6.7 gates; under `hard` an exemption is
 bounded by its expiry. This section defines the record and §6.7 defines how the count moves.
-
-Keys (G7 folds this table into §9 and the schema, then deletes it):
-
-| Key | Type | Default | Change |
-|---|---|---|---|
-| `exemptions` | list of records (fields above) | `[]` | New. Lives in `go-tops.yaml`, which CODEOWNERS covers (§11) |
 
 ---
 
@@ -1153,24 +1154,29 @@ and that list:
 
 - `catalog`: every law row, retired ones included (43);
 - `applicable`: laws whose `status` is `active` and whose `classes` holds the class;
-- `judged`: applicable laws with a verdict other than `not-evaluated`.
+- `applicable_judged`: applicable laws with a verdict other than `not-evaluated`; the applicable
+  laws that ended `not-evaluated` are counted by reason in `not_evaluated_by_reason`, a class
+  count that sums to `applicable` minus `applicable_judged`, not to `not_evaluated`;
+- `judged` and `not_evaluated`: the active laws with and without a live reader in this release,
+  the same for every class: the "N of M laws judged" of §8.2 (§12.3).
 
 The class profile's `laws.required` names applicable laws whose verdict must be judged (§3.3);
 every id in it must be in the catalog and apply to the class. `fixture` names the fixture of the
 law (§8.1); an `active` law without one is invalid.
 
-Keys (G7 folds this table into §9 and the schema, then deletes it):
-
-| Key | Change |
-|---|---|
-| `laws.enable` | **Removed** from profile and config. Applicability is the `classes` list of each law file |
-
 ---
 
 ## 9. Configuration: `go-tops.yaml`
 
+`go-tops.yaml` sits at the module root. Its shape is `schema/go-tops.schema.json` (§18), the
+same shape as a class profile (§5.3). A profile omits `module` and `version`; `check` requires
+both in `go-tops.yaml`. The example below is `config/go-tops.example.yaml`: docs CI keeps the
+block identical to the file and validates the file against the schema, so an unknown key at any
+depth fails.
+
+<!-- go-tops:example path=config/go-tops.example.yaml schema=schema/go-tops.schema.json -->
 ```yaml
-protocol: "0.3.0"            # must match the schema's protocol id
+protocol: "0.4.0"            # must match the schema's protocol constant
 version: "0.1.0"             # this config's version (non-empty)
 module: github.com/acme/myapp
 class: binary-cli            # one of the schema's classes
@@ -1178,7 +1184,7 @@ enforce: ratchet             # hard | ratchet | advisory (§6.7); adopters defau
 baseline: .go-tops/baseline.json
 
 toolchain:
-  go_floor: "1.26.0"
+  go_floor: "1.26"
   go_current: "1.27"
   cgo: false                 # builds and releases; true only for cgo-bridge.
                              # Test jobs always run with cgo for -race (§3.1)
@@ -1193,33 +1199,66 @@ gates:
     shuffle: true
     count: 1
   coverage:
-    lines_floor: 70
+    statements_floor: 70
     exclude_generated: true
     integration: { enabled: true, packages: ["./cmd/..."] }
   crap:
-    cap: 6
-    scope: diff
-    complexity: { err_guard_discount: true }
+    cap: 10
+    complexity: { err_guard_discount: true, wrap_functions: [] }
   mutation:
     engine: gremlins          # gremlins | go-mutesting | mutest | overlay
-    scope: diff
     base: origin/main
-    unexplained_survivors_max: 2
+    unexplained_survivors_max: 0
     ledger: .go-tops/survivors.yaml
 
 layers:
-  fuzz:      { tier: 1, replay_seed_corpus: true, timed: { tier: 2, duration: 5m } }
-  goleak:    { when: goroutines }
-  synctest:  { when: timers }
-  bench:     { tier: 2, baseline: .bench/baseline.txt, regression_pct: 5 }
+  fuzz:   { targets: ["./internal/spec:Parse*"], timed: { duration: 5m } }
+  stress: { count: 20 }
+  bench:  { enabled: false, reason: "binary-cli does not gate benchmarks" }
 
 laws:
-  enable: default             # or an explicit list
   ack_ledger: .go-tops/acks.yaml
+
+exemptions:
+  - path: internal/wire/dispatch.go
+    symbol: Server.handleOp
+    layer: crap
+    shape: table-switch
+    reason: opcode dispatch, every arm is one call; stays a table or answers to the cap
+    owner: platform
+    expires: "2027-03-01"
 
 report:
   path: .go-tops/report.json
 ```
+
+**Keys.** Every key the rules of §3 to §6 add or change in 0.4.0, with the section that states
+it.
+
+| Key | Type | Meaning |
+|---|---|---|
+| `advisory.reason`, `advisory.owner`, `advisory.expires` | text, handle, date | Required when `enforce: advisory`, invalid otherwise. `check` fails once `expires` has passed (§6.7) |
+| `laws.required` | list of law IDs | Each law is in the catalog, applies to the class (§8.3), has an `analyzer` or `tool` reader and is at tier 1 or below. `go-tops.yaml` may add IDs and may not remove or override the profile's (§3.3) |
+| `enabled`, `reason`, `expires` | boolean, text, date | `enabled: false` is the only way to turn a layer off and requires a non-empty `reason`, printed with the `skip` (§3.3). A run must measure something: `gates.hygiene`, `gates.tests` and `gates.coverage` have no `enabled` key and cannot be off. `gates.crap` and `gates.mutation` may be `enabled: false` only with a `reason` and a dated `expires`; every disabled gate is listed in the report with both, and `check` fails once `expires` has passed. The class layers of §7 (`layers.fuzz`, `layers.stress`, `layers.bench`) may be off with a `reason` alone |
+| `layers.fuzz.targets` | list of globs | `<go list package pattern>:<function-name glob>`, read by G-43 (§8.2) |
+| `layers.fuzz.timed.duration` | duration | The `-fuzztime` of the tier 2 fuzz layer (§7) |
+| `layers.stress.count` | integer ≥ 2 | The `-count` of the tier 2 stress run (§7) |
+| `layers.bench.baseline`, `layers.bench.regression_pct` | path, number | The tier 2 benchmark gate (§7) |
+| `gates.coverage.statements_floor` | number, 0 to 100 | The floor on statement coverage (§5.2, §6.1). Renamed from `lines_floor`; the report's `lines_pct` is `statements_pct` |
+| `gates.crap.cap` | number ≥ 1 | One cap per class (§5.2) |
+| `gates.crap.complexity.err_guard_discount` | boolean | Existing. Now also removes the guard's body from `cov(f)` (§6.3) |
+| `gates.crap.complexity.wrap_functions` | list of `import/path.Name` | Wrap functions that count as `fmt.Errorf` with `%w` for the guard rule (§6.3) |
+| `gates.hygiene.govulncheck.db` | URL or path | A mirrored vulnerability database, passed as `-db`, for a run that must be repeatable (§3.1) |
+| `gates.tests.race`, `gates.tests.shuffle`, `gates.tests.count` | `true`, `true`, `1` | Fixed by the command of §3.1 and the race rule of §5.2. The schema allows no other value |
+| `gates.mutation.unexplained_survivors_max` | `0` | The only valid value, in every class (§6.4) |
+| `gates.mutation.ledger` | path | The survivor ledger; entries carry the record of §6.4, `expires` required |
+| `exemptions` | list of records | The record of §6.8, in `go-tops.yaml`, which CODEOWNERS covers (§11) |
+
+**Keys removed in 0.4.0.** `laws.enable` (a law applies to a class by the `classes` list of its law file, §8.3); `gates.crap.scope` (CRAP has no diff scope, §6.2) and
+`gates.mutation.scope` (tier 1 mutates the diff and tier 2 the whole module, §6.4); `layers.goleak`
+and `layers.synctest` (a leak check is law G-42, and `synctest` tests run in the test run, §7);
+`layers.fuzz.tier` and `layers.fuzz.replay_seed_corpus` (seed replay is part of the test run, §7).
+A config that still sets one fails `check`, because the schema allows no unknown key.
 
 Config files the drop-in set may include: `go-tops.yaml`, `go-tops.lock`, `AGENTS.md`,
 `.golangci.yml`, mutation-engine config, `.github/workflows/go-tops.yml`, `justfile`, `.go-tops/`
@@ -1288,7 +1327,8 @@ CI rules (carried from Rust-TOPS's lessons):
   what that run measured. Until then the kind is absent and holds at its `hard` form, so the
   `deep` schedule is enabled after `gotops baseline --init --kind survivors` has run once.
 - A layer the class requires runs in these jobs; none ships as a commented-out job. A layer is
-  off only by `enabled: false` with a reason (§7).
+  off only by `enabled: false` with a reason, and for `crap` and `mutation` also a dated `expires`
+  (§3.3, §7).
 - Pin actions by commit SHA; minimal `permissions:`; cache `GOMODCACHE`/`GOCACHE` by `go.sum` and
   `tools/go.sum`.
 
@@ -1301,7 +1341,7 @@ CI rules (carried from Rust-TOPS's lessons):
 | Command | Behavior |
 |---|---|
 | `init --class <c>` | Writes `go-tops.yaml`, `go-tops.lock`, `tools/go.mod` with its pins, the adopter's `.golangci.yml` (style only), the workflow, the CODEOWNERS fragment, `justfile` and the adoption record `GO-TOPS.md`. It writes no laws config: the kit embeds it. Where `AGENTS.md` exists it writes only between `<!-- go-tops:begin -->` and `<!-- go-tops:end -->`, replacing the block on a re-run and appending the pair when absent; one marker without the other is a configuration error. Where `AGENTS.md` is absent it creates the file with the block. Refuses to overwrite any other existing file without `--force`. |
-| `check` | Validates `go-tops.yaml` against the **JSON Schema** (full validation, an improvement over Rust-TOPS's partial checks), plus semantic checks: protocol id, non-empty version, module name, `crap.cap ≥ 1`, `library-core`/`concurrency-runtime` keep `unexplained_survivors_max = 0`, language floor ≤ current, `advisory` carries a dated exemption, and under `ratchet` the baseline file exists and is clean against `HEAD`. |
+| `check` | Validates `go-tops.yaml` against the **JSON Schema** (full validation, an improvement over Rust-TOPS's partial checks), plus semantic checks: protocol id, non-empty version, module name, language floor ≤ current, `gates.crap.cap` not above the class column of §5.2 and `gates.coverage.statements_floor` not below it (a class with no column takes the cap 8 and the floor 90% of §5.2), an `enabled: false` without a `reason`, a disabled `gates.crap` or `gates.mutation` without an `expires` that has not passed, an `enabled` key on `gates.hygiene`, `gates.tests` or `gates.coverage`, every `laws.required` ID in the catalog, applying to the class, with a reader and at tier 1 or below, every exemption well formed and unexpired (§6.8), every entry of `.go-tops/survivors.yaml` valid against `survivorEntry` and every entry of `.go-tops/acks.yaml` valid against `ackEntry` in `schema/core.schema.json` (§6.4, §3.3), `enforce: advisory` carrying the `advisory` key (reason, owner, an `expires` that has not passed), and under `ratchet` the baseline file exists and is clean against `HEAD`. |
 | `baseline` | Writes `.go-tops/baseline.json` (§6.7), the only command that does. `--init` measures and writes the first ledger when the tests are green and every feeding layer produced non-empty output (thresholds may be red); `--init --kind survivors` records the tier 2 survivor counts the same way. A plain `baseline` only lowers entries and removes paid ones. `--accept-regression --reason <text> --owner <handle>` is the one way to raise an entry or lower `judged_laws` (the PR carries the `protocol-change` label). `--rename <old-key> <new-key>` moves one key. Refused under `advisory`, and `--init` is refused when a ledger exists. |
 | `gate` | Runs every enabled layer at or below `--max-tier` (default 1), in order, each judged (§3.5), laws last. Options: `--max-tier N`, `--fail-fast`, `--dry-run` (refused in CI), `--base <ref>`, `--json`, `--only <layer>` (a range that leaves a required law out ends `partial` and is refused in CI). A mapped tool that is missing is `tool-missing` and exits 1. Exit codes: §12.2. |
 | `laws [list \| run \| explain G-NN]` | Lists the catalog with readers, runs the laws layer alone, explains a law. |
@@ -1330,60 +1370,119 @@ A missing tool has one code: 1.
 
 ### 12.3 Report: `.go-tops/report.json`
 
-Written on every `gate` run. Schema file: `schema/gate-report.schema.json`.
+Written by every `gate` run that gets as far as running a layer (§6.6). Schema file:
+`schema/gate-report.schema.json`. The example below is `config/gate-report.example.json`: docs
+CI keeps the block identical to the file and validates the file against the schema.
 
+<!-- go-tops:example path=config/gate-report.example.json schema=schema/gate-report.schema.json -->
 ```json
 {
-  "protocol": "0.3.0",
+  "protocol": "0.4.0",
   "tool_version": "0.0.0",
   "module": "github.com/acme/myapp",
   "class": "binary-cli",
   "enforce": "ratchet",
   "git": { "head": "abc1234", "base": "origin/main", "dirty": false },
   "max_tier": 1,
-  "started_at": "2026-11-14T18:00:00Z",
+  "started_at": "2026-11-17T18:00:00Z",
   "duration_ms": 184211,
+  "vuln_db_timestamp": "2026-11-17T09:12:44Z",
+  "layer_counts": { "enabled_in_range": 5, "ran": 5 },
+  "exemptions": [
+    { "path": "internal/wire/dispatch.go", "symbol": "Server.handleOp", "layer": "crap", "shape": "table-switch",
+      "reason": "opcode dispatch, every arm is one call; stays a table or answers to the cap",
+      "owner": "platform", "expires": "2027-03-01" }
+  ],
   "layers": [
     {
+      "id": "hygiene", "tier": 1, "outcome": "pass",
+      "details": { "golangci_lint": "v2.15.0", "findings": 0 }
+    },
+    {
       "id": "tests", "tier": 1, "outcome": "pass",
-      "details": { "packages": 41, "tests": 812, "race": true, "shuffle_seed": 91823 }
+      "details": { "packages": 41, "tests": 812, "race": true, "skipped": 3, "shuffle_seed": 91823 }
     },
     {
       "id": "coverage", "tier": 1, "outcome": "pass",
-      "details": { "lines_pct": 78.4, "floor": 70, "profile_bytes": 48211 }
+      "details": { "statements_pct": 78.4, "floor": 70, "profile_bytes": 48211 }
     },
     {
       "id": "crap", "tier": 1, "outcome": "fail",
-      "details": { "cap": 6,
+      "details": { "cap": 10,
         "violations": [ { "func": "ParseSpec", "file": "internal/spec/parse.go:41",
                           "cc": 14, "cov_pct": 52.0, "crap": 35.7, "baseline": null } ] }
     },
-    { "id": "mutation", "tier": 1, "outcome": "pass",
-      "details": { "mutants": 63, "killed": 59, "survived_explained": 3, "survived_unexplained": 1, "max": 2 } }
+    {
+      "id": "mutation", "tier": 1, "outcome": "pass",
+      "details": { "mutants": 63, "killed": 60, "survived_explained": 3, "survived_unexplained": 0,
+                   "max": 0, "timed_out": 0, "timed_out_keys": [], "dropped": 0, "exempt": [] }
+    }
   ],
-  "layer_counts": { "enabled_in_range": 4, "ran": 4 },
   "laws": {
-    "catalog": 43, "judged": 16, "required": 10, "required_not_evaluated": 0,
-    "not_evaluated": 26,
-    "not_evaluated_by_reason": { "no_reader": 23, "config_off": 0, "input_missing": 3 },
+    "catalog": 43, "judged": 16, "not_evaluated": 26,
+    "applicable": 19, "applicable_judged": 16, "required": 16, "required_not_evaluated": 0,
+    "not_evaluated_by_reason": { "no_reader": 3, "config_off": 0, "input_missing": 0 },
     "out_of_range": [],
     "results": [
+      { "id": "G-02", "verdict": "allow", "reader": "tool" },
+      { "id": "G-07", "verdict": "allow", "reader": "tool" },
+      { "id": "G-08", "verdict": "allow", "reader": "analyzer" },
+      { "id": "G-11", "verdict": "allow", "reader": "tool" },
+      { "id": "G-12", "verdict": "allow", "reader": "tool" },
+      { "id": "G-16", "verdict": "allow", "reader": "tool" },
       { "id": "G-17", "verdict": "allow", "reader": "analyzer" },
-      { "id": "G-28", "verdict": "not-evaluated", "reason": "no_reader", "reader": "attested" }
+      { "id": "G-18", "verdict": "allow", "reader": "tool" },
+      { "id": "G-19", "verdict": "allow", "reader": "analyzer" },
+      { "id": "G-25", "verdict": "allow", "reader": "analyzer" },
+      { "id": "G-26", "verdict": "allow", "reader": "analyzer" },
+      { "id": "G-33", "verdict": "allow", "reader": "analyzer" },
+      { "id": "G-34", "verdict": "allow", "reader": "tool" },
+      { "id": "G-37", "verdict": "allow", "reader": "tool" },
+      { "id": "G-38", "verdict": "allow", "reader": "analyzer" },
+      { "id": "G-40", "verdict": "allow", "reader": "tool" },
+      { "id": "G-41", "verdict": "not-evaluated", "reason": "no_reader", "reader": "attested" },
+      { "id": "G-42", "verdict": "not-evaluated", "reason": "no_reader", "reader": "analyzer" },
+      { "id": "G-43", "verdict": "not-evaluated", "reason": "no_reader", "reader": "analyzer" }
     ]
   },
   "summary": { "outcome": "fail", "exit_code": 1, "failed": ["crap"] }
 }
 ```
 
-Report rules: every layer in range is present with an `outcome` from §3.3, and a `skip` carries
-its `reason`. A layer that is `not-run`, `not-reached` or `tool-missing` is present and fails the
-run. A law carries a `verdict`, and a `not-evaluated` law carries its reason code; the laws counts
-(`not_evaluated`, `not_evaluated_by_reason`, `required_not_evaluated`) are separate and are never folded into
-`allow`. `out_of_range` lists the laws above `max_tier`; the run's `summary` covers the range
-`max_tier` selects and no more. `layer_counts` holds the layers enabled in range and the layers that ran; the run fails
-when they differ (§3.5). A CRAP violation with `"baseline": null` is a new function; otherwise
-`baseline` is the score it must not exceed.
+Report rules:
+
+- Every layer in range is present with an `outcome` from §3.3. A `skip` carries its `reason`. A
+  layer that is `not-run`, `not-reached` or `tool-missing` is present and fails the run.
+  `layer_counts` holds the layers enabled in range and the layers that ran; the run fails when
+  they differ (§3.5).
+- A law result carries a `verdict`, and a `not-evaluated` law carries its reason code. The laws
+  counts are of two kinds. `catalog`, `judged` and `not_evaluated` describe the release and are
+  the same for every class: the catalog rows, the active laws with a live reader, and the active
+  laws without one, which is the "16 of 43 laws judged" of §8.2. `applicable` (§8.3),
+  `applicable_judged`, `required`, `required_not_evaluated`, `not_evaluated_by_reason` and
+  `out_of_range` describe this run for the class: the laws that apply, the ones among them with
+  a verdict other than `not-evaluated`, the ones the profile requires, the required ones that
+  ended `not-evaluated` (above zero fails the gate), the applicable ones that ended
+  `not-evaluated` by reason (a class count: its sum is `applicable` minus `applicable_judged`,
+  and not `not_evaluated`), and the laws above `max_tier`. A `not-evaluated` law is never folded
+  into `allow`.
+- The tests layer's `details` carry the `skipped` count and the `shuffle_seed` of the shuffled
+  test run. `vuln_db_timestamp` is the timestamp of the vulnerability database the run read, and
+  is `null` when the layer did not run. The vulnerability layer is time-dependent: the same commit can change verdict when the database
+  does.
+- A CRAP violation with `"baseline": null` is a function with no entry in the ledger, so it is
+  held to the cap. Otherwise `baseline` is its ledger score, and the function may not exceed it
+  by more than 0.01 (§6.7).
+- `details` is required, and typed, for four layers whenever they ran (outcome `pass`, `fail` or
+  `vacuous`): tests (`packages`, `tests`, `race`, `skipped`,
+  `shuffle_seed`), coverage (`statements_pct`, `floor`, `profile_bytes`), CRAP (`cap`,
+  `violations`, and `exempt` for functions scored under an exemption) and mutation (the counts of
+  §6.4, with `timed_out` and `timed_out_keys` for mutants that hung, `dropped` for mutants
+  that did not compile, and `exempt` for the survivor keys of mutants under a `mutation`
+  exemption). `exemptions` lists every exemption in force on the day of the run, as
+  the records of §6.8.
+- The summary's `exit_code` is 0 or 1: a run refused before any layer runs writes no report
+  (§12.2).
 
 ---
 
@@ -1487,13 +1586,13 @@ wrong; the config wins.
 
 ---
 
-## 16. Decisions (resolved for v0.3.0; remaining calibration items noted)
+## 16. Decisions (resolved for v0.4.0; remaining calibration items noted)
 
 1. **Complexity rule (`err_guard_discount`):** **true** in every class, for guards that only return the error (wrapped or not). errcheck `check-blank` and `check-type-assertions` are required, so discarding the error is not cheaper than handling it. Explicit in every profile. (§6.3) *Changed in 0.3.0; 0.2.0 turned it off for `library-core` and `concurrency-runtime`.*
 2. **Authorship marking:** None. One CRAP cap per class for every author. (§5.2, §6.2) *Changed in 0.3.0; 0.2.0 used an `Authored-By: agent` trailer that raised the cap.*
 3. **Mutation engine:** Pluggable adapter. Start with gremlins (or strongest existing with diff filtering). Plan thin in-house `-overlay` runner later for full control. Not blocking v0.1/v0.2.
 4. **Formal layers:** No Bend2 parity layer and no Lean recheck. The native analyzers are the laws layer. Reconsidered only with evidence that a formal layer judges something the analyzers do not. (§8.1) *Changed in 0.3.0.*
-5. **Thresholds:** Remain **proposed**. Calibrate on three real Hedronite repos (CLI, TUI, service) before protocol 1.0. (§5.2)
+5. **Thresholds:** The CRAP caps come from a measurement (§5.2) and are recalibrated from the first three adopters before protocol 1.0 (§19). Floors remain **proposed** until then.
 6. **`parser-codec` priority:** High priority immediately after the five launch classes.
 7. **Laws numbering:** Freeze IDs at 1.0. Retire rather than renumber. Prefix `G-NN`.
 8. **Report format extras:** Defer SARIF/JUnit to M7 or later. `report.json` sufficient for v0.2.
@@ -1502,41 +1601,74 @@ wrong; the config wins.
 11. **Enforcement:** `enforce` is `hard`, `ratchet` or `advisory`. Adopters default to `ratchet`; Go-TOPS runs `hard` on itself. (§6.7) *New in 0.3.0.*
 12. **Race and cgo:** Test jobs run with `CGO_ENABLED=1` because `-race` requires cgo on Linux. Builds and releases stay `CGO_ENABLED=0` outside `cgo-bridge`. (§3.1, G-26) *New in 0.3.0.*
 13. **Unmapped layers:** An enabled layer with no command is `not-run` and fails the gate. (§3.3, §7) *New in 0.3.0.*
+14. **CRAP caps from a measurement:** `binary-cli` and `binary-service` 10, `library-core` 8; `tui-app` and `concurrency-runtime` take 8 until a repo of the class is measured. One cap per class for every author. The `library-core` cap and the two unmeasured caps are provisional. (§5.2, §6.2, `calibration/2026-11-probe/`) *New in 0.4.0.*
+15. **The ratchet is a debt ledger:** the baseline lists only what is over the line, a function at or under the cap may change up to the cap, counts only fall, and a raise needs `--accept-regression` and the `protocol-change` label. A first ledger passes only if it equals the measurement. (§6.7) *New in 0.4.0.*
+16. **A required law that is not judged fails:** a law in the profile's `laws.required` that is `not-evaluated` fails the gate, whatever the reason. A run that leaves a required law out of range is `partial`, never `pass`, and CI refuses it. (§3.3, §3.4) *New in 0.4.0.*
+17. **Two vocabularies, one exit table:** layers end in an outcome and laws in a verdict, with one casing rule, and a missing tool has one exit code. (§3.3, §12.2) *New in 0.4.0.*
+18. **Run everything:** every enabled layer in range runs, with dependency short circuits; `--fail-fast` is the option; fewer layers ran than enabled fails. Conditions with no command are laws. (§3.5, §7) *New in 0.4.0.*
+19. **Exemptions expire:** an exemption names a path, a layer and an owner, and its expiry is required. A table-shaped `switch` takes one instead of a split. (§6.8) *New in 0.4.0.*
+20. **Mutation allowance is zero in every class:** statuses map to survivors, killed and dropped; a survivor has a stable key; tier 2 survivors are ledgered per file. (§6.4) *New in 0.4.0.*
+21. **A seam for the shared core:** the sections on verdicts, the report, enforcement, exemptions and exit codes sit between `tops-core` markers, and the shared definitions live in `schema/core.schema.json`, so a TOPS shared core can replace them by a checked sync. (§3.3, §6.6, §6.7, §6.8, §12.2, §18) *New in 0.4.0.*
+22. **Schemas, profiles and examples are files:** `schema/`, `profiles/` and `config/` hold them, and docs CI keeps every example block in this document identical to its file and valid against its schema. (§5.3, §9, §12.3, §18) *New in 0.4.0.*
+23. **One test run:** `go test -json -race -shuffle=on -count=1 -coverprofile=… -coverpkg=./...` feeds the tests, coverage and CRAP gates, parsed natively; `gotestsum` is optional display. (§3.1) *New in 0.4.0.*
+24. **Laws read their own lint pass:** the kit embeds the law lint configuration and runs it as its own pass, so editing the adopter's `.golangci.yml` cannot weaken a law; every enabled law has a fixture. (§8.1) *New in 0.4.0.*
+25. **Tool pins:** module tools live in `tools/go.mod` and run with `go tool -modfile`; `go-tops.lock` holds downloaded binaries and the toolchain only. (§10) *New in 0.4.0.*
+26. **One CI job and house standard first:** the drop-in is one job that runs `gotops gate`, with `fetch-depth: 0`; a macOS leg is required where the kit runs on Macs, and there is no Windows leg. (§11) *New in 0.4.0.*
+27. **Launch profiles follow adopters:** `binary-cli`, `binary-service` and `library-core`; `tui-app` and `concurrency-runtime` are schema-valid without a profile. (§5.1) *New in 0.4.0.*
+28. **The language floor is a policy:** the oldest Go release still supported upstream, compared as a language version, with the toolchain pin checked separately. (§2) *New in 0.4.0.*
 
 ---
 
-## 17. Repository layout (proposed)
+## 17. Repository layout
 
-```
+In the repository today:
+
+```text
 go-tops/
-├── cmd/gotops/                  # CLI entry
+├── .github/
+│   ├── CODEOWNERS
+│   └── workflows/docs.yml           # docs CI
+├── calibration/2026-11-probe/       # the CRAP calibration record: README, probe/, run.sh, results.json
+├── config/
+│   ├── AGENTS.template.md           # the AGENTS.md that gotops init will write
+│   ├── go-tops.example.yaml         # the §9 example
+│   └── gate-report.example.json     # the §12.3 example
+├── profiles/                        # binary-cli, binary-service, library-core (§5.3)
+├── schema/
+│   ├── go-tops.schema.json          # go-tops.yaml and profiles
+│   ├── gate-report.schema.json      # .go-tops/report.json
+│   └── core.schema.json             # shared definitions; the TOPS shared core replaces it by sync
+├── scripts/docs/                    # the docs checker (Go, its own go.mod)
+├── .gitignore
+├── .markdownlint-cli2.jsonc
+├── AGENTS.md  CHANGELOG.md  CLAUDE.md  GO_TOPS.md  README.md
+└── LICENSE  LICENSE-APACHE  LICENSE-MIT
+```
+
+From M1 onward:
+
+```text
+go-tops/
+├── cmd/gotops/                      # CLI entry
 ├── internal/
-│   ├── config/                  # go-tops.yaml load + schema validation
-│   ├── gate/                    # layer runner, tiers, verdicts
-│   ├── layers/                  # hygiene, tests, coverage, crap, mutation, fuzz, bench...
-│   ├── cover/                   # profile parse/merge (unit + covdata)
-│   ├── complexity/              # AST cyclomatic counting
-│   ├── crap/                    # scoring + diff scoping
-│   ├── mutate/                  # engine adapters + survivor ledger
-│   ├── laws/                    # catalog loader
-│   ├── analyzers/               # go/analysis analyzers (G-NN)
-│   ├── lock/                    # go-tops.lock verify/update
-│   └── report/                  # JSON/text/JUnit/SARIF
-├── laws/                        # G-NN.yaml metadata
-├── profiles/                    # class profiles
-├── schema/                      # go-tops.schema.json, gate-report.schema.json
-├── config/                      # drop-in templates (golangci, workflow, justfile, AGENTS.md)
-├── examples/                    # one repo per launch class
-├── docs/brand/
-├── GO_TOPS.md                   # the protocol (this spec, finalized)
-├── POLICIES.md
-├── AGENTS.md
-├── CHANGELOG.md
-├── go-tops.yaml                 # Go-TOPS gates itself
+│   ├── config/                      # go-tops.yaml load + schema validation
+│   ├── gate/                        # layer runner, tiers, outcomes
+│   ├── layers/                      # hygiene, tests, coverage, crap, mutation, fuzz, bench...
+│   ├── cover/                       # profile parse and merge
+│   ├── complexity/                  # AST cyclomatic counting
+│   ├── crap/                        # scoring, guard-neutral coverage, identity
+│   ├── mutate/                      # engine adapters + survivor ledger
+│   ├── laws/                        # catalog loader
+│   ├── analyzers/                   # go/analysis analyzers (G-NN)
+│   ├── lock/                        # go-tops.lock verify/update
+│   └── report/                      # JSON/text/JUnit/SARIF
+├── laws/                            # G-NN.yaml metadata
+├── testdata/lints/                  # fixture module: one break per delegated rule (§8)
+├── tools/go.mod                     # pinned tool modules, run with go tool -modfile
+├── examples/                        # one repo per launch class
+├── go-tops.yaml                     # Go-TOPS gates itself
 ├── go-tops.lock
-├── go.mod
-├── LICENSE  LICENSE-APACHE  LICENSE-MIT
-└── README.md
+└── go.mod
 ```
 
 **Self-hosting:** Go-TOPS must pass its own gate at tier 1 before any release; its own CRAP
@@ -1544,90 +1676,47 @@ output and survivor ledger are published in CI artifacts.
 
 ---
 
-## 18. JSON Schema sketch (`schema/go-tops.schema.json`)
+## 18. JSON Schema
 
-```json
-{
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://hedronite.com/schemas/go-tops/0.3.0/go-tops.schema.json",
-  "title": "Go-TOPS configuration",
-  "type": "object",
-  "required": ["protocol", "version", "module", "class"],
-  "additionalProperties": false,
-  "properties": {
-    "protocol": { "const": "0.3.0" },
-    "version":  { "type": "string", "minLength": 1 },
-    "module":   { "type": "string", "minLength": 1 },
-    "enforce":  { "enum": ["hard", "ratchet", "advisory"], "default": "ratchet" },
-    "baseline": { "type": "string", "minLength": 1 },
-    "class": {
-      "enum": ["library-core", "library-util", "parser-codec", "embedded-tinygo",
-               "unsafe-kernel", "binary-cli", "tui-app", "binary-service",
-               "concurrency-runtime", "cgo-bridge", "codegen", "workspace-root"]
-    },
-    "toolchain": {
-      "type": "object",
-      "properties": {
-        "go_floor":   { "type": "string", "pattern": "^1\\.[0-9]+(\\.[0-9]+)?$" },
-        "go_current": { "type": "string", "pattern": "^1\\.[0-9]+(\\.[0-9]+)?$" },
-        "cgo":        { "type": "boolean" }
-      }
-    },
-    "gates": {
-      "type": "object",
-      "properties": {
-        "coverage": {
-          "type": "object",
-          "properties": { "lines_floor": { "type": "number", "minimum": 0, "maximum": 100 } }
-        },
-        "crap": {
-          "type": "object",
-          "properties": {
-            "cap":   { "type": "number", "minimum": 1 },
-            "scope": { "enum": ["diff", "all"] },
-            "complexity": {
-              "type": "object",
-              "properties": { "err_guard_discount": { "type": "boolean" } }
-            }
-          }
-        },
-        "mutation": {
-          "type": "object",
-          "properties": {
-            "engine": { "enum": ["gremlins", "go-mutesting", "mutest", "overlay"] },
-            "scope":  { "enum": ["diff", "all"] },
-            "unexplained_survivors_max": { "type": "integer", "minimum": 0 }
-          }
-        }
-      }
-    }
-  },
-  "allOf": [
-    {
-      "if":   { "properties": { "class": { "enum": ["library-core", "concurrency-runtime"] } } },
-      "then": { "properties": { "gates": { "properties": { "mutation": {
-                 "properties": { "unexplained_survivors_max": { "const": 0 } } } } } } }
-    }
-  ]
-}
-```
+The schemas are files in `schema/`, JSON Schema 2020-12:
 
-(Abbreviated; the full schema covers every key in §9.)
+| File | What it validates |
+|---|---|
+| `schema/go-tops.schema.json` | `go-tops.yaml` and the class profiles in `profiles/`: one shape for both. `additionalProperties: false` at every object, so an unknown key at any depth fails. Its `protocol` is the constant `0.4.0` |
+| `schema/gate-report.schema.json` | `.go-tops/report.json` (§12.3): every layer with its tier and outcome, every law with its verdict and reason code, the laws counts, the vulnerability database timestamp and the shuffle seed |
+| `schema/core.schema.json` | The definitions the other two share: layer outcomes, law verdicts, reason codes, run outcomes, enforcement modes, law IDs, the baseline ledger and the exemption record. Both schemas `$ref` it and define none of these again. It is a local copy: the TOPS shared core will replace it by a checked sync |
+
+`schema/core.schema.json` also defines the entries of the two ledger files that `check`
+validates: `survivorEntry` for `.go-tops/survivors.yaml` (§6.4) and `ackEntry` for
+`.go-tops/acks.yaml` (§3.3). The schema of `go-tops.lock` is not part of 0.4.0: the lock is
+written and read by the CLI, so its schema lands with slice M1-G6 of the roadmap, which
+builds `lock --verify`.
+
+When prose and schema disagree, fix the schema first, then the prose (§3.4). The schemas carry
+no `$id`: their `$ref`s are relative, so a checkout validates with no network. A published
+`$id` URL waits until the schemas are published. Docs CI validates the example blocks of §5.3,
+§9 and §12.3 against these schemas on every pull request.
 
 ---
 
 ## 19. Roadmap
 
+The plan of record. Each milestone is a set of slices, one branch and one pull request each.
+
 | Milestone | Contents | Exit criterion |
 |---|---|---|
-| **M0** spec | This doc + schemas + profiles for five classes | Reviewed; thresholds marked for calibration |
-| **M1** CLI skeleton | `init`, `check`, `gate` (tier 0–1: hygiene, tests, coverage, `report.json`) | Self-hosting green |
-| **M2** CRAP + mutation | Native CRAP; one mutation engine adapter; survivor ledger | Gate fails on a deliberately weak test |
-| **M3** laws v0.1 | 16 laws judged (native); `law-diff` CI | Report shows "16 of 43 judged" |
-| **M4** deep layers | Fuzz, goleak, synctest, benchstat; tier 2 jobs | Nightly workflow green on examples |
-| **M5** release tier | Reproducible build, binary `govulncheck`, API-compat | Tier 3 passes on a tagged release |
-| **M6** protocol 1.0 | Calibrated thresholds; frozen law IDs; five classes proven on real repos | Three Hedronite repos adopt it |
-| **M7** extras | `parser-codec` profile, SARIF/JUnit, Nix flake | As prioritized |
+| **M0.5** protocol 0.4.0 | This document, the schemas, the launch profiles and the docs CI that checks them | 0.4.0 merged; every example in this document validates against its schema |
+| **M1** `gotops` CLI | `init`, `check`, `gate` at tiers 0–1, `report.json`; Go-TOPS gates itself | Self-hosting green at tier 1 |
+| **M2** native CRAP and the ratchet | Complexity and CRAP, guard-neutral coverage, the baseline ledger, exemptions | The gate fails a complex uncovered function and passes a legacy repo under `ratchet` |
+| **M3** first adopter | `vigil` gated under `ratchet`; adopt, gate and review skills | One real repo gated |
+| **M4** mutation | A gremlins adapter, the survivor ledger, diff outcomes, a spike on an overlay runner | The gate fails a deliberately weak test |
+| **M5** laws v0.1 | 16 laws judged by analyzers and the kit's law lint pass; the law ratchet and the ack ledger | The report says "16 of 43 laws judged" truthfully for each class; `vigil` runs laws under `ratchet` |
+| **M6** deep layers, second and third adopters | Leak and time laws, tier 2 layers; `simplex` adopts as `binary-service` and `augur` adopts | Three Hedronite repos gated |
+| **M7** release tier and 1.0 | Tier 3, distribution through `go tool`, SARIF and JUnit; law IDs frozen | Protocol 1.0 declared on the criterion below. The release is tagged by a human: an act, not a further criterion |
+
+**The 1.0 criterion.** Protocol 1.0 is declared when three Hedronite repos are gated under
+`ratchet` at tier 1 on the launch profiles, with the CRAP caps recalibrated from their data.
+Nothing else gates it.
 
 ---
 
@@ -1643,18 +1732,20 @@ output and survivor ledger are published in CI artifacts.
 
 ## Appendix A: Gate order at a glance
 
-```
+```text
+tier 0 (floor)      check · config and schema validation · analyzer laws
 tier 1 (merge gate)
-  1 hygiene   → mod tidy -diff · mod verify · fmt · vet · lint · govulncheck · deps
-  2 tests     → gotestsum -race -shuffle -count=1 (+ Examples)
-  3 coverage  → merged profile · test -s · floors
-  4 crap      → native CRAP · one cap per class · ratchet vs baseline
-  5 mutation  → diff-scoped · unexplained survivors ≤ max
-  6 class     → fuzz seed replay · goleak · synctest · alloc checks
-tier 0 (executes last)
-  ★ laws      → G-NN analyzers · Refuse fails · not-evaluated ≠ pass
-tier 2 (nightly)  timed fuzz · full mutation · race stress · bench regression · full matrix
-tier 3 (release)  reproducible build · binary govulncheck · SBOM/sig · API compat
+  1 hygiene   → mod tidy -diff · mod verify · fmt · lint · govulncheck · deps
+  2 tests     → one run: go test -json -race -shuffle=on -count=1 -coverprofile
+                (Examples, seed replay, synctest tests, leak checks run inside it)
+  3 coverage  → read from that run's profile · floors
+  4 crap      → native CRAP over the same profile · one cap per class · ratchet vs baseline
+  5 mutation  → diff-scoped · unexplained survivors 0 · vacuous on an empty diff
+  6 class     → layers that run a command · allocation counts at tier 1
+  ★ laws      → analyzer laws (tier 0) and tool laws (tier 1), judged last
+                refuse fails · a required law not-evaluated fails
+tier 2 (nightly)    timed fuzz · full mutation · race stress · bench regression · full matrix
+tier 3 (release)    reproducible build · binary govulncheck · SBOM/sig · API compat
 ```
 
 ## Appendix B: Sources

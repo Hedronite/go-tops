@@ -1,0 +1,754 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Go-TOPS gate report",
+  "description": "The file .go-tops/report.json, written by every gate run that gets as far as running a layer (§6.6, §12.3).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "protocol",
+    "tool_version",
+    "module",
+    "class",
+    "enforce",
+    "git",
+    "max_tier",
+    "started_at",
+    "duration_ms",
+    "layer_counts",
+    "layers",
+    "laws",
+    "summary",
+    "exemptions"
+  ],
+  "properties": {
+    "protocol": {
+      "const": "0.4.0"
+    },
+    "tool_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "module": {
+      "type": "string",
+      "minLength": 1
+    },
+    "class": {
+      "$ref": "go-tops.schema.json#/$defs/class"
+    },
+    "enforce": {
+      "$ref": "core.schema.json#/$defs/enforcementMode"
+    },
+    "git": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "head",
+        "base",
+        "dirty"
+      ],
+      "properties": {
+        "head": {
+          "type": "string",
+          "minLength": 1
+        },
+        "base": {
+          "type": "string",
+          "minLength": 1
+        },
+        "dirty": {
+          "type": "boolean"
+        }
+      }
+    },
+    "max_tier": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 3
+    },
+    "started_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "duration_ms": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "vuln_db_timestamp": {
+      "description": "The timestamp of the vulnerability database govulncheck read; null when it did not run. The layer is time-dependent.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "layer_counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "enabled_in_range",
+        "ran"
+      ],
+      "properties": {
+        "enabled_in_range": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "ran": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "layers": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/layer"
+      }
+    },
+    "laws": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "catalog",
+        "judged",
+        "not_evaluated",
+        "applicable",
+        "applicable_judged",
+        "required",
+        "required_not_evaluated",
+        "not_evaluated_by_reason",
+        "out_of_range",
+        "results"
+      ],
+      "properties": {
+        "catalog": {
+          "description": "Rows in the law catalog (§8.2).",
+          "type": "integer",
+          "minimum": 0
+        },
+        "judged": {
+          "description": "Active laws with a live reader in this release: the number in \"N of M laws judged\". The same for every class.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "not_evaluated": {
+          "description": "Active laws without a live reader in this release. The same for every class.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "applicable": {
+          "description": "Laws that apply to the class: active, with the class in their classes list (§8.3).",
+          "type": "integer",
+          "minimum": 0
+        },
+        "applicable_judged": {
+          "description": "Applicable laws that ended with a verdict other than not-evaluated.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "required": {
+          "description": "Applicable laws the profile requires.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "required_not_evaluated": {
+          "description": "Required laws in range that ended not-evaluated. Above zero fails the gate.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "not_evaluated_by_reason": {
+          "description": "Class level, beside required_not_evaluated: the applicable laws that ended not-evaluated, by reason code. The three counts sum to applicable minus applicable_judged, not to the release-level not_evaluated.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "no_reader",
+            "config_off",
+            "input_missing"
+          ],
+          "properties": {
+            "no_reader": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "config_off": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "input_missing": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "out_of_range": {
+          "description": "Laws above max_tier. The run's verdict covers its range only.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "core.schema.json#/$defs/lawId"
+          }
+        },
+        "results": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/lawResult"
+          }
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "outcome",
+        "exit_code",
+        "failed"
+      ],
+      "properties": {
+        "outcome": {
+          "$ref": "core.schema.json#/$defs/runOutcome"
+        },
+        "exit_code": {
+          "enum": [
+            0,
+            1
+          ]
+        },
+        "failed": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "exemptions": {
+      "description": "Every exemption in force on the day of the run (§6.8).",
+      "type": "array",
+      "items": {
+        "$ref": "core.schema.json#/$defs/exemption"
+      }
+    }
+  },
+  "$defs": {
+    "layer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "tier",
+        "outcome"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$"
+        },
+        "tier": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3
+        },
+        "outcome": {
+          "$ref": "core.schema.json#/$defs/outcome"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        },
+        "details": {
+          "description": "Layer-specific figures.",
+          "type": "object"
+        },
+        "expires": {
+          "description": "For a crap or mutation gate switched off: the date the exemption lapses (§3.3).",
+          "$ref": "core.schema.json#/$defs/date"
+        }
+      },
+      "if": {
+        "required": [
+          "outcome"
+        ],
+        "properties": {
+          "outcome": {
+            "const": "skip"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "reason"
+        ]
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "tests"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "details": {
+                "$ref": "#/$defs/testsDetails"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "id",
+              "outcome"
+            ],
+            "properties": {
+              "id": {
+                "const": "tests"
+              },
+              "outcome": {
+                "enum": [
+                  "pass",
+                  "fail",
+                  "vacuous"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "details"
+            ]
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "coverage"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "details": {
+                "$ref": "#/$defs/coverageDetails"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "id",
+              "outcome"
+            ],
+            "properties": {
+              "id": {
+                "const": "coverage"
+              },
+              "outcome": {
+                "enum": [
+                  "pass",
+                  "fail",
+                  "vacuous"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "details"
+            ]
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "crap"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "details": {
+                "$ref": "#/$defs/crapDetails"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "id",
+              "outcome"
+            ],
+            "properties": {
+              "id": {
+                "const": "crap"
+              },
+              "outcome": {
+                "enum": [
+                  "pass",
+                  "fail",
+                  "vacuous"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "details"
+            ]
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "mutation"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "details": {
+                "$ref": "#/$defs/mutationDetails"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "id",
+              "outcome"
+            ],
+            "properties": {
+              "id": {
+                "const": "mutation"
+              },
+              "outcome": {
+                "enum": [
+                  "pass",
+                  "fail",
+                  "vacuous"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "details"
+            ]
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "id",
+              "outcome"
+            ],
+            "properties": {
+              "id": {
+                "enum": [
+                  "crap",
+                  "mutation"
+                ]
+              },
+              "outcome": {
+                "const": "skip"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "expires"
+            ]
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "enum": [
+                  "hygiene",
+                  "tests",
+                  "coverage"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "outcome": {
+                "not": {
+                  "const": "skip"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "lawResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "verdict",
+        "reader"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "core.schema.json#/$defs/lawId"
+        },
+        "verdict": {
+          "$ref": "core.schema.json#/$defs/verdict"
+        },
+        "reader": {
+          "enum": [
+            "analyzer",
+            "tool",
+            "attested",
+            "tbd"
+          ]
+        },
+        "reason": {
+          "$ref": "core.schema.json#/$defs/reasonCode"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": [
+              "verdict"
+            ],
+            "properties": {
+              "verdict": {
+                "const": "not-evaluated"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "reason"
+            ]
+          },
+          "else": {
+            "not": {
+              "required": [
+                "reason"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "testsDetails": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "packages",
+        "tests",
+        "race",
+        "skipped",
+        "shuffle_seed"
+      ],
+      "properties": {
+        "packages": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "tests": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "race": {
+          "type": "boolean"
+        },
+        "skipped": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "shuffle_seed": {
+          "description": "The seed of the shuffled test run.",
+          "type": "integer"
+        }
+      }
+    },
+    "coverageDetails": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "statements_pct",
+        "floor",
+        "profile_bytes"
+      ],
+      "properties": {
+        "statements_pct": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "floor": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "profile_bytes": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "crapDetails": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "cap",
+        "violations"
+      ],
+      "properties": {
+        "cap": {
+          "type": "number",
+          "minimum": 1
+        },
+        "violations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/crapFunction"
+          }
+        },
+        "exempt": {
+          "description": "Functions scored and printed but not judged, under a crap exemption.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/crapFunction"
+          }
+        }
+      }
+    },
+    "crapFunction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "func",
+        "file",
+        "cc",
+        "cov_pct",
+        "crap",
+        "baseline"
+      ],
+      "properties": {
+        "func": {
+          "type": "string",
+          "minLength": 1
+        },
+        "file": {
+          "type": "string",
+          "minLength": 1
+        },
+        "cc": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cov_pct": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "crap": {
+          "type": "number",
+          "minimum": 0
+        },
+        "baseline": {
+          "description": "null: no ledger entry, so the function is held to the cap. Otherwise its ledger score (§6.7).",
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      }
+    },
+    "mutationDetails": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mutants",
+        "killed",
+        "survived_explained",
+        "survived_unexplained",
+        "max",
+        "timed_out",
+        "timed_out_keys",
+        "dropped",
+        "exempt"
+      ],
+      "properties": {
+        "mutants": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "killed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "survived_explained": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "survived_unexplained": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "max": {
+          "const": 0
+        },
+        "timed_out": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "timed_out_keys": {
+          "description": "The survivor keys of the mutants that timed out, listed so a reviewer sees which hung (§6.4).",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "dropped": {
+          "description": "Mutants that did not compile; counted nowhere else.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "exempt": {
+          "description": "The survivor keys of mutants in code under a mutation exemption; they are not counted as survivors (§6.8).",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    }
+  }
+}

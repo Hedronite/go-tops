@@ -1,0 +1,475 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Go-TOPS configuration and profile",
+  "description": "One shape for go-tops.yaml and for the class profiles in profiles/. A profile omits module and version; check requires both in go-tops.yaml.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "protocol",
+    "class"
+  ],
+  "properties": {
+    "protocol": {
+      "const": "0.4.0"
+    },
+    "version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "module": {
+      "type": "string",
+      "minLength": 1
+    },
+    "class": {
+      "$ref": "#/$defs/class"
+    },
+    "enforce": {
+      "$ref": "core.schema.json#/$defs/enforcementMode"
+    },
+    "baseline": {
+      "type": "string",
+      "minLength": 1
+    },
+    "advisory": {
+      "description": "Required when enforce is advisory, invalid otherwise (§6.7).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "reason",
+        "owner",
+        "expires"
+      ],
+      "properties": {
+        "reason": {
+          "$ref": "core.schema.json#/$defs/reasonText"
+        },
+        "owner": {
+          "$ref": "core.schema.json#/$defs/handle"
+        },
+        "expires": {
+          "$ref": "core.schema.json#/$defs/date"
+        }
+      }
+    },
+    "toolchain": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "go_floor": {
+          "$ref": "#/$defs/goVersion"
+        },
+        "go_current": {
+          "$ref": "#/$defs/goVersion"
+        },
+        "cgo": {
+          "type": "boolean"
+        }
+      }
+    },
+    "gates": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "hygiene": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "golangci_lint": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "config": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            },
+            "govulncheck": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "fail_on": {
+                  "enum": [
+                    "reachable"
+                  ]
+                },
+                "db": {
+                  "description": "A mirrored vulnerability database for a repeatable run (-db, §3.1).",
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            },
+            "deps": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "depguard": {
+                  "type": "boolean"
+                },
+                "licenses": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "allow": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tests": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "race": {
+              "const": true
+            },
+            "shuffle": {
+              "const": true
+            },
+            "count": {
+              "const": 1
+            }
+          }
+        },
+        "coverage": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "statements_floor": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 100
+            },
+            "exclude_generated": {
+              "type": "boolean"
+            },
+            "integration": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "packages": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        "crap": {
+          "type": "object",
+          "additionalProperties": false,
+          "allOf": [
+            {
+              "$ref": "#/$defs/reasonAndExpiresWhenOff"
+            }
+          ],
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 1
+            },
+            "cap": {
+              "type": "number",
+              "minimum": 1
+            },
+            "complexity": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "err_guard_discount": {
+                  "type": "boolean"
+                },
+                "wrap_functions": {
+                  "type": "array",
+                  "items": {
+                    "description": "import/path.Name",
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_.~-]+(/[A-Za-z0-9_.~-]+)*\\.[A-Za-z_][A-Za-z0-9_]*$"
+                  }
+                }
+              }
+            },
+            "expires": {
+              "$ref": "core.schema.json#/$defs/date"
+            }
+          }
+        },
+        "mutation": {
+          "type": "object",
+          "additionalProperties": false,
+          "allOf": [
+            {
+              "$ref": "#/$defs/reasonAndExpiresWhenOff"
+            }
+          ],
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 1
+            },
+            "engine": {
+              "enum": [
+                "gremlins",
+                "go-mutesting",
+                "mutest",
+                "overlay"
+              ]
+            },
+            "base": {
+              "type": "string",
+              "minLength": 1
+            },
+            "unexplained_survivors_max": {
+              "const": 0
+            },
+            "ledger": {
+              "type": "string",
+              "minLength": 1
+            },
+            "expires": {
+              "$ref": "core.schema.json#/$defs/date"
+            }
+          }
+        }
+      }
+    },
+    "layers": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "fuzz": {
+          "type": "object",
+          "additionalProperties": false,
+          "allOf": [
+            {
+              "$ref": "#/$defs/reasonWhenOff"
+            }
+          ],
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 1
+            },
+            "targets": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "timed": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "duration": {
+                  "type": "string",
+                  "pattern": "^[0-9]+(s|m|h)$"
+                }
+              }
+            }
+          }
+        },
+        "stress": {
+          "type": "object",
+          "additionalProperties": false,
+          "allOf": [
+            {
+              "$ref": "#/$defs/reasonWhenOff"
+            }
+          ],
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 1
+            },
+            "count": {
+              "type": "integer",
+              "minimum": 2
+            }
+          }
+        },
+        "bench": {
+          "type": "object",
+          "additionalProperties": false,
+          "allOf": [
+            {
+              "$ref": "#/$defs/reasonWhenOff"
+            }
+          ],
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 1
+            },
+            "baseline": {
+              "type": "string",
+              "minLength": 1
+            },
+            "regression_pct": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            }
+          }
+        }
+      }
+    },
+    "laws": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "required": {
+          "description": "Laws whose not-evaluated verdict fails the gate (§3.3). Each applies to the class (§8.3).",
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "core.schema.json#/$defs/lawId"
+          }
+        },
+        "ack_ledger": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "exemptions": {
+      "type": "array",
+      "items": {
+        "$ref": "core.schema.json#/$defs/exemption"
+      }
+    },
+    "report": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "required": [
+          "enforce"
+        ],
+        "properties": {
+          "enforce": {
+            "const": "advisory"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "advisory"
+        ]
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "advisory"
+        ]
+      },
+      "then": {
+        "required": [
+          "enforce"
+        ],
+        "properties": {
+          "enforce": {
+            "const": "advisory"
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "goVersion": {
+      "type": "string",
+      "pattern": "^1\\.[0-9]+(\\.[0-9]+)?$"
+    },
+    "reasonWhenOff": {
+      "description": "A layer switched off with enabled: false carries a reason (§3.3).",
+      "if": {
+        "required": [
+          "enabled"
+        ],
+        "properties": {
+          "enabled": {
+            "const": false
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "reason"
+        ]
+      }
+    },
+    "class": {
+      "enum": [
+        "library-core",
+        "library-util",
+        "parser-codec",
+        "embedded-tinygo",
+        "unsafe-kernel",
+        "binary-cli",
+        "tui-app",
+        "binary-service",
+        "concurrency-runtime",
+        "cgo-bridge",
+        "codegen",
+        "workspace-root"
+      ]
+    },
+    "reasonAndExpiresWhenOff": {
+      "description": "A gate switched off with enabled: false carries a reason and a dated expires (§3.3).",
+      "if": {
+        "required": [
+          "enabled"
+        ],
+        "properties": {
+          "enabled": {
+            "const": false
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "reason",
+          "expires"
+        ]
+      }
+    }
+  }
+}
