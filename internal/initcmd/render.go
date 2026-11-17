@@ -29,22 +29,25 @@ var leftoverRe = regexp.MustCompile(`\{[A-Z][A-Z0-9_]*\}`)
 
 func (in *inputs) values() map[string]string {
 	return map[string]string{
-		"{PROTOCOL}":       in.protocol,
-		"{MODULE}":         in.module,
-		"{CLASS}":          in.o.Class,
-		"{ENFORCE}":        "ratchet",
-		"{COVERAGE_FLOOR}": number(in.profile.Gates.Coverage.Floor),
-		"{CRAP_CAP}":       number(in.profile.Gates.Crap.Cap),
-		"{GO_FLOOR}":       in.goFloor,
-		"{GO_CURRENT}":     goCurrent(),
-		"{TOOLCHAIN}":      toolchain,
-		"{TOOLCHAIN_NUM}":  strings.TrimPrefix(toolchain, "go"),
-		"{OWNER}":          in.owner,
-		"{EXPIRES_M2}":     expiresM2,
-		"{EXPIRES_M4}":     expiresM4,
-		"{LAYERS}":         in.layersYAML(),
-		"{KIT_VERSION}":    in.kitVersionText(),
-		"{TOOL_VERSIONS}":  toolVersionsText(),
+		"{PROTOCOL}":          in.protocol,
+		"{MODULE}":            in.module,
+		"{CLASS}":             in.o.Class,
+		"{ENFORCE}":           "ratchet",
+		"{COVERAGE_FLOOR}":    number(in.profile.Gates.Coverage.Floor),
+		"{CRAP_CAP}":          number(in.profile.Gates.Crap.Cap),
+		"{GO_FLOOR}":          in.goFloor,
+		"{GO_CURRENT}":        goCurrent(),
+		"{TOOLCHAIN}":         toolchain,
+		"{TOOLCHAIN_NUM}":     strings.TrimPrefix(toolchain, "go"),
+		"{OWNER}":             in.owner,
+		"{EXPIRES_M2}":        expiresM2,
+		"{EXPIRES_M4}":        expiresM4,
+		"{LAYERS}":            in.layersYAML(),
+		"{DEPGUARD}":          strconv.FormatBool(in.depguard),
+		"{DEPGUARD_ENABLE}":   in.depguardEnable(),
+		"{DEPGUARD_SETTINGS}": in.depguardSettings(),
+		"{KIT_VERSION}":       in.kitVersionText(),
+		"{TOOL_VERSIONS}":     toolVersionsText(),
 	}
 }
 
@@ -164,4 +167,30 @@ func (in *inputs) toolsMod() string {
 	}
 	b.WriteString(")\n")
 	return b.String()
+}
+
+// depguardEnable is the line of the lint config that turns the linter on. It is
+// there exactly when go-tops.yaml says deps.depguard is true (§9).
+func (in *inputs) depguardEnable() string {
+	if !in.depguard {
+		return ""
+	}
+	return "  enable:\n    - depguard\n"
+}
+
+// depguardSettings are the import rules the linter enforces: packages the
+// standard library or a maintained module has replaced. The adopter adds its own.
+func (in *inputs) depguardSettings() string {
+	if !in.depguard {
+		return ""
+	}
+	return `    depguard:
+      rules:
+        main:
+          deny:
+            - pkg: io/ioutil
+              desc: deprecated since Go 1.16; use os and io
+            - pkg: github.com/pkg/errors
+              desc: archived; use errors and fmt.Errorf with %w
+`
 }

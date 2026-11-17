@@ -40,6 +40,7 @@ type inputs struct {
 	o        Options
 	profile  profile
 	module   string
+	depguard bool   // deps.depguard: init writes it true, so the lint config enables the linter
 	protocol string // the protocol the binary implements: the embedded schema constant
 	goFloor  string // 1.26
 	owner    string
@@ -60,7 +61,7 @@ func gatherInputs(o Options) (*inputs, error) {
 	if err != nil {
 		return nil, err
 	}
-	in := &inputs{o: o, protocol: proto}
+	in := &inputs{o: o, protocol: proto, depguard: true}
 	if err := in.loadProfile(); err != nil {
 		return nil, err
 	}
