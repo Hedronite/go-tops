@@ -9,10 +9,23 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	gotops "github.com/Hedronite/go-tops"
 )
 
-// Protocol is the protocol version the report states.
-const Protocol = "0.4.1"
+// Protocol is the protocol version the report states: the constant of the
+// embedded schema, which docs CI keeps equal to GO_TOPS.md (§2, §18).
+var Protocol = embeddedProtocol()
+
+// embeddedProtocol reads the version from the schema compiled into the binary.
+// A binary without it is a broken build, found by the first test run.
+func embeddedProtocol() string {
+	p, err := gotops.Protocol()
+	if err != nil {
+		panic("report: " + err.Error())
+	}
+	return p
+}
 
 // DefaultPath is where the report goes unless go-tops.yaml says otherwise.
 const DefaultPath = ".go-tops/report.json"

@@ -50,6 +50,17 @@ func (f *fakeLayer) Preflight(context.Context, *Env) error {
 // details that satisfy schema/gate-report.schema.json for a layer that ran.
 func details(id string) map[string]any {
 	switch id {
+	case "hygiene":
+		pass := func() map[string]any { return map[string]any{"outcome": "pass"} }
+		return map[string]any{
+			"golangci_lint": "v2.15.0", "findings": 0,
+			"tidy": pass(), "verify": pass(),
+			"toolchain":       map[string]any{"outcome": "pass", "go_version": "go1.27.4", "pinned": "go1.27.4"},
+			"format":          map[string]any{"outcome": "pass", "files": []any{}},
+			"lint":            map[string]any{"outcome": "pass", "findings": 0, "by_linter": map[string]any{}},
+			"vulnerabilities": map[string]any{"outcome": "pass", "db_last_modified": "2026-11-17T09:12:44Z", "time_dependent": true, "fail_on": "reachable", "reachable": []any{}, "other": 0},
+			"licenses":        map[string]any{"outcome": "pass", "allowed": []any{"MIT"}},
+		}
 	case "tests":
 		return map[string]any{"packages": 3, "tests": 12, "race": true, "skipped": 0, "shuffle_seed": 7}
 	case "coverage":
