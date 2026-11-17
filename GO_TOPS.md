@@ -126,8 +126,8 @@ Rust-TOPS defines tiers 0–5 (`RUST_TOPS.md` §3). Go-TOPS uses four:
 files itself (`go.mod`, the config, source syntax) and needs no other layer's output. It does
 not judge the laws whose reader is `tool`. Those map the output of a tier 1 layer (G-12 reads
 the lint JSON, G-40 the `govulncheck` output) and are judged at tier 1. In a `--max-tier 0` run
-they are out of range and listed as `not-evaluated` with reason `input_missing`, and they do not
-fail that run (§3.3). Exit 0 from `--max-tier 0` therefore means the tier 0 checks passed, not
+they are out of range: listed as `not-evaluated` with reason `input_missing` and in the report's
+out-of-range list, and they do not fail that run (§3.3). Exit 0 from `--max-tier 0` therefore means the tier 0 checks passed, not
 that the gate did.
 
 ### 3.3 Verdicts
@@ -174,9 +174,11 @@ Everywhere else an empty result is `fail` (§3.4 rule 5).
 **Required laws.** The class profile's `laws.required` lists the laws the class cannot go
 without. A required law that is `not-evaluated` **fails the gate, whatever the reason**. A law
 outside the list that is `not-evaluated` is counted in the report and never blocks. A required
-law above `--max-tier` is out of range and does not fail that run (§3.2). Switching off the
-linter behind a required law therefore fails the gate, and a `not-evaluated` law is never read as
-`allow`.
+law above `--max-tier` is out of range: the report lists it as out of range, and that run's
+verdict covers its range only (§3.2). A profile's `laws.required` holds only laws at or below the
+drop-in's maximum tier, 1, so the merge gate judges every required law and this rule binds in
+full there. Switching off the linter behind a required law therefore fails the gate, and a
+`not-evaluated` law is never read as `allow`.
 
 **Severity and acknowledgement.** Each law has a severity in §8.2: **R** or **A**. An instance of
 an R law is `refuse`. An instance of an A law is `ack` when it carries a recorded
@@ -192,7 +194,7 @@ counted against that file's `suppressions` entry for the law (§6.7): up to the 
 
 | Key | Meaning |
 |---|---|
-| `laws.required` | Profile key: a list of law IDs, a subset of `laws.enable`. Each must have an `analyzer` or `tool` reader, because an `attested` or `tbd` law can never be judged. `go-tops.yaml` may add IDs and may not remove or override the profile's |
+| `laws.required` | Profile key: a list of law IDs, a subset of `laws.enable`. Each must have an `analyzer` or `tool` reader, because an `attested` or `tbd` law can never be judged, and each must be a law at tier 1 or below. `go-tops.yaml` may add IDs and may not remove or override the profile's |
 | `enabled`, `reason` | On every layer. `enabled: false` is the only way to turn a layer off, and it requires a non-empty `reason`, which is printed with the `skip`. `check` fails an `enabled: false` with no `reason` |
 
 ### 3.4 Stated rules (policy)
@@ -436,7 +438,8 @@ run that gets as far as running a layer writes it, whether the run passes, fails
 none. The report names every layer in range with its outcome and every law with its verdict
 (§3.3). It counts `not-run`, `not-reached`, `vacuous` and `not-evaluated` separately and never
 folds them into `pass` or `allow`. It records the numbers §3.5 and §3.3 judge by: layers enabled
-in range and layers that ran; laws required, judged and `not-evaluated` by reason. See §12.3.
+in range and layers that ran; laws required, judged and `not-evaluated` by reason; and the laws
+out of range, with the run's verdict covering its range only. See §12.3.
 <!-- tops-core:end report -->
 
 ### 6.7 Enforcement modes
@@ -835,6 +838,7 @@ Written on every `gate` run. Schema file: `schema/gate-report.schema.json`.
   "laws": {
     "catalog": 43, "judged": 18, "required": 10, "required_not_evaluated": 0,
     "not_evaluated": { "no_reader": 22, "config_off": 0, "input_missing": 3 },
+    "out_of_range": [],
     "results": [
       { "id": "G-17", "verdict": "allow", "reader": "analyzer" },
       { "id": "G-28", "verdict": "not-evaluated", "reason": "no_reader", "reader": "attested" }
@@ -848,7 +852,8 @@ Report rules: every layer in range is present with an `outcome` from §3.3, and 
 its `reason`. A layer that is `not-run`, `not-reached` or `tool-missing` is present and fails the
 run. A law carries a `verdict`, and a `not-evaluated` law carries its reason code; the laws counts
 (`not_evaluated` by reason, `required_not_evaluated`) are separate and are never folded into
-`allow`. `layer_counts` holds the layers enabled in range and the layers that ran; the run fails
+`allow`. `out_of_range` lists the laws above `max_tier`; the run's `summary` covers the range
+`max_tier` selects and no more. `layer_counts` holds the layers enabled in range and the layers that ran; the run fails
 when they differ (§3.5). A CRAP violation with `"baseline": null` is a new function; otherwise
 `baseline` is the score it must not exceed.
 
