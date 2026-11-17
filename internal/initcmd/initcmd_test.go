@@ -15,6 +15,8 @@ import (
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
 	"go.yaml.in/yaml/v3"
+
+	gotops "github.com/Hedronite/go-tops"
 )
 
 // The oracle is GO_TOPS.md §12.1 (init), §4.1 (the drop-in set), §10 (the
@@ -219,7 +221,7 @@ func TestConfigValidatesAndCarriesTheProfile(t *testing.T) {
 			if got := asMap(t, gates["crap"])["cap"]; fmt.Sprint(got) != fmt.Sprint(want.cap) {
 				t.Errorf("cap %v, want %v", got, want.cap)
 			}
-			if cfg["module"] != "github.com/acme/demo" || cfg["class"] != class || cfg["enforce"] != "ratchet" || cfg["protocol"] != protocol {
+			if cfg["module"] != "github.com/acme/demo" || cfg["class"] != class || cfg["enforce"] != "ratchet" || cfg["protocol"] != mustProtocol(t) {
 				t.Errorf("header keys wrong: %v", cfg)
 			}
 			tc := asMap(t, cfg["toolchain"])
@@ -484,7 +486,7 @@ func TestAdoptionRecordFillsItems2To4And6(t *testing.T) {
 	rec := read(t, dir, "GO-TOPS.md")
 	for _, want := range []string{
 		"https://github.com/Hedronite/go-tops",
-		"2. **Protocol version.** " + protocol,
+		"2. **Protocol version.** " + mustProtocol(t),
 		"`gotops` v0.1.0", "toolchain go1.27.4", "golangci-lint 2.15.0", "govulncheck v1.9.0", "gotestsum v1.13.0", "go-licenses v2.0.1",
 		"`library-core`: statement coverage floor 85%, CRAP cap 8",
 		".go-tops/baseline.json", ".go-tops/survivors.yaml",
@@ -498,4 +500,15 @@ func TestAdoptionRecordFillsItems2To4And6(t *testing.T) {
 			t.Errorf("GO-TOPS.md has no item %d", i)
 		}
 	}
+}
+
+// mustProtocol is the protocol this binary implements: the constant of the
+// embedded schema, which the version check keeps equal to GO_TOPS.md.
+func mustProtocol(t *testing.T) string {
+	t.Helper()
+	p, err := gotops.Protocol()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return p
 }

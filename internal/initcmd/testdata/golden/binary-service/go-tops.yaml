@@ -1,5 +1,5 @@
 # Go-TOPS configuration (GO_TOPS.md §9), written by gotops init.
-protocol: "0.4.1"
+protocol: "0.4.2"
 version: "0.1.0"
 module: github.com/acme/demo
 class: binary-service

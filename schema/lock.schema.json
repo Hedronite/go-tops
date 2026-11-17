@@ -12,7 +12,7 @@
   ],
   "properties": {
     "protocol": {
-      "const": "0.4.1"
+      "const": "0.4.2"
     },
     "toolchain": {
       "description": "The exact Go release the gate runs on; go env GOVERSION must equal it (section 2).",
@@ -83,35 +83,63 @@
           "pattern": "^([^\\s{}]|\\{(version|os|arch)\\})+$"
         },
         "sha256": {
-          "description": "The SHA-256 of the downloaded file, one per platform. All four are required.",
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "darwin/arm64",
-            "darwin/amd64",
-            "linux/amd64",
-            "linux/arm64"
-          ],
-          "properties": {
-            "darwin/arm64": {
-              "$ref": "#/$defs/sha256"
-            },
-            "darwin/amd64": {
-              "$ref": "#/$defs/sha256"
-            },
-            "linux/amd64": {
-              "$ref": "#/$defs/sha256"
-            },
-            "linux/arm64": {
-              "$ref": "#/$defs/sha256"
+          "description": "The SHA-256 of the downloaded file (the archive when there is an extract path), one per platform. All four are required.",
+          "$ref": "#/$defs/platformHashes"
+        },
+        "executable_sha256": {
+          "description": "The SHA-256 of the executable inside the archive, one per platform. Required with extract, and absent without it: the gate and lock --verify compare the installed executable with this hash.",
+          "$ref": "#/$defs/platformHashes"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": [
+              "extract"
+            ]
+          },
+          "then": {
+            "required": [
+              "executable_sha256"
+            ]
+          },
+          "else": {
+            "not": {
+              "required": [
+                "executable_sha256"
+              ]
             }
           }
         }
-      }
+      ]
     },
     "sha256": {
       "type": "string",
       "pattern": "^[0-9a-f]{64}$"
+    },
+    "platformHashes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "darwin/arm64",
+        "darwin/amd64",
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "properties": {
+        "darwin/arm64": {
+          "$ref": "#/$defs/sha256"
+        },
+        "darwin/amd64": {
+          "$ref": "#/$defs/sha256"
+        },
+        "linux/amd64": {
+          "$ref": "#/$defs/sha256"
+        },
+        "linux/arm64": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
     }
   }
 }

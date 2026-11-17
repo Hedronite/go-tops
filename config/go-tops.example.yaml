@@ -1,4 +1,4 @@
-protocol: "0.4.1"            # must match the schema's protocol constant
+protocol: "0.4.2"            # must match the schema's protocol constant
 version: "0.1.0"             # this config's version (non-empty)
 module: github.com/acme/myapp
 class: binary-cli            # one of the schema's classes

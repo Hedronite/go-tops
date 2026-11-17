@@ -29,7 +29,7 @@ var leftoverRe = regexp.MustCompile(`\{[A-Z][A-Z0-9_]*\}`)
 
 func (in *inputs) values() map[string]string {
 	return map[string]string{
-		"{PROTOCOL}":       protocol,
+		"{PROTOCOL}":       in.protocol,
 		"{MODULE}":         in.module,
 		"{CLASS}":          in.o.Class,
 		"{ENFORCE}":        "ratchet",
@@ -76,7 +76,7 @@ func renderFiles(in *inputs) ([]file, error) {
 		}
 		out = append(out, file{tf.path, []byte(text)})
 	}
-	return append(out, file{"go-tops.lock", []byte(lockText())}, file{"tools/go.mod", []byte(in.toolsMod())}), nil
+	return append(out, file{"go-tops.lock", []byte(lockText(in.protocol))}, file{"tools/go.mod", []byte(in.toolsMod())}), nil
 }
 
 // layersYAML writes the class layers init leaves off: they run at tier 2, which
@@ -127,16 +127,20 @@ func path0(pkg string) string {
 }
 
 // lockText is go-tops.lock written from the embedded pins (§10).
-func lockText() string {
+func lockText(protocol string) string {
 	var b strings.Builder
 	b.WriteString("# Pins for the Go toolchain and the downloaded binaries (GO_TOPS.md §10).\n")
 	b.WriteString("# Written by gotops init from the kit's pins; change it with a reviewed gotops lock --update.\n")
 	fmt.Fprintf(&b, "protocol: %q\ntoolchain: %s\n\n", protocol, toolchain)
-	b.WriteString("trust:\n  mode: checksum\n  note: SHA-256 values copied from the upstream release checksum file\n\nbinaries:\n")
+	b.WriteString("trust:\n  mode: checksum\n  note: archive SHA-256 values copied from the upstream release checksum file; executable SHA-256 values computed from those verified archives\n\nbinaries:\n")
 	p := golangciLint
 	fmt.Fprintf(&b, "  - name: %s\n    version: %q\n    url: %s\n    extract: %s\n    sha256:\n", p.Name, p.Version, p.URL, p.Extract)
 	for _, pl := range platforms {
 		fmt.Fprintf(&b, "      %s: %s\n", pl, p.SHA256[pl])
+	}
+	b.WriteString("    executable_sha256:\n")
+	for _, pl := range platforms {
+		fmt.Fprintf(&b, "      %s: %s\n", pl, p.Executable[pl])
 	}
 	return b.String()
 }

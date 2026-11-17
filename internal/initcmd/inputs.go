@@ -11,6 +11,8 @@ import (
 	"strings"
 
 	"go.yaml.in/yaml/v3"
+
+	gotops "github.com/Hedronite/go-tops"
 )
 
 // launchClasses are the classes with an embedded profile (§5.1). The other
@@ -38,6 +40,7 @@ type inputs struct {
 	o        Options
 	profile  profile
 	module   string
+	protocol string // the protocol the binary implements: the embedded schema constant
 	goFloor  string // 1.26
 	owner    string
 	kitTool  bool // gotops goes into tools/go.mod
@@ -53,7 +56,11 @@ func gatherInputs(o Options) (*inputs, error) {
 	if !contains(launchClasses, o.Class) {
 		return nil, refuse("--class %q has no profile; the launch classes are %s", o.Class, strings.Join(launchClasses, ", "))
 	}
-	in := &inputs{o: o}
+	proto, err := gotops.Protocol()
+	if err != nil {
+		return nil, err
+	}
+	in := &inputs{o: o, protocol: proto}
 	if err := in.loadProfile(); err != nil {
 		return nil, err
 	}

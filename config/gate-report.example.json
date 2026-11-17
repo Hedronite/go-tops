@@ -1,5 +1,5 @@
 {
-  "protocol": "0.4.1",
+  "protocol": "0.4.2",
   "tool_version": "0.0.0",
   "module": "github.com/acme/myapp",
   "class": "binary-cli",
@@ -18,7 +18,15 @@
   "layers": [
     {
       "id": "hygiene", "tier": 1, "outcome": "pass",
-      "details": { "golangci_lint": "v2.15.0", "findings": 0 }
+      "details": { "golangci_lint": "v2.15.0", "findings": 0,
+                   "tidy": { "outcome": "pass" },
+                   "verify": { "outcome": "pass" },
+                   "toolchain": { "outcome": "pass", "go_version": "go1.27.4", "pinned": "go1.27.4" },
+                   "format": { "outcome": "pass", "files": [] },
+                   "lint": { "outcome": "pass", "findings": 0, "by_linter": {} },
+                   "vulnerabilities": { "outcome": "pass", "db_last_modified": "2026-11-17T09:12:44Z", "time_dependent": true,
+                                        "fail_on": "reachable", "reachable": [], "other": 0 },
+                   "licenses": { "outcome": "pass", "allowed": ["MIT", "Apache-2.0", "BSD-3-Clause", "BSD-2-Clause", "ISC"] } }
     },
     {
       "id": "tests", "tier": 1, "outcome": "pass",

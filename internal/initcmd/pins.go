@@ -9,7 +9,6 @@ import (
 // tools/go.mod, so the first gate run is already pinned (GO_TOPS.md §10).
 // A test keeps the lock pins equal to config/go-tops.example.lock.
 const (
-	protocol  = "0.4.1"
 	toolchain = "go1.27.4"
 	// protocolFloorMinor is the minor release of the language floor (§2).
 	protocolFloorMinor = 26
@@ -24,7 +23,8 @@ var platforms = []string{"darwin/arm64", "darwin/amd64", "linux/amd64", "linux/a
 
 type binaryPin struct {
 	Name, Version, URL, Extract string
-	SHA256                      map[string]string
+	SHA256                      map[string]string // of the downloaded archive
+	Executable                  map[string]string // of the executable inside it
 }
 
 var golangciLint = binaryPin{
@@ -37,6 +37,12 @@ var golangciLint = binaryPin{
 		"darwin/amd64": "767b899a28285e88ded2823d5dcc4bc5ef681173eb2d80f029a7b17ee4ece3b8",
 		"linux/amd64":  "9b7fe6a6bf6334b98decf8d86b11415ea7889afdabdd1959fdce23af2a9ebcea",
 		"linux/arm64":  "b4d8f17068b35ee6060cc2f69a16fb48740d706fbba81661c318649c114a6998",
+	},
+	Executable: map[string]string{
+		"darwin/arm64": "71b89744ef6dd92dad9026b70489d1ad660da79ef90dfb5aabe995d916bec8a9",
+		"darwin/amd64": "e04962742507a5f37a4002a7a8b2b549f6864f17807eb5d534d947f6311a051f",
+		"linux/amd64":  "d9af4564c05beb2f5e130119aec45e5e89d28e5017d558d3ca382659f2427894",
+		"linux/arm64":  "14680d7674eb1fed0405446670e15dcffb74e979ef0dcd41f998c088fd6babfb",
 	},
 }
 

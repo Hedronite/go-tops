@@ -26,7 +26,7 @@ func TestAgentsCreatedWhenAbsent(t *testing.T) {
 		t.Fatalf("a new AGENTS.md is the block alone:\n%s", got)
 	}
 	for _, want := range []string{
-		"**Class:** `binary-service`", "**Protocol:** Go-TOPS " + protocol, "**Module:** `github.com/acme/demo`",
+		"**Class:** `binary-service`", "**Protocol:** Go-TOPS " + mustProtocol(t), "**Module:** `github.com/acme/demo`",
 		"**Enforce:** `ratchet`", "Statement coverage ≥ `75%`", "CRAP cap ≤ `10`",
 	} {
 		if !strings.Contains(got, want) {

@@ -302,7 +302,7 @@ func TestReportHeader(t *testing.T) {
 	c.Exemptions = []report.Exemption{{Path: "a.go", Symbol: "F", Layer: "crap", Reason: "dispatch table, one call per arm", Owner: "platform", Expires: "2027-03-01"}}
 	r := mustRun(t, c, Options{MaxTier: 1, Base: "origin/release"}, d)
 	rep := r.Report
-	if rep.Protocol != "0.4.1" || rep.Module != "example.com/m" || rep.Class != "binary-cli" || rep.Enforce != "hard" || rep.ToolVersion != "0.0.0-dev" {
+	if rep.Protocol != report.Protocol || rep.Module != "example.com/m" || rep.Class != "binary-cli" || rep.Enforce != "hard" || rep.ToolVersion != "0.0.0-dev" {
 		t.Errorf("header %+v", rep)
 	}
 	if rep.Git.Head != "abc1234" || !rep.Git.Dirty || rep.Git.Base != "origin/release" {
@@ -362,7 +362,7 @@ func TestVulnDBTimestampReachesTheReport(t *testing.T) {
 	c := cfg()
 	c.RequiredLaws = nil
 	ls := gateLayers(nil, nil)
-	ls[0] = &fakeLayer{id: "hygiene", tier: 1, res: Result{Outcome: Pass, VulnDBTimestamp: "2026-11-17T09:12:44Z"}}
+	ls[0] = &fakeLayer{id: "hygiene", tier: 1, res: Result{Outcome: Pass, Details: details("hygiene"), VulnDBTimestamp: "2026-11-17T09:12:44Z"}}
 	r := mustRun(t, c, opts(), deps(ls))
 	if r.Report.VulnDBTimestamp == nil || *r.Report.VulnDBTimestamp != "2026-11-17T09:12:44Z" {
 		t.Fatalf("vuln_db_timestamp = %v", r.Report.VulnDBTimestamp)
