@@ -111,6 +111,52 @@ func TestPlantedDefectsFail(t *testing.T) {
 	}
 }
 
+// Each plant changes one stated count that the first version of the counts
+// check skipped or never read: a clause beside a sibling-suite name on the same
+// line, the same in a table cell, and the report example's not_evaluated.
+func TestPlantedCountsAlongsideSiblingNamesFail(t *testing.T) {
+	cases := []struct{ name, old, new, reason string }{
+		{"line-names-sibling-suite", "judge 1 law mechanically", "judge 2 law mechanically", "states v01 = 2; the catalog has v01 = 1"},
+		{"cell-names-sibling-suite", "native multichecker (3 laws);", "native multichecker (2 laws);", "states catalog = 2; the catalog has catalog = 3"},
+		{"report-not-evaluated", `"not_evaluated": 1`, `"not_evaluated": 2`, "states not_evaluated = 2; the catalog has not_evaluated = 1"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			root := fixture(t, "")
+			editFile(t, root, "GO_TOPS.md", c.old, c.new)
+			code, out := runDocs(root)
+			if code != 1 || len(failedChecks(out)) != 1 || failedChecks(out)[0] != "counts" || !strings.Contains(out, c.reason) {
+				t.Fatalf("exit %d, want only counts failing with %q:\n%s", code, c.reason, out)
+			}
+		})
+	}
+}
+
+// A count that belongs to the sibling suite is still not read.
+func TestSiblingSuiteCountsStayIgnored(t *testing.T) {
+	root := fixture(t, "")
+	editFile(t, root, "GO_TOPS.md", "Bend2 (53 laws, 15 judged)", "Bend2 (54 laws, 16 judged)")
+	editFile(t, root, "GO_TOPS.md", "Rust-TOPS has a sibling suite with 53 laws and 15 judged.", "Rust-TOPS has a sibling suite with 54 laws and 16 judged.")
+	if code, out := runDocs(root); code != 0 {
+		t.Fatalf("sibling counts must not be read, exit %d:\n%s", code, out)
+	}
+}
+
+func editFile(t *testing.T, root, rel, old, new string) {
+	t.Helper()
+	p := filepath.Join(root, rel)
+	data, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Count(string(data), old) != 1 {
+		t.Fatalf("%s: want exactly one %q", rel, old)
+	}
+	if err := os.WriteFile(p, []byte(strings.Replace(string(data), old, new, 1)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestMissingExampleFileFails(t *testing.T) {
 	root := fixture(t, "")
 	if err := os.Remove(filepath.Join(root, "examples", "cfg.yaml")); err != nil {
@@ -185,15 +231,18 @@ func TestMaskCode(t *testing.T) {
 func TestReadStatements(t *testing.T) {
 	type s = statement
 	for line, want := range map[string][]s{
-		"The report states \"18 of 41 laws judged.\"":                     {{"v01", 18, ""}, {"catalog", 41, ""}},
-		"judge 18 laws mechanically (the rows)":                           {{"v01", 18, ""}},
-		"| **M3** | 18 laws judged (native) | \"18 of 41 judged\" |":      {{"v01", 18, ""}, {"v01", 18, ""}, {"catalog", 41, ""}},
-		`"catalog": 41, "judged": 18, "not_evaluated": 23`:                {{"catalog", 41, ""}, {"v01", 18, ""}},
-		"17 active v0.1 laws and 40 active laws":                          {{"v01", 17, ""}, {"active", 40, ""}},
-		"Law catalog (draft: 41 laws, `G-01`…`G-41`)":                     {{"catalog", 41, ""}, {"catalog", 41, ""}},
-		"Rust-TOPS 1.1.0 defines 53 laws":                                 nil,
-		"| Laws engine | Bend2 (53 laws, 15 judged) | native (41 laws) |": {{"catalog", 41, ""}},
-		"no counts here, only 3 of 5 things":                              nil,
+		"The report states \"18 of 41 laws judged.\"":                                                         {{"v01", 18, ""}, {"catalog", 41, ""}},
+		"judge 18 laws mechanically (the rows)":                                                               {{"v01", 18, ""}},
+		"| **M3** | 18 laws judged (native) | \"18 of 41 judged\" |":                                          {{"v01", 18, ""}, {"v01", 18, ""}, {"catalog", 41, ""}},
+		"17 active v0.1 laws and 40 active laws":                                                              {{"v01", 17, ""}, {"active", 40, ""}},
+		"Law catalog (draft: 41 laws, `G-01`…`G-41`)":                                                         {{"catalog", 41, ""}, {"catalog", 41, ""}},
+		"Rust-TOPS 1.1.0 defines 53 laws":                                                                     nil,
+		"| Laws engine | Bend2 (53 laws, 15 judged) | native (41 laws) |":                                     {{"catalog", 41, ""}},
+		"**v0.1 target:** judge 18 laws mechanically (the rows), mirroring Rust-TOPS's":                       {{"v01", 18, ""}},
+		"| Laws engine | Bend2 (53 laws, 15 judged) | Native multichecker (41 laws); no Bend or Lean layer |": {{"catalog", 41, ""}},
+		`"catalog": 41, "judged": 18, "not_evaluated": 23`:                                                    {{"catalog", 41, ""}, {"v01", 18, ""}, {"not_evaluated", 23, ""}},
+		"Rust-TOPS defines 53 laws, this defines 41 laws":                                                     {{"catalog", 41, ""}},
+		"no counts here, only 3 of 5 things":                                                                  nil,
 	} {
 		got := readStatements(line)
 		if len(got) != len(want) {

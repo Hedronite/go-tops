@@ -15,6 +15,7 @@ import (
 //	catalog  every row, retired or not (retired laws keep their ID)
 //	active   rows not retired
 //	v01      rows whose v0.1 cell is exactly "✓" and that are not retired
+//	notEval  active - v01: the laws a v0.1 report lists as not-evaluated
 //
 // A row is retired when its Law cell, after leading "~", "*" and spaces,
 // begins with "Retired" (any case). Counts stated in prose are checked against
@@ -22,6 +23,10 @@ import (
 type catalog struct {
 	Catalog, Active, V01, Retired int
 }
+
+// notEvaluated is the "not_evaluated" figure of a report: active laws that
+// are not judged at v0.1. Retired rows are in neither term.
+func (c catalog) notEvaluated() int { return c.Active - c.V01 }
 
 const catalogFile = "GO_TOPS.md"
 
@@ -103,7 +108,7 @@ func isRetired(lawCell string) bool {
 
 // A statement is a count the prose makes about the catalog.
 type statement struct {
-	Qty  string // "catalog", "active" or "v01"
+	Qty  string // "catalog", "active", "v01" or "not_evaluated"
 	N    int
 	Text string
 }
@@ -131,6 +136,7 @@ var countPats = []countPat{
 	}},
 	{regexp.MustCompile(`"catalog":\s*(\d+)`), one("catalog", 1)},
 	{regexp.MustCompile(`"judged":\s*(\d+)`), one("v01", 1)},
+	{regexp.MustCompile(`"not_evaluated":\s*(\d+)`), one("not_evaluated", 1)},
 	{regexp.MustCompile("`G-01`(?:…|\\.\\.\\.)`G-(\\d+)`"), one("catalog", 1)},
 	{regexp.MustCompile(`\b(\d+) active (v0\.1 )?laws\b`), func(m []string) []statement {
 		n, _ := strconv.Atoi(m[1])
@@ -145,9 +151,9 @@ var countPats = []countPat{
 	{regexp.MustCompile(`\b(\d+) laws\b`), one("catalog", 1)},
 }
 
-// otherSuites marks text about the sibling protocols, whose counts are not
-// this catalog's.
-var otherSuites = []string{"Rust-TOPS", "Bend", "Lean"}
+// otherSuiteRe matches the sibling protocols, whose counts are not this
+// catalog's.
+var otherSuiteRe = regexp.MustCompile(`\b(?:Rust-TOPS|Bend\d*|Lean)\b`)
 
 // segments splits a line into the units counted separately: table cells, or
 // the whole line.
@@ -158,35 +164,59 @@ func segments(line string) []string {
 	return []string{line}
 }
 
+// clauses returns the byte ranges of s that are read as units. A clause ends
+// at ";", at a comma or a sentence-ending "." outside parentheses, and at the
+// end of s, so "(53 laws, 15 judged)" stays whole and "judge 18 laws (...),
+// mirroring Rust-TOPS's" splits in two.
+func clauses(s string) [][2]int {
+	masked := maskCode(s)
+	var out [][2]int
+	start, depth := 0, 0
+	for i := 0; i < len(masked); i++ {
+		switch c := masked[i]; {
+		case c == '(':
+			depth++
+		case c == ')' && depth > 0:
+			depth--
+		case depth == 0 && (c == ';' || c == ',' || (c == '.' && (i+1 == len(masked) || masked[i+1] == ' '))):
+			out = append(out, [2]int{start, i})
+			start = i + 1
+		}
+	}
+	return append(out, [2]int{start, len(masked)})
+}
+
+// readStatements returns the catalog counts a line states. A clause that names
+// a sibling suite is skipped, and only that clause: the numbers around it in
+// the same line or table cell are still read.
 func readStatements(line string) []statement {
 	var out []statement
 	for _, seg := range segments(line) {
-		if containsAny(seg, otherSuites) {
-			continue
-		}
-		for _, p := range countPats {
-			for _, loc := range p.re.FindAllStringSubmatchIndex(seg, -1) {
-				m := make([]string, len(loc)/2)
-				for i := range m {
-					if loc[2*i] >= 0 {
-						m[i] = seg[loc[2*i]:loc[2*i+1]]
-					}
-				}
-				out = append(out, p.read(m)...)
-				seg = seg[:loc[0]] + strings.Repeat(" ", loc[1]-loc[0]) + seg[loc[1]:]
-			}
+		for _, c := range clauses(seg) {
+			out = append(out, readClause(seg[c[0]:c[1]])...)
 		}
 	}
 	return out
 }
 
-func containsAny(s string, subs []string) bool {
-	for _, x := range subs {
-		if strings.Contains(s, x) {
-			return true
+func readClause(text string) []statement {
+	if otherSuiteRe.MatchString(text) {
+		return nil
+	}
+	var out []statement
+	for _, p := range countPats {
+		for _, loc := range p.re.FindAllStringSubmatchIndex(text, -1) {
+			m := make([]string, len(loc)/2)
+			for i := range m {
+				if loc[2*i] >= 0 {
+					m[i] = text[loc[2*i]:loc[2*i+1]]
+				}
+			}
+			out = append(out, p.read(m)...)
+			text = text[:loc[0]] + strings.Repeat(" ", loc[1]-loc[0]) + text[loc[1]:]
 		}
 	}
-	return false
+	return out
 }
 
 func (c catalog) value(qty string) int {
@@ -195,6 +225,8 @@ func (c catalog) value(qty string) int {
 		return c.Catalog
 	case "active":
 		return c.Active
+	case "not_evaluated":
+		return c.notEvaluated()
 	}
 	return c.V01
 }

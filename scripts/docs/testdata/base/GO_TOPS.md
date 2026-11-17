@@ -9,13 +9,16 @@
 | G-03 | Third law with a pipe \| in it | A | at | |
 
 The report states "1 of 3 laws judged", and 2 active laws remain.
-A sibling suite has 53 laws and 15 judged, and Rust-TOPS says so.
+Rust-TOPS has a sibling suite with 53 laws and 15 judged.
+
+**v0.1 target:** judge 1 law mechanically (the ✓ rows), mirroring Rust-TOPS's
+approach of shipping a minority of laws.
 
 | Suite | Laws |
 |---|---|
 | Sibling | Bend2 (53 laws, 15 judged) |
-| This one | native (3 laws) |
+| This one | native multichecker (3 laws); no Bend or Lean layer |
 
 ```json
-{ "catalog": 3, "judged": 1 }
+{ "catalog": 3, "judged": 1, "not_evaluated": 1 }
 ```
