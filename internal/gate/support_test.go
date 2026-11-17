@@ -27,7 +27,10 @@ type fakeLayer struct {
 	ran     *[]string
 	preErr  error
 	preSeen bool
+	noCmd   bool // the layer has no command mapped (gate.Commanded)
 }
+
+func (f *fakeLayer) HasCommand() bool { return !f.noCmd }
 
 func (f *fakeLayer) ID() string      { return f.id }
 func (f *fakeLayer) Tier() int       { return f.tier }

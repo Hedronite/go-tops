@@ -200,6 +200,11 @@ func runLayers(ctx context.Context, env *Env, plan []planned, opts Options) ([]r
 			}
 			res = Result{Outcome: Skip, Reason: reason}
 			entry.Expires = p.cfg.Expires
+		case !hasCommand(l):
+			// Before the needs rule and --fail-fast: not-run is "no command
+			// mapped", not-reached is "has a command, but a layer it needs did
+			// not pass" (§3.3).
+			res = NoCommand(l.ID())
 		case stopped:
 			res = Result{Outcome: NotReached, Reason: "--fail-fast stopped the run before this layer"}
 		default:
