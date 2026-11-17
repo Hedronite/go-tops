@@ -29,7 +29,7 @@ go tool -modfile=tools/go.mod gotops report --format text
 - Statement coverage ≥ `{COVERAGE_FLOOR}%`
 - CRAP cap ≤ `{CRAP_CAP}`, the same for every author
 - Error guards that only return the error count 0 toward complexity (`err_guard_discount: true`)
-- Unexplained mutation survivors ≤ `{SURVIVORS_MAX}`, on lines changed against `origin/main`
+- Unexplained mutation survivors: none (`unexplained_survivors_max` is 0), on lines changed against `origin/main`
 - Race detector: required (test jobs run with `CGO_ENABLED=1`; `-race` needs cgo on Linux)
 - Under `ratchet`: a function over the cap may not exceed its score in `.go-tops/baseline.json` plus 0.01, and every other function meets the cap. A package under its floor fails only if its coverage percentage falls and its uncovered-statement count rises. No per-file count of lint findings, law findings, `//nolint` or `//tops:ack` comments, or unexplained survivors, and no repo exemption count, rises above its baseline entry. Only `gotops baseline` writes the baseline
 - Other class layers: see `go-tops.yaml`
@@ -53,7 +53,7 @@ When generating or reviewing code, specifically check for and reject the followi
 ### Error Handling
 
 - **Never** discard errors with `_`. **Bad:** `_, _ = f.Write(data)`, `x, _ := strconv.Atoi(s)`. **[errcheck `check-blank`, G-12]**
-- Check the error from `Close`, `Flush` and `Sync` on anything you wrote to. Use a named return and a deferred check that keeps the first error. A deferred `Close` on a file opened only for reading passes: the errcheck `exclude-functions` list is `(io.ReadCloser).Close` and `(*os.File).Close`. A file you wrote to is checked by review. **[errcheck, G-12; review]**
+- Check the error from `Close`, `Flush` and `Sync` on anything you wrote to. Use a named return and a deferred check that keeps the first error. A deferred `Close` on a reader passed as `io.ReadCloser` (a response body) passes the errcheck `exclude-functions` list, which holds only `(io.ReadCloser).Close`. A read-only file from `os.Open` takes a `//nolint:errcheck` with a reason, which is counted (§6.7 `suppressions`); `_ = f.Close()` fails. A file you wrote to is checked by review. **[errcheck, G-12; review]**
 - Always wrap returned errors with operational context: `fmt.Errorf("action %s: %w", id, err)`. **[errorlint, G-11]**
 - Use `errors.Is` / `errors.As`. Never match on `err.Error()` strings or direct equality on wrapped errors. **[errorlint, G-11]**
 - Do not `panic` or call `Must*` helpers for recoverable conditions in library code. **[G-13]**
