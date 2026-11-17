@@ -29,7 +29,7 @@ type Options struct {
 	Offline    bool   // do not run go mod tidy for tools/go.sum
 	Assets     fs.FS  // the kit's embedded files, in repo layout: profiles/, config/
 	KitVersion string // the gotops release; empty or not a release leaves gotops out of tools/go.mod
-	// Tidy fills tools/go.sum. Nil runs `go mod tidy -modfile=tools/go.mod` in Dir.
+	// Tidy fills tools/go.sum. Nil runs `go -C tools mod tidy` in Dir.
 	Tidy func(dir string) error
 }
 
@@ -64,7 +64,7 @@ func Run(o Options, stdout, stderr Printer) int {
 		stdout.Printf("note: %s\n", n)
 	}
 	if o.Offline {
-		stdout.Printf("note: --offline: tools/go.sum is not written; run go mod tidy -modfile=tools/go.mod\n")
+		stdout.Printf("note: --offline: tools/go.sum is not written; run go -C tools mod tidy\n")
 		return ExitOK
 	}
 	return runTidy(o, stderr)
@@ -91,7 +91,10 @@ func runTidy(o Options, stderr Printer) int {
 }
 
 func goModTidy(dir string) error {
-	cmd := exec.Command("go", "mod", "tidy", "-modfile=tools/go.mod")
+	// Inside tools/, so the tools module is tidied on its own. From the module root,
+	// -modfile=tools/go.mod would read the adopter's packages as packages of the
+	// tools module and fail as soon as one imports another.
+	cmd := exec.Command("go", "-C", "tools", "mod", "tidy")
 	cmd.Dir = dir
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("%w\n%s", err, out)

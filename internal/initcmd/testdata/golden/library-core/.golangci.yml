@@ -4,7 +4,17 @@ version: "2"
 
 linters:
   default: standard
+  enable:
+    - depguard
   settings:
+    depguard:
+      rules:
+        main:
+          deny:
+            - pkg: io/ioutil
+              desc: deprecated since Go 1.16; use os and io
+            - pkg: github.com/pkg/errors
+              desc: archived; use errors and fmt.Errorf with %w
     errcheck:
       check-blank: true
       check-type-assertions: true

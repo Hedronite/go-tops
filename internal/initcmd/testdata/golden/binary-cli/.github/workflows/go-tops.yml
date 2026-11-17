@@ -37,6 +37,18 @@ jobs:
           cache-dependency-path: |
             go.sum
             tools/go.sum
+      # setup-go installs the latest release of the floor language version; this
+      # step proves the floor leg runs it and not another toolchain.
+      - name: toolchain is the floor release
+        if: matrix.leg == 'floor'
+        run: |
+          set -euo pipefail
+          got="$(go env GOVERSION)"
+          echo "GOVERSION=${got}"
+          case "${got}" in
+            go1.26|go1.26.*) ;;
+            *) echo "::error::the floor leg runs ${got}, not a go1.26 release"; exit 1 ;;
+          esac
       # The gate leg: gotops runs every layer and fails the job on a red gate.
       - name: gate
         if: matrix.leg != 'floor'
