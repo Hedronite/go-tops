@@ -22,3 +22,19 @@ approach of shipping a minority of laws.
 ```json
 { "catalog": 3, "judged": 1, "not_evaluated": 1 }
 ```
+
+### 5.3 Profile file shape
+
+Prose only: no example block here.
+
+## 9. Configuration
+
+Prose only: no example block here.
+
+### 12.3 Report
+
+Prose only: no example block here.
+
+## 10. After the example sections
+
+Prose only.

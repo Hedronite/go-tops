@@ -157,6 +157,40 @@ func editFile(t *testing.T, root, rel, old, new string) {
 	}
 }
 
+// Every YAML or JSON block in sections 5.3, 9 and 12.3 must carry a marker.
+func TestUnmarkedBlocksInExampleSectionsFail(t *testing.T) {
+	const prose = "Prose only: no example block here."
+	cases := []struct{ name, old, new, reason string }{
+		{"yaml-in-section-9", "## 9. Configuration\n\n" + prose, "## 9. Configuration\n\n```yaml\nprotocol: \"0.4.0\"\n```", "fenced yaml block in section 9 has no go-tops:example marker"},
+		{"json-in-section-12.3", "### 12.3 Report\n\n" + prose, "### 12.3 Report\n\n```json\n{}\n```", "fenced json block in section 12.3 has no go-tops:example marker"},
+		{"yml-in-section-5.3", "### 5.3 Profile file shape\n\n" + prose, "### 5.3 Profile file shape\n\n```yml\na: 1\n```", "fenced yml block in section 5.3 has no go-tops:example marker"},
+		{"subsection-of-9", "## 9. Configuration\n\n" + prose, "## 9. Configuration\n\n### 9.1 Keys\n\n```yaml\na: 1\n```", "fenced yaml block in section 9 has no go-tops:example marker"},
+		{"section-renumbered", "### 12.3 Report", "### 12.4 Report", "section 12.3 not found"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			root := fixture(t, "")
+			editFile(t, root, "GO_TOPS.md", c.old, c.new)
+			code, out := runDocs(root)
+			if got := failedChecks(out); code != 1 || len(got) != 1 || got[0] != "examples" || !strings.Contains(out, c.reason) {
+				t.Fatalf("exit %d, want only examples failing with %q:\n%s", code, c.reason, out)
+			}
+		})
+	}
+}
+
+func TestMarkedAndOutOfSectionBlocksPass(t *testing.T) {
+	root := fixture(t, "")
+	editFile(t, root, "GO_TOPS.md", "## 9. Configuration\n\nProse only: no example block here.",
+		"## 9. Configuration\n\n<!-- go-tops:example path=examples/cfg.yaml schema=schema/cfg.schema.json -->\n\n```yaml\nprotocol: \"0.4.0\"\ntier: 1\n```")
+	editFile(t, root, "GO_TOPS.md", "## 10. After the example sections\n\nProse only.",
+		"## 10. After the example sections\n\n```yaml\nnot: an example section\n```")
+	code, out := runDocs(root)
+	if code != 0 || !strings.Contains(out, "3 examples") {
+		t.Fatalf("a marked block in section 9 and an unmarked one in section 10 must pass, exit %d:\n%s", code, out)
+	}
+}
+
 func TestMissingExampleFileFails(t *testing.T) {
 	root := fixture(t, "")
 	if err := os.Remove(filepath.Join(root, "examples", "cfg.yaml")); err != nil {
