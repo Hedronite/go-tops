@@ -171,13 +171,13 @@ func (r *repo) schema(rel string, cache map[string]*jsonschema.Schema) (*jsonsch
 	return s, nil
 }
 
-// decodeInstance parses a .json or .yaml/.yml file into the value the schema
+// decodeInstance parses a .json, .yaml/.yml or .lock (YAML) file into the value the schema
 // validator expects. YAML goes through JSON so numbers take JSON's types.
 func decodeInstance(name string, data []byte) (any, error) {
 	switch strings.ToLower(path.Ext(name)) {
 	case ".json":
 		return jsonschema.UnmarshalJSON(bytes.NewReader(data))
-	case ".yaml", ".yml":
+	case ".yaml", ".yml", ".lock":
 		dec := yaml.NewDecoder(bytes.NewReader(data))
 		var v any
 		if err := dec.Decode(&v); err != nil {
@@ -193,7 +193,7 @@ func decodeInstance(name string, data []byte) (any, error) {
 		}
 		return jsonschema.UnmarshalJSON(bytes.NewReader(j))
 	}
-	return nil, fmt.Errorf("unsupported example extension (want .json, .yaml or .yml)")
+	return nil, fmt.Errorf("unsupported example extension (want .json, .yaml, .yml or .lock)")
 }
 
 // firstDiff describes where two texts first differ, by line.

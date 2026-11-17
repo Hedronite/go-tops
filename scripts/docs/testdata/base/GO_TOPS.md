@@ -50,6 +50,10 @@ Prose only: no example block here.
 
 Prose only: no example block here.
 
-## 10. After the example sections
+## 10. Tool pins
+
+Prose only: no example block here.
+
+## 11. After the example sections
 
 Prose only.

@@ -1,5 +1,5 @@
 {
-  "protocol": "0.4.0",
+  "protocol": "0.4.1",
   "tool_version": "0.0.0",
   "module": "github.com/acme/myapp",
   "class": "binary-cli",
@@ -67,5 +67,5 @@
       { "id": "G-43", "verdict": "not-evaluated", "reason": "no_reader", "reader": "analyzer" }
     ]
   },
-  "summary": { "outcome": "fail", "exit_code": 1, "failed": ["crap"] }
+  "summary": { "outcome": "fail", "exit_code": 1, "failed": ["crap"], "enforced": true }
 }
