@@ -7,7 +7,7 @@ A written spec, a JSON Schema, per-class profiles, a laws layer of `go/analysis`
 
 ## Status
 
-Draft. Protocol **0.3.0**. The package is unreleased (0.0.0). There is no code yet.
+Draft. Protocol **0.3.0**. The package is unreleased (0.0.0). The only code is the docs checker in `scripts/docs/`, which docs CI runs; there is no `gotops` yet.
 
 This repo is at milestone M0: the spec. `go tool gotops` does not exist yet, and nothing here is ready to copy into CI.
 
@@ -34,17 +34,17 @@ The full roadmap is in [`GO_TOPS.md` §19](GO_TOPS.md#19-roadmap).
 
 | Path | What it is |
 |---|---|
-| [`GO_TOPS.md`](GO_TOPS.md) | The protocol, draft 0.3.0 |
+| [`GO_TOPS.md`](GO_TOPS.md) | The protocol, 0.4.0-dev |
 | [`config/AGENTS.template.md`](config/AGENTS.template.md) | The `AGENTS.md` that `gotops init` will write into an adopting repo |
 | [`AGENTS.md`](AGENTS.md) | Standing orders for agents working on this repo ([`CLAUDE.md`](CLAUDE.md) imports it) |
 
 ## Contributing
 
-Read `GO_TOPS.md` and `AGENTS.md` first. Work on a branch and open a draft PR. A change to laws, schema, profiles, thresholds or normative spec text is a protocol change: it carries the `protocol-change` label, a changelog entry, and a protocol version bump.
+Read `GO_TOPS.md` and `AGENTS.md` first. Work on a branch and open a PR ready for review when the step is complete. A change to laws, schema, profiles, thresholds or normative spec text is a protocol change: it carries the `protocol-change` label, a changelog entry, and a protocol version bump.
 
 ## Credits
 
-Built by [Hedronite](https://github.com/Hedronite). Structure and many rules are adapted from [Rust-TOPS](https://github.com/Hedronite/rust-tops). CRAP scores use the 2007 Change Risk Anti-Patterns formula (Savoia and Evans); this kit did not originate that metric.
+Built by [Hedronite](https://github.com/Hedronite). Structure and many rules are adapted from [Rust-TOPS](https://github.com/Hedronite/rust-tops) (protocol 1.2.0 on `main`; latest release tag `cargo-tops` v0.3.0). CRAP scores use the 2007 Change Risk Anti-Patterns formula (Savoia and Evans); this kit did not originate that metric.
 
 ## License
 
