@@ -1,0 +1,19 @@
+name: docs
+on: pull_request
+permissions:
+  contents: read
+concurrency:
+  group: docs
+  cancel-in-progress: true
+jobs:
+  a:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: echo ok
+  docs:
+    if: ${{ always() }}
+    needs: [a]
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo done

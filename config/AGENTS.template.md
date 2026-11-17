@@ -62,7 +62,7 @@ When generating or reviewing code, specifically check for and reject the followi
 - Never introduce `context.Background()` or `context.TODO()` inside business logic (only allowed in `main`, wiring, and tests). **[G-17]**
 - Never pass structs containing `sync.Mutex` or `sync.WaitGroup` by value. **[vet `copylocks`, G-07]**
 - Prefer channels for orchestration/ownership transfer; prefer mutexes for protecting shared in-memory state. **[review]**
-- No `time.Sleep` in tests to wait for concurrency. Use `testing/synctest` or channels; do not poll. **[G-08]**
+- No `time.Sleep` in tests to wait for concurrency. Use `testing/synctest` or channels; do not poll. On Go 1.27 or later, inside a `synctest` bubble use `synctest.Sleep(d)` (advances the fake clock, then waits until every other goroutine is durably blocked) and `httptest.NewTestServer(t, handler)` (an in-memory network). **[G-08]**
 
 ### Idiomatic Design
 - Accept interfaces, return concrete structs. Define small (1–3 method) interfaces in the **consumer** package, not alongside implementations. **[review]**

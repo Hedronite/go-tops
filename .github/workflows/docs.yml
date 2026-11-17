@@ -1,0 +1,141 @@
+name: docs
+
+# Docs CI for the protocol repo. Read-only; superseded runs are cancelled; every
+# action is pinned by commit SHA (the comment names the release). The checker
+# is scripts/docs (Go, own module). One aggregate job, `docs`, needs the rest:
+# it is the check a ruleset on main requires.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # Pinned tool version; the config is .markdownlint-cli2.jsonc.
+      - run: npx --yes markdownlint-cli2@0.24.1
+
+  selftest:
+    name: selftest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: scripts/docs/go.mod
+          cache-dependency-path: scripts/docs/go.sum
+      - name: checker self-tests
+        working-directory: scripts/docs
+        run: go test ./...
+
+  links:
+    name: links
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: scripts/docs/go.mod
+          cache-dependency-path: scripts/docs/go.sum
+      - name: relative links and anchors, offline
+        working-directory: scripts/docs
+        run: go run . -root ../.. -checks parse,links
+
+  counts:
+    name: counts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: scripts/docs/go.mod
+          cache-dependency-path: scripts/docs/go.sum
+      - name: catalog counts against every stated count
+        working-directory: scripts/docs
+        run: go run . -root ../.. -checks parse,counts
+
+  examples:
+    name: examples
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: scripts/docs/go.mod
+          cache-dependency-path: scripts/docs/go.sum
+      # --allow-vacuous: no example blocks exist yet. The step that adds them
+      # removes this flag, so zero examples fails from then on.
+      - name: example blocks match their files and validate
+        working-directory: scripts/docs
+        run: go run . -root ../.. -checks parse,examples --allow-vacuous
+
+  markers:
+    name: markers
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: scripts/docs/go.mod
+          cache-dependency-path: scripts/docs/go.sum
+      - name: tops-core markers balanced and named
+        working-directory: scripts/docs
+        run: go run . -root ../.. -checks parse,markers
+
+  floor:
+    name: floor
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: scripts/docs/go.mod
+          cache-dependency-path: scripts/docs/go.sum
+      - name: lint config reasons and workflow pins
+        working-directory: scripts/docs
+        run: go run . -root ../.. -checks parse,lintconfig,workflow
+
+  docs:
+    name: docs
+    # Runs even when a dependency failed, was skipped or was cancelled, and
+    # fails unless every one of them succeeded: a skipped job must not pass.
+    if: ${{ always() }}
+    needs: [lint, selftest, links, counts, examples, markers, floor]
+    runs-on: ubuntu-latest
+    steps:
+      - name: every docs job succeeded
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "job results: ${RESULTS}"
+          for r in ${RESULTS}; do
+            if [ "${r}" != "success" ]; then
+              echo "::error::a docs job ended ${r}, not success"
+              exit 1
+            fi
+          done

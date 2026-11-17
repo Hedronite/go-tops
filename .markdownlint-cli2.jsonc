@@ -1,0 +1,56 @@
+// markdownlint-cli2 config for the docs job (pinned in docs.yml).
+//
+// Every rule set to false below carries a reason in a // comment on the same
+// line or directly above; scripts/docs checks that (check "lintconfig"), so a
+// rule cannot be turned off here without saying why. A rule is turned back on
+// by deleting its line once the cause is fixed. GO_TOPS.md is not edited to
+// pass lint: a real defect in it goes to the section owner, and the rule stays
+// off here, with the lines named, until it is fixed.
+{
+  "config": {
+    "default": true,
+
+    // The protocol is written as one line per paragraph and one line per table
+    // row, and a table row cannot wrap: 332 lines pass 80 columns, the longest
+    // is 429. A column limit would force hard wraps that diff badly.
+    "MD013": false,
+
+    // Blank line inside a blockquote: GO_TOPS.md lines 13 and 15 put two
+    // adjacent blockquotes in the header. Re-enable when the header is rewritten.
+    "MD028": false,
+
+    // Bold-only lines: GO_TOPS.md section 8.2 labels the law groups
+    // (**Concurrency**, **Errors**, ...) with bold lines on purpose, so the
+    // groups do not appear in the heading outline or the anchors. Permanent.
+    "MD036": false,
+
+    // Fenced blocks with no language: GO_TOPS.md lines 280, 828 and 964 are
+    // a formula, a directory tree and a flow diagram. Re-enable once each
+    // carries a `text` info string.
+    "MD040": false,
+
+    // Heading with no blank line below it: config/AGENTS.template.md lines
+    // 52, 59, 67, 72 and 79 (five places). That file is rewritten in later
+    // steps; re-enable when it is.
+    "MD022": false,
+
+    // List with no blank line above it: the same five places in
+    // config/AGENTS.template.md, directly under those headings. Re-enable
+    // together with MD022.
+    "MD032": false,
+
+    // Table separator rows are written |---|---| under rows padded with
+    // spaces, in every table of every file (202 hits). The rule accepts no
+    // style that mixes the two, and the choice is cosmetic. Re-enable if the
+    // tables are ever normalised.
+    "MD060": false
+  },
+  "globs": ["**/*.md"],
+  "ignores": [
+    "node_modules/**",
+    // Deliberately broken fixtures for the checker's own tests.
+    "scripts/docs/testdata/**",
+    // CLAUDE.md is a one-line import of AGENTS.md, not a document.
+    "CLAUDE.md"
+  ]
+}
