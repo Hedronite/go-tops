@@ -292,14 +292,14 @@ For a new repo, copy the drop-in set and replace the placeholders:
 | `go-tops.yaml` | Protocol config (§9) | `{MODULE}`, `{CLASS}` |
 | `go-tops.lock` | Pins for downloaded binaries and the Go toolchain (§10) | generated |
 | `tools/go.mod`, `tools/go.sum` | Pins for every module tool, run with `go tool -modfile=tools/go.mod` (§10) | generated |
-| `AGENTS.md` | Agent-facing commands and rules (template: `config/AGENTS.template.md`). `init` writes its block between `<!-- go-tops:begin -->` and `<!-- go-tops:end -->` | `{MODULE}`, `{CLASS}`, `{ENFORCE}`, `{COVERAGE_FLOOR}`, `{CRAP_CAP}`, `{SURVIVORS_MAX}` |
+| `AGENTS.md` | Agent-facing commands and rules (template: `config/AGENTS.template.md`). `init` writes its block between `<!-- go-tops:begin -->` and `<!-- go-tops:end -->` | `{MODULE}`, `{CLASS}`, `{ENFORCE}`, `{COVERAGE_FLOOR}`, `{CRAP_CAP}` |
 | `GO-TOPS.md` | Adoption record (§13) | generated |
 | `.golangci.yml` | The adopter's golangci-lint v2 config, **style only**: no law reads it (§8.1). It carries errcheck `check-blank`, `check-type-assertions` and the same `exclude-functions` list as the law pass (§8.1), so the editor and the gate agree | `{MODULE}` |
 | `.go-tops/baseline.json` | Ratchet baseline (§6.7); written by `gotops baseline`, not by hand | generated |
 | `.gremlins.yaml` or engine config | Mutation settings **[verify]** | |
 | `.github/workflows/go-tops.yml` | CI floor (§11) | `{GO_FLOOR}`, `{GO_CURRENT}`, `{PRIMARY_PKG}` |
 | `.github/CODEOWNERS` | A fragment covering the files that can weaken the gate (§11) | `{OWNER}` |
-| `go.mod` | The `go` line (and, where the repo uses one, the `toolchain` line) | `{GO_FLOOR}` |
+| `go.mod` | The `go` line, at or above the protocol floor (§2), and optionally a `toolchain` line. `{GO_FLOOR}` is the release or language version the module's `go` line names | `{GO_FLOOR}` |
 | `justfile` | Front door recipes | |
 
 ### 4.2 Or install the orchestrator
@@ -335,7 +335,8 @@ required layers, and CRAP caps. A repo declares one class per module (workspace 
 The schema permits twelve classes. **Launch profiles** ship for the three classes the Hedronite
 repos are: `binary-cli`, `binary-service` and `library-core`. The other nine, `tui-app` and
 `concurrency-runtime` among them, are schema-valid but profile-less until a repo needs one; such
-a repo sets `class` and states every threshold in its own `go-tops.yaml`.
+a repo sets `class` and states every threshold in its own `go-tops.yaml`, each at or stricter than
+the §5.2 column for its class.
 
 | Class | Typical code | Launch profile? |
 |---|---|---|
@@ -362,9 +363,9 @@ All numbers are **proposed** defaults. Tune on real repositories before 1.0.
 | CRAP cap | 8 (provisional) | 10 | 8 (provisional) | 10 | 8 (provisional) |
 | `unexplained_survivors_max` | **0** | **0** | **0** | **0** | **0** |
 | Race detector | required | required | required | required | required (+ stress) |
-| Leak detection (`goroutineleak` profile on Go 1.27, `goleak` on 1.26) | if goroutines | if goroutines | required | required | required |
-| `synctest` for time/concurrency | if applicable | if applicable | if timers | if timers | required |
-| Fuzz targets | for exported decoders | for flag/arg parsers | for input parsing | for request decoders | for queue/codec boundaries |
+| Leak detection (law G-42, §8.2; `goroutineleak` profile on Go 1.27, `goleak` on 1.26) | G-42 applies | G-42 applies | G-42 applies | G-42 applies | G-42 applies |
+| `synctest` for time/concurrency | in the test run; G-08 forbids `time.Sleep` as a wait | in the test run; G-08 | in the test run; G-08 | in the test run; G-08 | in the test run; G-08 |
+| Fuzz targets (law G-43, on `layers.fuzz.targets`) | exported decoders | flag/arg parsers | input parsing | request decoders | queue/codec boundaries |
 | Benchmark regression gate | tier 2 | no | no | tier 2 | tier 2 |
 | API-compat check | tier 3 | no | no | no | tier 3 |
 | Extra laws | G-21–G-24 | G-41 | **G-10** | G-19, G-20 | G-01–G-09 |
@@ -995,21 +996,23 @@ same packages and shares the analysis cache with gate 1; its cost is measured at
 | G-02 | `govet` | `enable: [waitgroup]` |
 | G-07 | `govet` | `enable: [copylocks]` |
 | G-11 | `errorlint` | `errorf: true`, `asserts: true`, `comparison: true`. Matching on `err.Error()` is judged by a `gotops-laws` analyzer, not a linter |
-| G-12 | `errcheck` | `check-blank: true`, `check-type-assertions: true`, `exclude-functions: [(io.ReadCloser).Close, (*os.File).Close]` |
+| G-12 | `errcheck` | `check-blank: true`, `check-type-assertions: true`, `exclude-functions: [(io.ReadCloser).Close]` |
 | G-16 | `noctx`, `contextcheck` | defaults |
 | G-18 | `bodyclose`, `sqlclosecheck`, `rowserrcheck` | defaults |
 | G-37 | `gosec` | `includes: [G401, G404, G501, G505]` |
 
 `govet` runs with `disable-all: true` and exactly the analyzers its rows name. The G-12
-`exclude-functions` list is what gives a read-only `Close` a passing form: `defer r.Close()` on a
-reader passes, while `_ = f.Close()` and an unchecked `Write` still fail. A file written to is
-still checked by review (`AGENTS.md`). `init` writes the same list into the adopter's
-`.golangci.yml`. The delegated laws that are not golangci-lint linters are judged in gate 1:
+`exclude-functions` list is `(io.ReadCloser).Close` and nothing else. It gives a response body, or
+a reader passed as `io.ReadCloser`, a passing form: `defer r.Close()`. There is no blanket
+exclusion for `*os.File`: `_ = f.Close()` and an unchecked `Write` fail. A read-only file from
+`os.Open` takes a `//nolint:errcheck` with a reason, which the `suppressions` ledger counts
+(§6.7), never an exclusion; a file written to is checked by review (`AGENTS.md`). `init` writes
+the same list into the adopter's `.golangci.yml`. The delegated laws that are not golangci-lint linters are judged in gate 1:
 G-34 (`go mod tidy -diff`, `go mod verify`) and G-40 (`govulncheck`). Laws with an `analyzer`
 reader (G-08, G-17, G-19, G-25, G-38) and the facts G-26 and G-33 have no row here because no
 linter setting decides them.
 
-**Every enabled law has a fixture.** A law that has no fixture is not enabled.
+**Every active law has a fixture.** A law without a fixture cannot be `active`: its law file fails validation (§8.3).
 
 - A custom analyzer is tested with `analysistest` and `// want` comments in its `testdata/src/`.
 - A delegated linter is tested with a fixture module under `testdata/lints/` that breaks each
@@ -1148,7 +1151,7 @@ fix: "Accept a context parameter and pass it down."
 `go-tops.yaml` does not enable or disable one. The report derives its counts from the catalog
 and that list:
 
-- `catalog`: every law row, retired ones included (41);
+- `catalog`: every law row, retired ones included (43);
 - `applicable`: laws whose `status` is `active` and whose `classes` holds the class;
 - `judged`: applicable laws with a verdict other than `not-evaluated`.
 
@@ -1255,7 +1258,7 @@ runs tools one by one can be green while the gate is red.
 
 | Job | Trigger | Content |
 |---|---|---|
-| `gate` | pull request, push to `main` | Checkout with `fetch-depth: 0` (the mutation diff needs history, §6.4); the pinned toolchain; `go tool -modfile=tools/go.mod gotops gate` (tier ≤ 1); upload `.go-tops/` (`report.json` and the saved lint and coverage output) with `if: always()`. Legs: `ubuntu-latest` at `{GO_CURRENT}` (the full gate); `macos-latest` at `{GO_CURRENT}` (the full gate); `ubuntu-latest` with `GOTOOLCHAIN` set to the `{GO_FLOOR}` release, running `go build ./...` and `CGO_ENABLED=1 go test -race -shuffle=on -count=1 ./...` in place of the gate (the language-floor leg, below) |
+| `gate` | pull request, push to `main` | Checkout with `fetch-depth: 0` (the mutation diff needs history, §6.4); the pinned toolchain; `go tool -modfile=tools/go.mod gotops gate` (tier ≤ 1); upload `.go-tops/` (`report.json` and the saved lint and coverage output) with `if: always()`. Legs: `ubuntu-latest` at `{GO_CURRENT}` (the full gate); `macos-latest` at `{GO_CURRENT}` (the full gate); `ubuntu-latest` with `GOTOOLCHAIN` set to the release the module's `go` line names (`{GO_FLOOR}`; for a language-only `go 1.26` line, the latest 1.26 patch release), running `go build ./...` and `CGO_ENABLED=1 go test -race -shuffle=on -count=1 ./...` in place of the gate (the language-floor leg, below) |
 | `deep` | schedule | `gotops gate --max-tier 2`: timed fuzzing, full-module mutation, long `-race -count=N` stress, benchmark time per op on a named host with `benchstat` significance, and the build-tag × `CGO_ENABLED=0/1` × GOOS/GOARCH matrix |
 | `release` | tag | `gotops gate --max-tier 3`: reproducible-build verification, binary `govulncheck`, SBOM and signature check |
 
@@ -1445,10 +1448,10 @@ wrong; the config wins.
 | Classes | 11 in schema, 8 with profiles | 12 in schema, 3 with launch profiles (`binary-cli`, `binary-service`, `library-core`; adds `tui-app`) | Profiles follow the repos that exist |
 | `check` | Validates `rust-tops.yaml` against the schema | Full JSON Schema validation | Same rule |
 | Report | Optional report schema exists; CLI does not write it | Always writes `report.json` | Make results inspectable |
-| `init` | Does not write the lock file | Writes the lock file | First gate run is already pinned |
+| `init` | Does not write the lock file | Writes the lock file and `tools/go.mod` with its pins | First gate run is already pinned |
 | CI floor | The drop-in runs `cargo tops gate --max-tier 1` with `fetch-depth: 0`; mutation and Darwin lanes are overlay comments | One `gate` job running `gotops gate`, with a required macOS leg and no Windows leg; scheduled tier 2 and tag tier 3 jobs; `fetch-depth: 0` | A job that runs tools one by one can be green while the gate is red |
-| Missing tool | Missing mapped tool fails gate | Same; tools are resolved via `tool` directive + lock | Hermeticity |
-| Toolchain pin | `rust-toolchain.toml`, MSRV | `go` + `toolchain` directives, language-floor job | Go equivalent |
+| Missing tool | Missing mapped tool fails gate | Same: `tool-missing`, exit 1; tools are pinned in `tools/go.mod` and `go-tops.lock` | Hermeticity |
+| Toolchain pin | `rust-toolchain.toml`, MSRV | The exact release in `go-tops.lock`, checked against `go env GOVERSION`; a language floor in the `go` line; a floor leg in CI | `GOTOOLCHAIN=local` never reads the `toolchain` line |
 | Reproducible env | Nix flake | Optional Nix flake (later) | Lower priority |
 
 ---
