@@ -230,7 +230,7 @@ All numbers are **proposed** defaults. Tune on real repositories before 1.0.
 | CRAP cap | 8 (provisional) | 10 | none yet | 10 | none yet |
 | `unexplained_survivors_max` | **0** | **0** | **0** | **0** | **0** |
 | Race detector | required | required | required | required | required (+ stress) |
-| Leak detection (`goleak`) | if goroutines | if goroutines | required | required | required |
+| Leak detection (`goroutineleak` profile on Go 1.27, `goleak` on 1.26) | if goroutines | if goroutines | required | required | required |
 | `synctest` for time/concurrency | if applicable | if applicable | if timers | if timers | required |
 | Fuzz targets | for exported decoders | for flag/arg parsers | for input parsing | for request decoders | for queue/codec boundaries |
 | Benchmark regression gate | tier 2 | no | no | tier 2 | tier 2 |
