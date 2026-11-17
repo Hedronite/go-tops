@@ -153,7 +153,7 @@ Rust-TOPS defines tiers 0–5 (`RUST_TOPS.md` §3). Go-TOPS uses four:
 **What `--max-tier 0` judges.** Tier 0 judges the laws whose reader is `analyzer`: each reads
 files itself (`go.mod`, the config, source syntax) and needs no other layer's output. It does
 not judge the laws whose reader is `tool`. Those map the output of a tier 1 layer (G-12 reads
-the lint JSON, G-40 the `govulncheck` output) and are judged at tier 1. In a `--max-tier 0` run
+the law pass's lint JSON, §8.1; G-40 the `govulncheck` output) and are judged at tier 1. In a `--max-tier 0` run
 they are out of range: listed as `not-evaluated` with reason `input_missing` and in the report's
 out-of-range list, and they do not fail that run (§3.3). A `--max-tier 0` run leaves every
 required `tool`-reader law out of range, so it ends `partial`, never `pass`: it means the tier 0
@@ -266,7 +266,7 @@ A layer that needs another is `not-reached` when the other is not `pass`:
 | Coverage | Tests |
 | CRAP | Coverage |
 | Mutation | Tests (green) |
-| A law whose reader is `tool` | The layer whose output it maps. Only that law is affected: it is `not-evaluated` with reason `input_missing`, and the laws layer still runs |
+| A law whose reader is `tool` | The output it maps: the law pass (§8.1) for a delegated linter, the layer that makes it otherwise. Only that law is affected: it is `not-evaluated` with reason `input_missing`, and the laws layer still runs |
 
 Hygiene, tests and the class layers need nothing.
 
@@ -1250,12 +1250,12 @@ Purpose: make the gate reproducible, with one pin mechanism for each kind of too
 ## 11. CI floor
 
 The drop-in workflow `.github/workflows/go-tops.yml` (placeholders `{GO_FLOOR}`, `{GO_CURRENT}`,
-`{PRIMARY_PKG}`) runs the same command a developer runs. It repeats no tool as a step: a job that
+`{PRIMARY_PKG}`) runs the same command a developer runs. It repeats no tool as a step, apart from the floor leg below: a job that
 runs tools one by one can be green while the gate is red.
 
 | Job | Trigger | Content |
 |---|---|---|
-| `gate` | pull request, push to `main` | Checkout with `fetch-depth: 0` (the mutation diff needs history, §6.4); the pinned toolchain; `go tool -modfile=tools/go.mod gotops gate` (tier ≤ 1); upload `.go-tops/` (`report.json` and the saved lint and coverage output) with `if: always()`. Legs: `ubuntu-latest` at `{GO_CURRENT}` (the full gate); `macos-latest` at `{GO_CURRENT}` (the full gate); `ubuntu-latest` at `{GO_FLOOR}` with `GOTOOLCHAIN` set to the floor release and `--only tests` (build and test on the language floor) |
+| `gate` | pull request, push to `main` | Checkout with `fetch-depth: 0` (the mutation diff needs history, §6.4); the pinned toolchain; `go tool -modfile=tools/go.mod gotops gate` (tier ≤ 1); upload `.go-tops/` (`report.json` and the saved lint and coverage output) with `if: always()`. Legs: `ubuntu-latest` at `{GO_CURRENT}` (the full gate); `macos-latest` at `{GO_CURRENT}` (the full gate); `ubuntu-latest` with `GOTOOLCHAIN` set to the `{GO_FLOOR}` release, running `go build ./...` and `CGO_ENABLED=1 go test -race -shuffle=on -count=1 ./...` in place of the gate (the language-floor leg, below) |
 | `deep` | schedule | `gotops gate --max-tier 2`: timed fuzzing, full-module mutation, long `-race -count=N` stress, benchmark time per op on a named host with `benchstat` significance, and the build-tag × `CGO_ENABLED=0/1` × GOOS/GOARCH matrix |
 | `release` | tag | `gotops gate --max-tier 3`: reproducible-build verification, binary `govulncheck`, SBOM and signature check |
 
@@ -1263,6 +1263,11 @@ CI rules (carried from Rust-TOPS's lessons):
 
 - CI **refuses** `--dry-run` and any names-only mode.
 - The gate fails on an empty coverage profile or empty CRAP output (§3.4), and so does CI.
+- **The floor leg is the one exception.** A gate pinned at the current toolchain cannot say
+  whether the module still builds on the floor, and `gotops gate --only tests` would leave the
+  required laws out of range, a `partial` run that CI refuses (§3.3, §3.5). So the leg runs the
+  build and the tests directly, on the floor toolchain, and the gate judges everything else on the
+  other legs.
 - **Every leg of `gate` is a required check.** The macOS leg is required wherever the kit runs on
   Macs, which is every repo whose developers or users run macOS: Darwin differs from Linux in
   cgo, paths and the toolchain, and a gate that only ran on Linux says nothing about the machine
