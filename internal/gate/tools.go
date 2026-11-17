@@ -31,10 +31,17 @@ type Resolver interface {
 // Resolve asks Go whether a module tool exists (`go tool -n`), so a tool
 // missing from tools/go.mod, or a missing tools/go.mod, is ErrToolMissing.
 // Whether a found tool is the pinned version is `gotops lock --verify`.
+//
+// A downloaded binary is checked before it runs: Verify, when set, receives
+// the name and the path found and returns an error unless the file's SHA-256
+// equals the lock's for the host platform. A mismatch is a *LockError, exit 2
+// (§12.2), not a missing tool. The check itself lives in internal/lock, shared
+// with `gotops lock --verify`.
 type ToolResolver struct {
 	Dir    string
 	Exec   Executor
 	Binary map[string]bool // names resolved as downloaded binaries
+	Verify func(name, path string) error
 	cache  map[string][]string
 }
 
@@ -50,6 +57,11 @@ func (r *ToolResolver) Resolve(ctx context.Context, name string) ([]string, erro
 	var err error
 	if r.Binary[name] {
 		argv, err = r.binary(name)
+		if err == nil && r.Verify != nil {
+			if verr := r.Verify(name, argv[0]); verr != nil {
+				return nil, &LockError{Err: fmt.Errorf("%s: %w", name, verr)}
+			}
+		}
 	} else {
 		argv, err = r.module(ctx, name)
 	}
@@ -86,4 +98,19 @@ func (r *ToolResolver) module(ctx context.Context, name string) ([]string, error
 		return nil, fmt.Errorf("%w: %s is not a tool of %s", ErrToolMissing, name, ToolsModfile)
 	}
 	return prefix, nil
+}
+
+// PreflightTools resolves each tool a layer will use, from the layer's
+// Preflight. A tool that fails its lock check is a *LockError, and the run
+// exits 2 before any layer runs. A tool that is missing is not an error here:
+// the layer reports tool-missing when it runs, and the gate exits 1.
+func PreflightTools(ctx context.Context, env *Env, names ...string) error {
+	for _, n := range names {
+		_, err := env.Tools.Resolve(ctx, n)
+		var le *LockError
+		if errors.As(err, &le) {
+			return err
+		}
+	}
+	return nil
 }

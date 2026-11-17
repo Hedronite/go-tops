@@ -25,6 +25,7 @@ func init() {
 		{id: "coverage", tier: 1, needs: []string{"tests"}},
 		{id: "crap", tier: 1, needs: []string{"coverage"}},
 		{id: "mutation", tier: 1, needs: []string{"tests"}},
+		{id: "allocs", tier: 1}, // allocation budgets (§7); switched by layers.bench
 		{id: "fuzz", tier: 2},
 		{id: "stress", tier: 2},
 		{id: "bench", tier: 2},

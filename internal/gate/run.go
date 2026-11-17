@@ -226,14 +226,14 @@ func unmet(l Layer, outcome map[string]Outcome) string {
 }
 
 // judge refuses a result no layer may return. An empty or invalid result is
-// no result (§3.4 rule 5): the layer is not-run, which fails the gate. It is
-// not fail, because the report schema requires measured details of a tests,
-// coverage, crap or mutation layer that failed, and the runner has none to
-// give. skip and not-reached belong to the runner, and vacuous is for the
-// empty mutation diff only (§3.3).
+// no result (§3.4 rule 5): the layer fails, and says why in details.error,
+// the form of the report schema for a failed layer that has no figures. skip
+// and not-reached belong to the runner, and vacuous is for the empty mutation
+// diff only (§3.3).
 func judge(l Layer, r Result) Result {
 	bad := func(format string, a ...any) Result {
-		return Result{Outcome: NotRun, Reason: fmt.Sprintf(format, a...) + "; an empty or invalid result is not a result"}
+		msg := fmt.Sprintf(format, a...) + "; an empty or invalid result is a failure"
+		return Result{Outcome: Fail, Reason: msg, Details: map[string]any{"error": msg}}
 	}
 	switch {
 	case !r.Outcome.valid():

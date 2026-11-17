@@ -61,9 +61,16 @@ type CrapConfig struct {
 }
 
 // layer returns the switch for a layer, enabled when the config says nothing.
+// The allocation-budget layer (§7) has no key of its own: it follows
+// layers.bench, so a profile that does not gate benchmarks skips it too.
 func (c Config) layer(id string) LayerConfig {
 	if lc, ok := c.Layers[id]; ok {
 		return lc
+	}
+	if id == "allocs" {
+		if lc, ok := c.Layers["bench"]; ok {
+			return lc
+		}
 	}
 	return LayerConfig{Enabled: true}
 }

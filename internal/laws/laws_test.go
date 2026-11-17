@@ -335,3 +335,43 @@ func TestTiers(t *testing.T) {
 		}
 	}
 }
+
+// Classes name only classes of the schema, and a retired law applies to none.
+func TestClassesAreSchemaClassesAndRetiredHasNone(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join(repoRoot, "schema", "go-tops.schema.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var s struct {
+		Defs struct {
+			Class struct {
+				Enum []string `json:"enum"`
+			} `json:"class"`
+		} `json:"$defs"`
+	}
+	if err := json.Unmarshal(b, &s); err != nil {
+		t.Fatal(err)
+	}
+	valid := map[string]bool{}
+	for _, c := range s.Defs.Class.Enum {
+		valid[c] = true
+	}
+	if len(valid) != 12 {
+		t.Fatalf("the schema has %d classes, want 12", len(valid))
+	}
+	for _, l := range Catalog() {
+		for _, c := range l.Classes {
+			if !valid[c] {
+				t.Errorf("%s: %q is not a class of the schema", l.ID, c)
+			}
+		}
+		if l.Retired && len(l.Classes) != 0 {
+			t.Errorf("%s is retired but applies to %v", l.ID, l.Classes)
+		}
+	}
+	for _, c := range s.Defs.Class.Enum {
+		if n := len(Applicable(c)); n < 18 {
+			t.Errorf("%s: %d applicable laws, want at least the 16 ✓ laws and G-42, G-43", c, n)
+		}
+	}
+}

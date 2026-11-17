@@ -176,3 +176,96 @@ func TestNoShellInTheSource(t *testing.T) {
 		}
 	}
 }
+
+// B5-5: a downloaded binary is checked against the lock before it runs. A
+// mismatch is a lock error (exit 2), never tool-missing (exit 1).
+func TestResolveBinaryVerifiesBeforeRunning(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("PATH", t.TempDir())
+	bin := filepath.Join(dir, ".go-tops", "bin")
+	if err := os.MkdirAll(bin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(bin, "golangci-lint")
+	if err := os.WriteFile(path, []byte("x"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	var seen []string
+	r := &ToolResolver{Dir: dir, Exec: newExec(), Binary: DefaultBinaries(), Verify: func(name, p string) error {
+		seen = append(seen, name+"@"+p)
+		return errors.New("sha256 is aa, the lock says bb")
+	}}
+	_, err := r.Resolve(context.Background(), "golangci-lint")
+	var le *LockError
+	if !errors.As(err, &le) || errors.Is(err, ErrToolMissing) {
+		t.Fatalf("err = %v, want a *LockError and not ErrToolMissing", err)
+	}
+	if len(seen) != 1 || seen[0] != "golangci-lint@"+path {
+		t.Fatalf("Verify saw %v", seen)
+	}
+	if exitCodeFor(err) != 2 {
+		t.Fatalf("exit %d, want 2", exitCodeFor(err))
+	}
+	// a passing check resolves
+	r = &ToolResolver{Dir: dir, Exec: newExec(), Binary: DefaultBinaries(), Verify: func(string, string) error { return nil }}
+	if argv, err := r.Resolve(context.Background(), "golangci-lint"); err != nil || argv[0] != path {
+		t.Fatalf("argv %v err %v", argv, err)
+	}
+	// an absent binary is not verified: it is missing
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	called := false
+	r = &ToolResolver{Dir: dir, Exec: newExec(), Binary: DefaultBinaries(), Verify: func(string, string) error { called = true; return nil }}
+	if _, err := r.Resolve(context.Background(), "golangci-lint"); !errors.Is(err, ErrToolMissing) || called {
+		t.Fatalf("err %v called %v", err, called)
+	}
+}
+
+type stubTools struct{ err error }
+
+func (s stubTools) Resolve(context.Context, string) ([]string, error) { return nil, s.err }
+
+// A layer whose preflight resolves a tool that fails its lock check stops the
+// run before any layer runs: exit 2. A missing tool does not: the layer
+// reports tool-missing and the gate exits 1.
+func TestPreflightToolsExitCodes(t *testing.T) {
+	mk := func(tools Resolver) ([]Layer, Deps, *[]string) {
+		var ran []string
+		l := &toolLayer{fakeLayer: fakeLayer{id: "hygiene", tier: 1, ran: &ran}, tool: "golangci-lint"}
+		d := deps([]Layer{l})
+		d.Tools = tools
+		return []Layer{l}, d, &ran
+	}
+	c := cfg()
+	c.RequiredLaws = nil
+
+	_, d, ran := mk(stubTools{err: &LockError{Err: errors.New("sha mismatch")}})
+	mustRefuse(t, c, opts(), d, 2)
+	if len(*ran) != 0 {
+		t.Fatalf("a layer ran before the lock exit: %v", *ran)
+	}
+
+	_, d, ran = mk(stubTools{err: ErrToolMissing})
+	r := mustRun(t, c, opts(), d)
+	if r.ExitCode != 1 || layerOutcomes(r)["hygiene"] != "tool-missing" || len(*ran) != 0 {
+		t.Fatalf("exit %d outcomes %v ran %v; a missing tool is tool-missing, exit 1", r.ExitCode, layerOutcomes(r), *ran)
+	}
+}
+
+// toolLayer preflights its tool, and reports tool-missing when it is absent.
+type toolLayer struct {
+	fakeLayer
+	tool string
+}
+
+func (l *toolLayer) Preflight(ctx context.Context, env *Env) error {
+	return PreflightTools(ctx, env, l.tool)
+}
+
+func (l *toolLayer) Run(ctx context.Context, env *Env) Result {
+	if _, err := env.Tools.Resolve(ctx, l.tool); err != nil {
+		return MissingTool(l.tool, err)
+	}
+	return l.fakeLayer.Run(ctx, env)
+}

@@ -249,8 +249,15 @@ func TestEmptyAndForbiddenResultsFail(t *testing.T) {
 		ls := gateLayers(nil, nil)
 		ls[1] = &fakeLayer{id: "tests", tier: 1, res: res}
 		r := mustRun(t, c, opts(), deps(ls))
-		if got := layerOutcomes(r)["tests"]; got != "not-run" {
-			t.Errorf("%s result: tests is %s, want not-run (no result)", name, got)
+		if got := layerOutcomes(r)["tests"]; got != "fail" {
+			t.Errorf("%s result: tests is %s, want fail", name, got)
+		}
+		for _, l := range r.Report.Layers {
+			if l.ID == "tests" {
+				if msg, _ := l.Details["error"].(string); msg == "" || len(l.Details) != 1 {
+					t.Errorf("%s result: details %v, want {error: why}", name, l.Details)
+				}
+			}
 		}
 		if r.ExitCode != 1 {
 			t.Errorf("%s result: exit %d", name, r.ExitCode)

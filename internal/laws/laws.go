@@ -5,7 +5,10 @@
 // fails on any difference, so the two cannot drift.
 package laws
 
-import "sort"
+import (
+	"slices"
+	"sort"
+)
 
 // Severity is the R or A column of §8.2.
 type Severity string
@@ -63,6 +66,15 @@ type Law struct {
 	Tier    int
 	V01     bool // the ✓ column: a live reader is targeted for the first mechanical release
 	Retired bool // the Law cell begins "Retired"
+	// Classes are the classes the law applies to (§8.3). PROVISIONAL: §8.2
+	// has no such column and the law files that hold the list arrive at M5, so
+	// until then the list is derived from the places the protocol does state
+	// it: the ✓ laws every profile requires (§5.3), the "Extra laws" row of
+	// §5.2, and the two laws §5.2 gives to every class (G-42, G-43). For
+	// binary-cli that is the 19 laws of config/gate-report.example.json. The
+	// drift test covers ID, severity, reader, tier, v0.1 and retired, not this
+	// field; M5 replaces it with the law files.
+	Classes []string
 }
 
 // Active reports whether the law is neither retired nor planned.
@@ -119,43 +131,12 @@ func Release() Counts {
 	return c
 }
 
-// extra is the "Extra laws" row of §5.2: the laws a class carries beyond the
-// ✓ set.
-var extra = map[string][]string{
-	"library-core":        {"G-21", "G-22", "G-23", "G-24"},
-	"binary-cli":          {"G-41"},
-	"tui-app":             {"G-10"},
-	"binary-service":      {"G-19", "G-20"},
-	"concurrency-runtime": {"G-01", "G-02", "G-03", "G-04", "G-05", "G-06", "G-07", "G-08", "G-09"},
-}
-
-// everyClass holds the laws §5.2 gives to every class: leak detection (G-42)
-// and fuzz targets (G-43).
-var everyClass = []string{"G-42", "G-43"}
-
-// Applicable returns the active laws that apply to the class, sorted by ID.
-//
-// §8.3 says a law applies when the class is in its law file's classes list,
-// and the law files arrive at M5. Until then the set is derived from the two
-// places the protocol does state it: the ✓ laws every profile requires
-// (§5.3), the "Extra laws" row of §5.2, and the two laws §5.2 gives to every
-// class. For binary-cli that is the 19 laws of config/gate-report.example.json.
+// Applicable returns the active laws that apply to the class (§8.3), sorted
+// by ID. It reads the provisional Classes field.
 func Applicable(class string) []Law {
-	want := map[string]bool{}
-	for _, l := range catalog {
-		if l.V01 {
-			want[l.ID] = true
-		}
-	}
-	for _, id := range extra[class] {
-		want[id] = true
-	}
-	for _, id := range everyClass {
-		want[id] = true
-	}
 	var out []Law
 	for _, l := range catalog {
-		if want[l.ID] && l.Active() {
+		if l.Active() && slices.Contains(l.Classes, class) {
 			out = append(out, l)
 		}
 	}

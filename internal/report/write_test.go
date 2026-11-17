@@ -158,3 +158,21 @@ func TestWriteFailsWhereItCannotWrite(t *testing.T) {
 		t.Fatal("writing under a regular file succeeded")
 	}
 }
+
+// A failed layer that has no figures says why with details {error: ...}.
+func TestFailedLayerMayCarryAnError(t *testing.T) {
+	r := minimal()
+	r.Layers = []Layer{{ID: "tests", Tier: 1, Outcome: "fail", Details: map[string]any{"error": "go test printed no JSON"}}}
+	b, err := Marshal(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := validate(t, b); err != nil {
+		t.Fatalf("a failed tests layer with details.error is invalid: %v", err)
+	}
+	r.Layers[0].Details = map[string]any{"error": ""}
+	b, _ = Marshal(r)
+	if validate(t, b) == nil {
+		t.Fatal("an empty error validated")
+	}
+}

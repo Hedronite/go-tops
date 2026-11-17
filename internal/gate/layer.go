@@ -39,7 +39,7 @@ type Env struct {
 
 // order is the §3.1 gate order. A registered layer takes its place here; one
 // not listed runs after them, in registration order.
-var order = []string{"hygiene", "tests", "coverage", "crap", "mutation", "fuzz", "stress", "bench"}
+var order = []string{"hygiene", "tests", "coverage", "crap", "mutation", "allocs", "fuzz", "stress", "bench"}
 
 var (
 	mu       sync.Mutex

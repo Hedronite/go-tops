@@ -15,11 +15,11 @@ func TestStubsAreRegisteredInGateOrder(t *testing.T) {
 		got = append(got, l.ID())
 		tiers[l.ID()] = l.Tier()
 	}
-	want := "hygiene,tests,coverage,crap,mutation,fuzz,stress,bench"
+	want := "hygiene,tests,coverage,crap,mutation,allocs,fuzz,stress,bench"
 	if strings.Join(got, ",") != want {
 		t.Fatalf("layers %v, want %s", got, want)
 	}
-	for _, id := range []string{"hygiene", "tests", "coverage", "crap", "mutation"} {
+	for _, id := range []string{"hygiene", "tests", "coverage", "crap", "mutation", "allocs"} {
 		if tiers[id] != 1 {
 			t.Errorf("%s is tier %d, want 1 (§3.2)", id, tiers[id])
 		}
@@ -38,7 +38,7 @@ func TestEnabledStubsAreNotRunAndFail(t *testing.T) {
 	d.Layers = nil
 	r := mustRun(t, c, Options{MaxTier: 2}, d)
 	o := layerOutcomes(r)
-	for _, id := range []string{"hygiene", "tests", "coverage", "crap", "mutation", "fuzz", "stress", "bench"} {
+	for _, id := range []string{"hygiene", "tests", "coverage", "crap", "mutation", "allocs", "fuzz", "stress", "bench"} {
 		// coverage, crap and mutation need a layer that never passes
 		want := "not-run"
 		if id == "coverage" || id == "crap" || id == "mutation" {
@@ -48,7 +48,7 @@ func TestEnabledStubsAreNotRunAndFail(t *testing.T) {
 			t.Errorf("%s is %s, want %s", id, o[id], want)
 		}
 	}
-	if r.ExitCode != 1 || r.Report.LayerCounts.EnabledInRange != 8 || r.Report.LayerCounts.Ran != 0 {
+	if r.ExitCode != 1 || r.Report.LayerCounts.EnabledInRange != 9 || r.Report.LayerCounts.Ran != 0 {
 		t.Fatalf("exit %d counts %+v", r.ExitCode, r.Report.LayerCounts)
 	}
 }
@@ -65,10 +65,11 @@ func TestDisabledStubsAreSkipWithReason(t *testing.T) {
 		"stress":   {Enabled: false, Reason: "binary-cli does not stress"},
 		"bench":    {Enabled: false, Reason: "binary-cli does not gate benchmarks"},
 	}
+	// allocs follows bench: no key of its own (§7)
 	r := mustRun(t, c, Options{MaxTier: 2}, deps(nil))
 	for _, l := range r.Report.Layers {
 		switch l.ID {
-		case "crap", "mutation", "fuzz", "stress", "bench":
+		case "crap", "mutation", "allocs", "fuzz", "stress", "bench":
 			if l.Outcome != "skip" || l.Reason == "" {
 				t.Errorf("%s: %+v, want skip with a reason", l.ID, l)
 			}
