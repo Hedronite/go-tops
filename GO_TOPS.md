@@ -175,7 +175,7 @@ use `snake_case`. Prose, config and the report spell each value the same way.
 |---|---|---|
 | `pass` | The layer ran and its rule is met | none |
 | `fail` | The layer ran and its rule is broken | **fails** |
-| `skip` | The class does not require the layer, or `go-tops.yaml` sets it `enabled: false` with a `reason` | Printed with the reason; the layer is not enabled, so it is not counted |
+| `skip` | The class does not require the layer, or `go-tops.yaml` sets it `enabled: false` with a `reason` (a class layer of §7 needs no more; the `crap` and `mutation` gates also need an unexpired `expires`; `hygiene`, `tests` and `coverage` cannot be turned off) | Printed with the reason; the layer is not enabled, so it is not counted |
 | `not-run` | The layer is enabled and in range but has no command mapped | **fails** |
 | `not-reached` | The layer is enabled and in range and has a command, but a layer it needs did not pass, or `--fail-fast` stopped the run before it (§3.5) | **fails** |
 | `vacuous` | The layer ran and had nothing to judge, in the one place this spec allows that: an empty mutation diff (§6.4) | Printed and counted for nothing: neither a pass nor a failure |
@@ -371,7 +371,7 @@ above it may do, is stated once, in §6.7. No class is uncapped: `tui-app` and
 strictest launch cap, as a provisional value until a repo of the class is measured. A class
 with no column and no profile at all (`library-util`, `parser-codec`, `unsafe-kernel`,
 `cgo-bridge`, `codegen`, `embedded-tinygo` and `workspace-root`) takes the same provisional cap,
-8, and the strictest launch floor, 90%, until it has a profile.
+8, and the strictest floor in the table above, 90%, until it has a profile.
 
 **Where the caps come from.** The launch caps are `binary-cli` 10, `binary-service` 10 and
 `library-core` 8. They come from a measurement, not from another protocol:
@@ -1239,7 +1239,7 @@ it.
 |---|---|---|
 | `advisory.reason`, `advisory.owner`, `advisory.expires` | text, handle, date | Required when `enforce: advisory`, invalid otherwise. `check` fails once `expires` has passed (§6.7) |
 | `laws.required` | list of law IDs | Each law is in the catalog, applies to the class (§8.3), has an `analyzer` or `tool` reader and is at tier 1 or below. `go-tops.yaml` may add IDs and may not remove or override the profile's (§3.3) |
-| `enabled`, `reason` | boolean, text | On every layer under `gates` and `layers`. `enabled: false` is the only way to turn a layer off and requires a non-empty `reason`, printed with the `skip` (§3.3) |
+| `enabled`, `reason`, `expires` | boolean, text, date | `enabled: false` is the only way to turn a layer off and requires a non-empty `reason`, printed with the `skip` (§3.3). A run must measure something: `gates.hygiene`, `gates.tests` and `gates.coverage` have no `enabled` key and cannot be off. `gates.crap` and `gates.mutation` may be `enabled: false` only with a `reason` and a dated `expires`; every disabled gate is listed in the report with both, and `check` fails once `expires` has passed. The class layers of §7 (`layers.fuzz`, `layers.stress`, `layers.bench`) may be off with a `reason` alone |
 | `layers.fuzz.targets` | list of globs | `<go list package pattern>:<function-name glob>`, read by G-43 (§8.2) |
 | `layers.fuzz.timed.duration` | duration | The `-fuzztime` of the tier 2 fuzz layer (§7) |
 | `layers.stress.count` | integer ≥ 2 | The `-count` of the tier 2 stress run (§7) |
@@ -1327,7 +1327,8 @@ CI rules (carried from Rust-TOPS's lessons):
   what that run measured. Until then the kind is absent and holds at its `hard` form, so the
   `deep` schedule is enabled after `gotops baseline --init --kind survivors` has run once.
 - A layer the class requires runs in these jobs; none ships as a commented-out job. A layer is
-  off only by `enabled: false` with a reason (§7).
+  off only by `enabled: false` with a reason, and for `crap` and `mutation` also a dated `expires`
+  (§3.3, §7).
 - Pin actions by commit SHA; minimal `permissions:`; cache `GOMODCACHE`/`GOCACHE` by `go.sum` and
   `tools/go.sum`.
 
@@ -1340,7 +1341,7 @@ CI rules (carried from Rust-TOPS's lessons):
 | Command | Behavior |
 |---|---|
 | `init --class <c>` | Writes `go-tops.yaml`, `go-tops.lock`, `tools/go.mod` with its pins, the adopter's `.golangci.yml` (style only), the workflow, the CODEOWNERS fragment, `justfile` and the adoption record `GO-TOPS.md`. It writes no laws config: the kit embeds it. Where `AGENTS.md` exists it writes only between `<!-- go-tops:begin -->` and `<!-- go-tops:end -->`, replacing the block on a re-run and appending the pair when absent; one marker without the other is a configuration error. Where `AGENTS.md` is absent it creates the file with the block. Refuses to overwrite any other existing file without `--force`. |
-| `check` | Validates `go-tops.yaml` against the **JSON Schema** (full validation, an improvement over Rust-TOPS's partial checks), plus semantic checks: protocol id, non-empty version, module name, language floor ≤ current, `gates.crap.cap` not above the class column of §5.2 and `gates.coverage.statements_floor` not below it (a class with no column takes the values of §5.2's last paragraph), an `enabled: false` without a `reason`, every `laws.required` ID in the catalog, applying to the class, with a reader and at tier 1 or below, every exemption well formed and unexpired (§6.8), every entry of `.go-tops/survivors.yaml` valid against `survivorEntry` and every entry of `.go-tops/acks.yaml` valid against `ackEntry` in `schema/core.schema.json` (§6.4, §3.3), `enforce: advisory` carrying the `advisory` key (reason, owner, an `expires` that has not passed), and under `ratchet` the baseline file exists and is clean against `HEAD`. |
+| `check` | Validates `go-tops.yaml` against the **JSON Schema** (full validation, an improvement over Rust-TOPS's partial checks), plus semantic checks: protocol id, non-empty version, module name, language floor ≤ current, `gates.crap.cap` not above the class column of §5.2 and `gates.coverage.statements_floor` not below it (a class with no column takes the cap 8 and the floor 90% of §5.2), an `enabled: false` without a `reason`, a disabled `gates.crap` or `gates.mutation` without an `expires` that has not passed, an `enabled` key on `gates.hygiene`, `gates.tests` or `gates.coverage`, every `laws.required` ID in the catalog, applying to the class, with a reader and at tier 1 or below, every exemption well formed and unexpired (§6.8), every entry of `.go-tops/survivors.yaml` valid against `survivorEntry` and every entry of `.go-tops/acks.yaml` valid against `ackEntry` in `schema/core.schema.json` (§6.4, §3.3), `enforce: advisory` carrying the `advisory` key (reason, owner, an `expires` that has not passed), and under `ratchet` the baseline file exists and is clean against `HEAD`. |
 | `baseline` | Writes `.go-tops/baseline.json` (§6.7), the only command that does. `--init` measures and writes the first ledger when the tests are green and every feeding layer produced non-empty output (thresholds may be red); `--init --kind survivors` records the tier 2 survivor counts the same way. A plain `baseline` only lowers entries and removes paid ones. `--accept-regression --reason <text> --owner <handle>` is the one way to raise an entry or lower `judged_laws` (the PR carries the `protocol-change` label). `--rename <old-key> <new-key>` moves one key. Refused under `advisory`, and `--init` is refused when a ledger exists. |
 | `gate` | Runs every enabled layer at or below `--max-tier` (default 1), in order, each judged (§3.5), laws last. Options: `--max-tier N`, `--fail-fast`, `--dry-run` (refused in CI), `--base <ref>`, `--json`, `--only <layer>` (a range that leaves a required law out ends `partial` and is refused in CI). A mapped tool that is missing is `tool-missing` and exits 1. Exit codes: §12.2. |
 | `laws [list \| run \| explain G-NN]` | Lists the catalog with readers, runs the laws layer alone, explains a law. |
@@ -1414,7 +1415,7 @@ CI keeps the block identical to the file and validates the file against the sche
     {
       "id": "mutation", "tier": 1, "outcome": "pass",
       "details": { "mutants": 63, "killed": 60, "survived_explained": 3, "survived_unexplained": 0,
-                   "max": 0, "timed_out": 0, "timed_out_keys": [], "dropped": 0 }
+                   "max": 0, "timed_out": 0, "timed_out_keys": [], "dropped": 0, "exempt": [] }
     }
   ],
   "laws": {
@@ -1472,11 +1473,13 @@ Report rules:
 - A CRAP violation with `"baseline": null` is a function with no entry in the ledger, so it is
   held to the cap. Otherwise `baseline` is its ledger score, and the function may not exceed it
   by more than 0.01 (§6.7).
-- `details` is typed for four layers: tests (`packages`, `tests`, `race`, `skipped`,
+- `details` is required, and typed, for four layers whenever they ran (outcome `pass`, `fail` or
+  `vacuous`): tests (`packages`, `tests`, `race`, `skipped`,
   `shuffle_seed`), coverage (`statements_pct`, `floor`, `profile_bytes`), CRAP (`cap`,
   `violations`, and `exempt` for functions scored under an exemption) and mutation (the counts of
-  §6.4, with `timed_out` and `timed_out_keys` for mutants that hung and `dropped` for mutants
-  that did not compile). `exemptions` lists every exemption in force on the day of the run, as
+  §6.4, with `timed_out` and `timed_out_keys` for mutants that hung, `dropped` for mutants
+  that did not compile, and `exempt` for the survivor keys of mutants under a `mutation`
+  exemption). `exemptions` lists every exemption in force on the day of the run, as
   the records of §6.8.
 - The summary's `exit_code` is 0 or 1: a run refused before any layer runs writes no report
   (§12.2).

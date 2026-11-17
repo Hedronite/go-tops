@@ -37,7 +37,7 @@
     {
       "id": "mutation", "tier": 1, "outcome": "pass",
       "details": { "mutants": 63, "killed": 60, "survived_explained": 3, "survived_unexplained": 0,
-                   "max": 0, "timed_out": 0, "timed_out_keys": [], "dropped": 0 }
+                   "max": 0, "timed_out": 0, "timed_out_keys": [], "dropped": 0, "exempt": [] }
     }
   ],
   "laws": {

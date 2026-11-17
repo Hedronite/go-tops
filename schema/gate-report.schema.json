@@ -260,6 +260,10 @@
         "details": {
           "description": "Layer-specific figures.",
           "type": "object"
+        },
+        "expires": {
+          "description": "For a crap or mutation gate switched off: the date the exemption lapses (§3.3).",
+          "$ref": "core.schema.json#/$defs/date"
         }
       },
       "if": {
@@ -300,6 +304,31 @@
         {
           "if": {
             "required": [
+              "id",
+              "outcome"
+            ],
+            "properties": {
+              "id": {
+                "const": "tests"
+              },
+              "outcome": {
+                "enum": [
+                  "pass",
+                  "fail",
+                  "vacuous"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "details"
+            ]
+          }
+        },
+        {
+          "if": {
+            "required": [
               "id"
             ],
             "properties": {
@@ -314,6 +343,31 @@
                 "$ref": "#/$defs/coverageDetails"
               }
             }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "id",
+              "outcome"
+            ],
+            "properties": {
+              "id": {
+                "const": "coverage"
+              },
+              "outcome": {
+                "enum": [
+                  "pass",
+                  "fail",
+                  "vacuous"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "details"
+            ]
           }
         },
         {
@@ -338,6 +392,31 @@
         {
           "if": {
             "required": [
+              "id",
+              "outcome"
+            ],
+            "properties": {
+              "id": {
+                "const": "crap"
+              },
+              "outcome": {
+                "enum": [
+                  "pass",
+                  "fail",
+                  "vacuous"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "details"
+            ]
+          }
+        },
+        {
+          "if": {
+            "required": [
               "id"
             ],
             "properties": {
@@ -350,6 +429,80 @@
             "properties": {
               "details": {
                 "$ref": "#/$defs/mutationDetails"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "id",
+              "outcome"
+            ],
+            "properties": {
+              "id": {
+                "const": "mutation"
+              },
+              "outcome": {
+                "enum": [
+                  "pass",
+                  "fail",
+                  "vacuous"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "details"
+            ]
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "id",
+              "outcome"
+            ],
+            "properties": {
+              "id": {
+                "enum": [
+                  "crap",
+                  "mutation"
+                ]
+              },
+              "outcome": {
+                "const": "skip"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "expires"
+            ]
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "enum": [
+                  "hygiene",
+                  "tests",
+                  "coverage"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "outcome": {
+                "not": {
+                  "const": "skip"
+                }
               }
             }
           }
@@ -547,7 +700,8 @@
         "max",
         "timed_out",
         "timed_out_keys",
-        "dropped"
+        "dropped",
+        "exempt"
       ],
       "properties": {
         "mutants": {
@@ -585,6 +739,14 @@
           "description": "Mutants that did not compile; counted nowhere else.",
           "type": "integer",
           "minimum": 0
+        },
+        "exempt": {
+          "description": "The survivor keys of mutants in code under a mutation exemption; they are not counted as survivors (§6.8).",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
         }
       }
     }

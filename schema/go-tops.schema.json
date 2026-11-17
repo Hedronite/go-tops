@@ -73,19 +73,7 @@
         "hygiene": {
           "type": "object",
           "additionalProperties": false,
-          "allOf": [
-            {
-              "$ref": "#/$defs/reasonWhenOff"
-            }
-          ],
           "properties": {
-            "enabled": {
-              "type": "boolean"
-            },
-            "reason": {
-              "type": "string",
-              "minLength": 1
-            },
             "golangci_lint": {
               "type": "object",
               "additionalProperties": false,
@@ -139,19 +127,7 @@
         "tests": {
           "type": "object",
           "additionalProperties": false,
-          "allOf": [
-            {
-              "$ref": "#/$defs/reasonWhenOff"
-            }
-          ],
           "properties": {
-            "enabled": {
-              "type": "boolean"
-            },
-            "reason": {
-              "type": "string",
-              "minLength": 1
-            },
             "race": {
               "const": true
             },
@@ -166,19 +142,7 @@
         "coverage": {
           "type": "object",
           "additionalProperties": false,
-          "allOf": [
-            {
-              "$ref": "#/$defs/reasonWhenOff"
-            }
-          ],
           "properties": {
-            "enabled": {
-              "type": "boolean"
-            },
-            "reason": {
-              "type": "string",
-              "minLength": 1
-            },
             "statements_floor": {
               "type": "number",
               "minimum": 0,
@@ -210,7 +174,7 @@
           "additionalProperties": false,
           "allOf": [
             {
-              "$ref": "#/$defs/reasonWhenOff"
+              "$ref": "#/$defs/reasonAndExpiresWhenOff"
             }
           ],
           "properties": {
@@ -241,6 +205,9 @@
                   }
                 }
               }
+            },
+            "expires": {
+              "$ref": "core.schema.json#/$defs/date"
             }
           }
         },
@@ -249,7 +216,7 @@
           "additionalProperties": false,
           "allOf": [
             {
-              "$ref": "#/$defs/reasonWhenOff"
+              "$ref": "#/$defs/reasonAndExpiresWhenOff"
             }
           ],
           "properties": {
@@ -278,6 +245,9 @@
             "ledger": {
               "type": "string",
               "minLength": 1
+            },
+            "expires": {
+              "$ref": "core.schema.json#/$defs/date"
             }
           }
         }
@@ -481,6 +451,25 @@
         "codegen",
         "workspace-root"
       ]
+    },
+    "reasonAndExpiresWhenOff": {
+      "description": "A gate switched off with enabled: false carries a reason and a dated expires (§3.3).",
+      "if": {
+        "required": [
+          "enabled"
+        ],
+        "properties": {
+          "enabled": {
+            "const": false
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "reason",
+          "expires"
+        ]
+      }
     }
   }
 }
