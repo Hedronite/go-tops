@@ -6,7 +6,7 @@ enforce: ratchet             # hard | ratchet | advisory (§6.7); adopters defau
 baseline: .go-tops/baseline.json
 
 toolchain:
-  go_floor: "1.26.0"
+  go_floor: "1.26"
   go_current: "1.27"
   cgo: false                 # builds and releases; true only for cgo-bridge.
                              # Test jobs always run with cgo for -race (§3.1)
@@ -39,7 +39,6 @@ layers:
   bench:  { enabled: false, reason: "binary-cli does not gate benchmarks" }
 
 laws:
-  enable: default             # or an explicit list
   ack_ledger: .go-tops/acks.yaml
 
 exemptions:

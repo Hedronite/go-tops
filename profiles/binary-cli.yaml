@@ -9,5 +9,4 @@ layers:
   fuzz: { targets: [] }               # arg and flag parsers: the repo declares the globs (G-43)
   bench: { enabled: false, reason: "binary-cli does not gate benchmarks" }
 laws:
-  enable: [G-11, G-12, G-16, G-17, G-18, G-19, G-33, G-34, G-40, G-41, G-42, G-43]
-  required: [G-11, G-12, G-16, G-17, G-18, G-19, G-33, G-34, G-40]
+  required: [G-02, G-07, G-08, G-11, G-12, G-16, G-17, G-18, G-19, G-25, G-26, G-33, G-34, G-37, G-38, G-40]
