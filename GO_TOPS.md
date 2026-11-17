@@ -9,9 +9,9 @@
 > in every class and only to guards that return the error; blank discards are caught (§6.3).
 > Enforcement modes, with `ratchet` the adopter default (§6.7). The Bend2 parity layer and Lean
 > recheck are removed; the native analyzers are the laws layer (§8.1). Protocol version bumped.
-
+>
 > **Changes from 0.1.0 to 0.2.0:** Hybrid laws architecture (native `go/analysis` primary floor + optional Bend2 parity layer + Lean recheck of catalog and pure invariants). Open decisions in §16 resolved where consensus was reached (err_guard_discount defaults, authorship trailers, Bend optional, etc.). Formal layers guidance added. Protocol version bumped.
-
+>
 > **How to read this.** Go-TOPS reuses Rust-TOPS's *shape* (a written spec, a JSON Schema,
 > per-class profiles, an orchestrator CLI, a CI floor, and a laws layer) and re-derives the
 > *content* for Go. Every place this spec intentionally differs from Rust-TOPS is called out in
