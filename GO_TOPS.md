@@ -368,7 +368,10 @@ agents (§1.1). What a cap means is stated in §6.2: at full coverage it is a ce
 complexity. How the cap binds under each enforcement mode, including what an existing function
 above it may do, is stated once, in §6.7. No class is uncapped: `tui-app` and
 `concurrency-runtime` have no launch profile (§5.1) and no measurement, so each takes 8, the
-strictest launch cap, as a provisional value until a repo of the class is measured.
+strictest launch cap, as a provisional value until a repo of the class is measured. A class
+with no column and no profile at all (`library-util`, `parser-codec`, `unsafe-kernel`,
+`cgo-bridge`, `codegen`, `embedded-tinygo` and `workspace-root`) takes the same provisional cap,
+8, and the strictest launch floor, 90%, until it has a profile.
 
 **Where the caps come from.** The launch caps are `binary-cli` 10, `binary-service` 10 and
 `library-core` 8. They come from a measurement, not from another protocol:
@@ -1151,7 +1154,9 @@ and that list:
 
 - `catalog`: every law row, retired ones included (43);
 - `applicable`: laws whose `status` is `active` and whose `classes` holds the class;
-- `applicable_judged`: applicable laws with a verdict other than `not-evaluated`;
+- `applicable_judged`: applicable laws with a verdict other than `not-evaluated`; the applicable
+  laws that ended `not-evaluated` are counted by reason in `not_evaluated_by_reason`, a class
+  count that sums to `applicable` minus `applicable_judged`, not to `not_evaluated`;
 - `judged` and `not_evaluated`: the active laws with and without a live reader in this release,
   the same for every class: the "N of M laws judged" of §8.2 (§12.3).
 
@@ -1242,7 +1247,9 @@ it.
 | `gates.coverage.statements_floor` | number, 0 to 100 | The floor on statement coverage (§5.2, §6.1). Renamed from `lines_floor`; the report's `lines_pct` is `statements_pct` |
 | `gates.crap.cap` | number ≥ 1 | One cap per class (§5.2) |
 | `gates.crap.complexity.err_guard_discount` | boolean | Existing. Now also removes the guard's body from `cov(f)` (§6.3) |
-| `gates.crap.complexity.wrap_functions` | list of strings | Wrap functions that count as `fmt.Errorf` with `%w` for the guard rule (§6.3) |
+| `gates.crap.complexity.wrap_functions` | list of `import/path.Name` | Wrap functions that count as `fmt.Errorf` with `%w` for the guard rule (§6.3) |
+| `gates.hygiene.govulncheck.db` | URL or path | A mirrored vulnerability database, passed as `-db`, for a run that must be repeatable (§3.1) |
+| `gates.tests.race`, `gates.tests.shuffle`, `gates.tests.count` | `true`, `true`, `1` | Fixed by the command of §3.1 and the race rule of §5.2. The schema allows no other value |
 | `gates.mutation.unexplained_survivors_max` | `0` | The only valid value, in every class (§6.4) |
 | `gates.mutation.ledger` | path | The survivor ledger; entries carry the record of §6.4, `expires` required |
 | `exemptions` | list of records | The record of §6.8, in `go-tops.yaml`, which CODEOWNERS covers (§11) |
@@ -1333,7 +1340,7 @@ CI rules (carried from Rust-TOPS's lessons):
 | Command | Behavior |
 |---|---|
 | `init --class <c>` | Writes `go-tops.yaml`, `go-tops.lock`, `tools/go.mod` with its pins, the adopter's `.golangci.yml` (style only), the workflow, the CODEOWNERS fragment, `justfile` and the adoption record `GO-TOPS.md`. It writes no laws config: the kit embeds it. Where `AGENTS.md` exists it writes only between `<!-- go-tops:begin -->` and `<!-- go-tops:end -->`, replacing the block on a re-run and appending the pair when absent; one marker without the other is a configuration error. Where `AGENTS.md` is absent it creates the file with the block. Refuses to overwrite any other existing file without `--force`. |
-| `check` | Validates `go-tops.yaml` against the **JSON Schema** (full validation, an improvement over Rust-TOPS's partial checks), plus semantic checks: protocol id, non-empty version, module name, language floor ≤ current, an `enabled: false` without a `reason`, every `laws.required` ID in the catalog, applying to the class, with a reader and at tier 1 or below, every exemption well formed and unexpired (§6.8), `enforce: advisory` carrying the `advisory` key (reason, owner, an `expires` that has not passed), and under `ratchet` the baseline file exists and is clean against `HEAD`. |
+| `check` | Validates `go-tops.yaml` against the **JSON Schema** (full validation, an improvement over Rust-TOPS's partial checks), plus semantic checks: protocol id, non-empty version, module name, language floor ≤ current, `gates.crap.cap` not above the class column of §5.2 and `gates.coverage.statements_floor` not below it (a class with no column takes the values of §5.2's last paragraph), an `enabled: false` without a `reason`, every `laws.required` ID in the catalog, applying to the class, with a reader and at tier 1 or below, every exemption well formed and unexpired (§6.8), every entry of `.go-tops/survivors.yaml` valid against `survivorEntry` and every entry of `.go-tops/acks.yaml` valid against `ackEntry` in `schema/core.schema.json` (§6.4, §3.3), `enforce: advisory` carrying the `advisory` key (reason, owner, an `expires` that has not passed), and under `ratchet` the baseline file exists and is clean against `HEAD`. |
 | `baseline` | Writes `.go-tops/baseline.json` (§6.7), the only command that does. `--init` measures and writes the first ledger when the tests are green and every feeding layer produced non-empty output (thresholds may be red); `--init --kind survivors` records the tier 2 survivor counts the same way. A plain `baseline` only lowers entries and removes paid ones. `--accept-regression --reason <text> --owner <handle>` is the one way to raise an entry or lower `judged_laws` (the PR carries the `protocol-change` label). `--rename <old-key> <new-key>` moves one key. Refused under `advisory`, and `--init` is refused when a ledger exists. |
 | `gate` | Runs every enabled layer at or below `--max-tier` (default 1), in order, each judged (§3.5), laws last. Options: `--max-tier N`, `--fail-fast`, `--dry-run` (refused in CI), `--base <ref>`, `--json`, `--only <layer>` (a range that leaves a required law out ends `partial` and is refused in CI). A mapped tool that is missing is `tool-missing` and exits 1. Exit codes: §12.2. |
 | `laws [list \| run \| explain G-NN]` | Lists the catalog with readers, runs the laws layer alone, explains a law. |
@@ -1378,9 +1385,13 @@ CI keeps the block identical to the file and validates the file against the sche
   "max_tier": 1,
   "started_at": "2026-11-17T18:00:00Z",
   "duration_ms": 184211,
-  "shuffle_seed": 91823,
   "vuln_db_timestamp": "2026-11-17T09:12:44Z",
   "layer_counts": { "enabled_in_range": 5, "ran": 5 },
+  "exemptions": [
+    { "path": "internal/wire/dispatch.go", "symbol": "Server.handleOp", "layer": "crap", "shape": "table-switch",
+      "reason": "opcode dispatch, every arm is one call; stays a table or answers to the cap",
+      "owner": "platform", "expires": "2027-03-01" }
+  ],
   "layers": [
     {
       "id": "hygiene", "tier": 1, "outcome": "pass",
@@ -1388,7 +1399,7 @@ CI keeps the block identical to the file and validates the file against the sche
     },
     {
       "id": "tests", "tier": 1, "outcome": "pass",
-      "details": { "packages": 41, "tests": 812, "race": true, "skipped": 3 }
+      "details": { "packages": 41, "tests": 812, "race": true, "skipped": 3, "shuffle_seed": 91823 }
     },
     {
       "id": "coverage", "tier": 1, "outcome": "pass",
@@ -1403,7 +1414,7 @@ CI keeps the block identical to the file and validates the file against the sche
     {
       "id": "mutation", "tier": 1, "outcome": "pass",
       "details": { "mutants": 63, "killed": 60, "survived_explained": 3, "survived_unexplained": 0,
-                   "max": 0, "timed_out": 0, "dropped": 0 }
+                   "max": 0, "timed_out": 0, "timed_out_keys": [], "dropped": 0 }
     }
   ],
   "laws": {
@@ -1451,15 +1462,22 @@ Report rules:
   `out_of_range` describe this run for the class: the laws that apply, the ones among them with
   a verdict other than `not-evaluated`, the ones the profile requires, the required ones that
   ended `not-evaluated` (above zero fails the gate), the applicable ones that ended
-  `not-evaluated` by reason, and the laws above `max_tier`. A `not-evaluated` law is never folded
+  `not-evaluated` by reason (a class count: its sum is `applicable` minus `applicable_judged`,
+  and not `not_evaluated`), and the laws above `max_tier`. A `not-evaluated` law is never folded
   into `allow`.
-- `shuffle_seed` is the seed of the shuffled test run, and `vuln_db_timestamp` is the timestamp
-  of the vulnerability database the run read; either is `null` when its layer did not run. The
-  vulnerability layer is time-dependent: the same commit can change verdict when the database
+- The tests layer's `details` carry the `skipped` count and the `shuffle_seed` of the shuffled
+  test run. `vuln_db_timestamp` is the timestamp of the vulnerability database the run read, and
+  is `null` when the layer did not run. The vulnerability layer is time-dependent: the same commit can change verdict when the database
   does.
 - A CRAP violation with `"baseline": null` is a function with no entry in the ledger, so it is
   held to the cap. Otherwise `baseline` is its ledger score, and the function may not exceed it
   by more than 0.01 (§6.7).
+- `details` is typed for four layers: tests (`packages`, `tests`, `race`, `skipped`,
+  `shuffle_seed`), coverage (`statements_pct`, `floor`, `profile_bytes`), CRAP (`cap`,
+  `violations`, and `exempt` for functions scored under an exemption) and mutation (the counts of
+  §6.4, with `timed_out` and `timed_out_keys` for mutants that hung and `dropped` for mutants
+  that did not compile). `exemptions` lists every exemption in force on the day of the run, as
+  the records of §6.8.
 - The summary's `exit_code` is 0 or 1: a run refused before any layer runs writes no report
   (§12.2).
 
@@ -1665,6 +1683,12 @@ The schemas are files in `schema/`, JSON Schema 2020-12:
 | `schema/gate-report.schema.json` | `.go-tops/report.json` (§12.3): every layer with its tier and outcome, every law with its verdict and reason code, the laws counts, the vulnerability database timestamp and the shuffle seed |
 | `schema/core.schema.json` | The definitions the other two share: layer outcomes, law verdicts, reason codes, run outcomes, enforcement modes, law IDs, the baseline ledger and the exemption record. Both schemas `$ref` it and define none of these again. It is a local copy: the TOPS shared core will replace it by a checked sync |
 
+`schema/core.schema.json` also defines the entries of the two ledger files that `check`
+validates: `survivorEntry` for `.go-tops/survivors.yaml` (§6.4) and `ackEntry` for
+`.go-tops/acks.yaml` (§3.3). The schema of `go-tops.lock` is not part of 0.4.0: the lock is
+written and read by the CLI, so its schema lands with slice M1-G6 of the roadmap, which
+builds `lock --verify`.
+
 When prose and schema disagree, fix the schema first, then the prose (§3.4). The schemas carry
 no `$id`: their `$ref`s are relative, so a checkout validates with no network. A published
 `$id` URL waits until the schemas are published. Docs CI validates the example blocks of §5.3,
@@ -1685,7 +1709,7 @@ The plan of record. Each milestone is a set of slices, one branch and one pull r
 | **M4** mutation | A gremlins adapter, the survivor ledger, diff outcomes, a spike on an overlay runner | The gate fails a deliberately weak test |
 | **M5** laws v0.1 | 16 laws judged by analyzers and the kit's law lint pass; the law ratchet and the ack ledger | The report says "16 of 43 laws judged" truthfully for each class; `vigil` runs laws under `ratchet` |
 | **M6** deep layers, second and third adopters | Leak and time laws, tier 2 layers; `simplex` adopts as `binary-service` and `augur` adopts | Three Hedronite repos gated |
-| **M7** release tier and 1.0 | Tier 3, distribution through `go tool`, SARIF and JUnit; law IDs frozen | Protocol 1.0 on the criterion below, on the owner's word |
+| **M7** release tier and 1.0 | Tier 3, distribution through `go tool`, SARIF and JUnit; law IDs frozen | Protocol 1.0 declared on the criterion below. The release is tagged by a human: an act, not a further criterion |
 
 **The 1.0 criterion.** Protocol 1.0 is declared when three Hedronite repos are gated under
 `ratchet` at tier 1 on the launch profiles, with the CRAP caps recalibrated from their data.

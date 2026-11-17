@@ -21,20 +21,7 @@
       "minLength": 1
     },
     "class": {
-      "enum": [
-        "library-core",
-        "library-util",
-        "parser-codec",
-        "embedded-tinygo",
-        "unsafe-kernel",
-        "binary-cli",
-        "tui-app",
-        "binary-service",
-        "concurrency-runtime",
-        "cgo-bridge",
-        "codegen",
-        "workspace-root"
-      ]
+      "$ref": "#/$defs/class"
     },
     "enforce": {
       "$ref": "core.schema.json#/$defs/enforcementMode"
@@ -117,6 +104,11 @@
                   "enum": [
                     "reachable"
                   ]
+                },
+                "db": {
+                  "description": "A mirrored vulnerability database for a repeatable run (-db, §3.1).",
+                  "type": "string",
+                  "minLength": 1
                 }
               }
             },
@@ -161,14 +153,13 @@
               "minLength": 1
             },
             "race": {
-              "type": "boolean"
+              "const": true
             },
             "shuffle": {
-              "type": "boolean"
+              "const": true
             },
             "count": {
-              "type": "integer",
-              "minimum": 1
+              "const": 1
             }
           }
         },
@@ -244,8 +235,9 @@
                 "wrap_functions": {
                   "type": "array",
                   "items": {
+                    "description": "import/path.Name",
                     "type": "string",
-                    "minLength": 1
+                    "pattern": "^[A-Za-z0-9_.~-]+(/[A-Za-z0-9_.~-]+)*\\.[A-Za-z_][A-Za-z0-9_]*$"
                   }
                 }
               }
@@ -473,6 +465,22 @@
           "reason"
         ]
       }
+    },
+    "class": {
+      "enum": [
+        "library-core",
+        "library-util",
+        "parser-codec",
+        "embedded-tinygo",
+        "unsafe-kernel",
+        "binary-cli",
+        "tui-app",
+        "binary-service",
+        "concurrency-runtime",
+        "cgo-bridge",
+        "codegen",
+        "workspace-root"
+      ]
     }
   }
 }

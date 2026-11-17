@@ -8,9 +8,13 @@
   "max_tier": 1,
   "started_at": "2026-11-17T18:00:00Z",
   "duration_ms": 184211,
-  "shuffle_seed": 91823,
   "vuln_db_timestamp": "2026-11-17T09:12:44Z",
   "layer_counts": { "enabled_in_range": 5, "ran": 5 },
+  "exemptions": [
+    { "path": "internal/wire/dispatch.go", "symbol": "Server.handleOp", "layer": "crap", "shape": "table-switch",
+      "reason": "opcode dispatch, every arm is one call; stays a table or answers to the cap",
+      "owner": "platform", "expires": "2027-03-01" }
+  ],
   "layers": [
     {
       "id": "hygiene", "tier": 1, "outcome": "pass",
@@ -18,7 +22,7 @@
     },
     {
       "id": "tests", "tier": 1, "outcome": "pass",
-      "details": { "packages": 41, "tests": 812, "race": true, "skipped": 3 }
+      "details": { "packages": 41, "tests": 812, "race": true, "skipped": 3, "shuffle_seed": 91823 }
     },
     {
       "id": "coverage", "tier": 1, "outcome": "pass",
@@ -33,7 +37,7 @@
     {
       "id": "mutation", "tier": 1, "outcome": "pass",
       "details": { "mutants": 63, "killed": 60, "survived_explained": 3, "survived_unexplained": 0,
-                   "max": 0, "timed_out": 0, "dropped": 0 }
+                   "max": 0, "timed_out": 0, "timed_out_keys": [], "dropped": 0 }
     }
   ],
   "laws": {

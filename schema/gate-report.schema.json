@@ -17,7 +17,8 @@
     "layer_counts",
     "layers",
     "laws",
-    "summary"
+    "summary",
+    "exemptions"
   ],
   "properties": {
     "protocol": {
@@ -32,8 +33,7 @@
       "minLength": 1
     },
     "class": {
-      "type": "string",
-      "minLength": 1
+      "$ref": "go-tops.schema.json#/$defs/class"
     },
     "enforce": {
       "$ref": "core.schema.json#/$defs/enforcementMode"
@@ -72,13 +72,6 @@
     "duration_ms": {
       "type": "integer",
       "minimum": 0
-    },
-    "shuffle_seed": {
-      "description": "The seed of the shuffled test run; null when the tests did not run.",
-      "type": [
-        "integer",
-        "null"
-      ]
     },
     "vuln_db_timestamp": {
       "description": "The timestamp of the vulnerability database govulncheck read; null when it did not run. The layer is time-dependent.",
@@ -164,7 +157,7 @@
           "minimum": 0
         },
         "not_evaluated_by_reason": {
-          "description": "Applicable laws that ended not-evaluated, by reason code.",
+          "description": "Class level, beside required_not_evaluated: the applicable laws that ended not-evaluated, by reason code. The three counts sum to applicable minus applicable_judged, not to the release-level not_evaluated.",
           "type": "object",
           "additionalProperties": false,
           "required": [
@@ -229,6 +222,13 @@
           }
         }
       }
+    },
+    "exemptions": {
+      "description": "Every exemption in force on the day of the run (§6.8).",
+      "type": "array",
+      "items": {
+        "$ref": "core.schema.json#/$defs/exemption"
+      }
     }
   },
   "$defs": {
@@ -276,7 +276,85 @@
         "required": [
           "reason"
         ]
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "tests"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "details": {
+                "$ref": "#/$defs/testsDetails"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "coverage"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "details": {
+                "$ref": "#/$defs/coverageDetails"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "crap"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "details": {
+                "$ref": "#/$defs/crapDetails"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "mutation"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "details": {
+                "$ref": "#/$defs/mutationDetails"
+              }
+            }
+          }
+        }
+      ]
     },
     "lawResult": {
       "type": "object",
@@ -331,6 +409,184 @@
           }
         }
       ]
+    },
+    "testsDetails": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "packages",
+        "tests",
+        "race",
+        "skipped",
+        "shuffle_seed"
+      ],
+      "properties": {
+        "packages": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "tests": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "race": {
+          "type": "boolean"
+        },
+        "skipped": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "shuffle_seed": {
+          "description": "The seed of the shuffled test run.",
+          "type": "integer"
+        }
+      }
+    },
+    "coverageDetails": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "statements_pct",
+        "floor",
+        "profile_bytes"
+      ],
+      "properties": {
+        "statements_pct": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "floor": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "profile_bytes": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "crapDetails": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "cap",
+        "violations"
+      ],
+      "properties": {
+        "cap": {
+          "type": "number",
+          "minimum": 1
+        },
+        "violations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/crapFunction"
+          }
+        },
+        "exempt": {
+          "description": "Functions scored and printed but not judged, under a crap exemption.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/crapFunction"
+          }
+        }
+      }
+    },
+    "crapFunction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "func",
+        "file",
+        "cc",
+        "cov_pct",
+        "crap",
+        "baseline"
+      ],
+      "properties": {
+        "func": {
+          "type": "string",
+          "minLength": 1
+        },
+        "file": {
+          "type": "string",
+          "minLength": 1
+        },
+        "cc": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cov_pct": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "crap": {
+          "type": "number",
+          "minimum": 0
+        },
+        "baseline": {
+          "description": "null: no ledger entry, so the function is held to the cap. Otherwise its ledger score (§6.7).",
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      }
+    },
+    "mutationDetails": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mutants",
+        "killed",
+        "survived_explained",
+        "survived_unexplained",
+        "max",
+        "timed_out",
+        "timed_out_keys",
+        "dropped"
+      ],
+      "properties": {
+        "mutants": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "killed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "survived_explained": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "survived_unexplained": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "max": {
+          "const": 0
+        },
+        "timed_out": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "timed_out_keys": {
+          "description": "The survivor keys of the mutants that timed out, listed so a reviewer sees which hung (§6.4).",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "dropped": {
+          "description": "Mutants that did not compile; counted nowhere else.",
+          "type": "integer",
+          "minimum": 0
+        }
+      }
     }
   }
 }
