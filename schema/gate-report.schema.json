@@ -22,7 +22,7 @@
   ],
   "properties": {
     "protocol": {
-      "const": "0.4.1"
+      "const": "0.4.2"
     },
     "tool_version": {
       "type": "string",
@@ -641,6 +641,7 @@
             "properties": {
               "id": {
                 "enum": [
+                  "hygiene",
                   "tests",
                   "coverage",
                   "crap",
@@ -663,6 +664,57 @@
                 "const": "fail"
               }
             }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "hygiene"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "details": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/hygieneDetails"
+                  },
+                  {
+                    "$ref": "#/$defs/errorDetails"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "id",
+              "outcome"
+            ],
+            "properties": {
+              "id": {
+                "const": "hygiene"
+              },
+              "outcome": {
+                "enum": [
+                  "pass",
+                  "fail",
+                  "vacuous"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "details"
+            ]
           }
         }
       ]
@@ -920,6 +972,232 @@
           "type": "string",
           "minLength": 1,
           "pattern": "\\S"
+        }
+      }
+    },
+    "hygieneCheck": {
+      "description": "One check of gate 1 and how it came out. A check that did not pass says why. The base of every check below: each adds its own keys and allows no others.",
+      "type": "object",
+      "required": [
+        "outcome"
+      ],
+      "properties": {
+        "outcome": {
+          "enum": [
+            "pass",
+            "fail",
+            "tool-missing"
+          ]
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "if": {
+        "properties": {
+          "outcome": {
+            "enum": [
+              "fail",
+              "tool-missing"
+            ]
+          }
+        },
+        "required": [
+          "outcome"
+        ]
+      },
+      "then": {
+        "required": [
+          "message"
+        ]
+      }
+    },
+    "hygieneDetails": {
+      "description": "Gate 1 (section 3.1). Every check is present. The vulnerabilities check is time-dependent: the same commit can change verdict when the database moves.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "golangci_lint",
+        "findings",
+        "tidy",
+        "verify",
+        "toolchain",
+        "format",
+        "lint",
+        "vulnerabilities",
+        "licenses"
+      ],
+      "properties": {
+        "golangci_lint": {
+          "description": "The version of the linter that ran, or unknown.",
+          "type": "string",
+          "pattern": "^(v[0-9]+\\.[0-9]+\\.[0-9]+|unknown)$"
+        },
+        "findings": {
+          "description": "Findings in .go-tops/lint-style.json, the adopter-style pass.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "tidy": {
+          "description": "go mod tidy -diff",
+          "allOf": [
+            {
+              "$ref": "#/$defs/hygieneCheck"
+            }
+          ],
+          "unevaluatedProperties": false
+        },
+        "verify": {
+          "description": "go mod verify",
+          "allOf": [
+            {
+              "$ref": "#/$defs/hygieneCheck"
+            }
+          ],
+          "unevaluatedProperties": false
+        },
+        "toolchain": {
+          "description": "go env GOVERSION equals the toolchain go-tops.lock pins.",
+          "allOf": [
+            {
+              "$ref": "#/$defs/hygieneCheck"
+            }
+          ],
+          "unevaluatedProperties": false,
+          "properties": {
+            "go_version": {
+              "type": "string"
+            },
+            "pinned": {
+              "type": "string"
+            }
+          }
+        },
+        "format": {
+          "description": "golangci-lint fmt --diff",
+          "allOf": [
+            {
+              "$ref": "#/$defs/hygieneCheck"
+            }
+          ],
+          "unevaluatedProperties": false,
+          "properties": {
+            "files": {
+              "description": "Files the formatters would change.",
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        "lint": {
+          "description": "The one adopter-style golangci-lint run.",
+          "allOf": [
+            {
+              "$ref": "#/$defs/hygieneCheck"
+            }
+          ],
+          "unevaluatedProperties": false,
+          "properties": {
+            "findings": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "by_linter": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "integer",
+                "minimum": 1
+              }
+            }
+          }
+        },
+        "vulnerabilities": {
+          "description": "govulncheck -json, judged from the parsed findings. Present with its database timestamp whenever the scan ran.",
+          "allOf": [
+            {
+              "$ref": "#/$defs/hygieneCheck"
+            }
+          ],
+          "unevaluatedProperties": false,
+          "properties": {
+            "db_last_modified": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "time_dependent": {
+              "const": true
+            },
+            "fail_on": {
+              "enum": [
+                "reachable"
+              ]
+            },
+            "reachable": {
+              "description": "OSV IDs with a finding in a function the code calls; any makes the check fail.",
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "osv"
+                ],
+                "properties": {
+                  "osv": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "fixed_version": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "other": {
+              "description": "OSV IDs found only at package or module level; recorded, not failing.",
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "if": {
+            "properties": {
+              "outcome": {
+                "const": "pass"
+              }
+            },
+            "required": [
+              "outcome"
+            ]
+          },
+          "then": {
+            "required": [
+              "db_last_modified",
+              "time_dependent",
+              "reachable",
+              "other"
+            ]
+          }
+        },
+        "licenses": {
+          "description": "go-licenses check against the allow list.",
+          "allOf": [
+            {
+              "$ref": "#/$defs/hygieneCheck"
+            }
+          ],
+          "unevaluatedProperties": false,
+          "properties": {
+            "allowed": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
         }
       }
     }

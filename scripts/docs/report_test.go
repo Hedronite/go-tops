@@ -127,6 +127,70 @@ func TestReportLayerErrorForm(t *testing.T) {
 	}
 }
 
+// Gate 1 reports one typed object per check (section 12.3): the figures, or the
+// {error} form of a layer that measured nothing.
+func TestReportHygieneDetails(t *testing.T) {
+	raw, err := os.ReadFile(reportExample)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ex := string(raw)
+	if err := validateReport(t, ex); err != nil {
+		t.Fatalf("the example must validate: %v", err)
+	}
+	cases := []struct{ name, old, new string }{
+		{"tidy-fails-without-message", `"tidy": { "outcome": "pass" }`, `"tidy": { "outcome": "fail" }`},
+		{"tool-missing-without-message", `"verify": { "outcome": "pass" }`, `"verify": { "outcome": "tool-missing" }`},
+		{"check-outcome-skip", `"tidy": { "outcome": "pass" }`, `"tidy": { "outcome": "skip" }`},
+		{"check-unknown-key", `"tidy": { "outcome": "pass" }`, `"tidy": { "outcome": "pass", "bogus_key": 1 }`},
+		{"toolchain-takes-only-its-keys", `"go_version": "go1.27.4"`, `"go_version": "go1.27.4", "files": []`},
+		{"check-missing", "                   \"verify\": { \"outcome\": \"pass\" },\n", ""},
+		{"unknown-hygiene-key", "\"findings\": 0,\n                   \"tidy\"", "\"findings\": 0, \"bogus_key\": 1,\n                   \"tidy\""},
+		{"bad-linter-version", `"golangci_lint": "v2.15.0"`, `"golangci_lint": "2.15"`},
+		{"negative-findings", "\"findings\": 0,\n                   \"tidy\"", "\"findings\": -1,\n                   \"tidy\""},
+		{"vuln-not-time-dependent", `"time_dependent": true`, `"time_dependent": false`},
+		{"vuln-pass-without-timestamp", `"db_last_modified": "2026-11-17T09:12:44Z", `, ``},
+		{"vuln-fail-on-other", `"fail_on": "reachable"`, `"fail_on": "other"`},
+		{"vuln-reachable-needs-an-id", `"reachable": []`, `"reachable": [ {} ]`},
+		{"by-linter-zero", `"by_linter": {}`, `"by_linter": { "gocritic": 0 }`},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			doc := strings.Replace(ex, c.old, c.new, 1)
+			if doc == ex && c.old != c.new {
+				t.Fatalf("the example lacks %q", c.old)
+			}
+			if err := validateReport(t, doc); err == nil {
+				t.Fatal("the planted report validated")
+			}
+		})
+	}
+	// a failing check carries a message, and a failed layer may carry {error}
+	good := strings.Replace(ex, `"tidy": { "outcome": "pass" }`, `"tidy": { "outcome": "fail", "message": "go.mod needs tidying" }`, 1)
+	if err := validateReport(t, good); err != nil {
+		t.Errorf("a failed check with a message must validate: %v", err)
+	}
+	hyg := ex[strings.Index(ex, `"id": "hygiene"`):strings.Index(ex, `"id": "tests"`)]
+	errLayer := `"id": "hygiene", "tier": 1, "outcome": "fail",
+      "details": { "error": "cannot read the toolchain pin" }
+    },
+    {
+      `
+	if err := validateReport(t, strings.Replace(ex, hyg, errLayer, 1)); err != nil {
+		t.Errorf("hygiene fail with {error} must validate: %v", err)
+	}
+	if err := validateReport(t, strings.Replace(ex, hyg, strings.Replace(errLayer, `"outcome": "fail"`, `"outcome": "pass"`, 1), 1)); err == nil {
+		t.Error("hygiene pass with {error} validated")
+	}
+	noDetails := `"id": "hygiene", "tier": 1, "outcome": "pass"
+    },
+    {
+      `
+	if err := validateReport(t, strings.Replace(ex, hyg, noDetails, 1)); err == nil {
+		t.Error("a hygiene layer that ran with no details validated")
+	}
+}
+
 func TestReportAdvisoryRun(t *testing.T) {
 	raw, err := os.ReadFile(reportExample)
 	if err != nil {
