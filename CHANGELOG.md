@@ -18,7 +18,7 @@ All notable changes to this project are listed here. The protocol version and th
   - Lock and report hardening (QA): `binaries` needs at least one entry and `trust.note` a non-space character; when `enforced` is `true` the summary `exit_code` follows the `outcome` (`fail` is 1, `pass` and `partial` are 0).
   - Backend findings: a failed tests, coverage, CRAP or mutation layer may carry `{error}` in place of its figures; §10 says a downloaded binary resolves to `.go-tops/bin/<name>`, then `PATH`, and is checked against the lock before it runs.
   - `config/AGENTS.template.md` takes a `{PROTOCOL}` placeholder in place of the stale 0.3.0 line, and its verification paragraph follows the §3.1 gate order; §4.1 lists the placeholder.
-  - §6.1 no longer promises an inclusion allowlist for generated files: they are always excluded in this release, and an allowlist is roadmap work.
+  - §6.1 no longer promises a per-file inclusion allowlist for generated files: they are excluded unless `gates.coverage.exclude_generated` is `false`, and a per-file inclusion allowlist is roadmap work.
   - §12.1: `check` validates `go-tops.lock` against the lock schema and `lock --verify` reads the lock by it. The §19 M5 row says the kit switches its own gate to `hard` there.
   - Version 0.4.1 in the header, the §2 row, the three schema constants, the profiles and the examples.
   - Docs checker: the version check covers the lock schema; a `.lock` example is read as YAML; §10 is an example section, so an unmarked block there fails; six examples. Self-tests plant a bad lock key, a short SHA, a missing platform and the advisory report cases.
