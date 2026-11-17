@@ -24,6 +24,17 @@ import (
 // When a hash changed, the trust mode becomes `tofu`: the new values were not
 // compared with an upstream checksum file, so the lock must not claim they were.
 
+// EnvError is an update that failed on the environment: a download that did not
+// complete or hold the expected file, or a file that could not be written. An
+// invalid lock, or a pin the update was asked to raise that does not exist, is
+// not one (exit 2, not 3).
+type EnvError struct{ Err error }
+
+func (e *EnvError) Error() string { return e.Err.Error() }
+
+// Unwrap exposes the cause.
+func (e *EnvError) Unwrap() error { return e.Err }
+
 // Fetcher returns the file at url.
 type Fetcher func(url string) ([]byte, error)
 
@@ -54,7 +65,10 @@ func Update(o UpdateOptions) ([]Change, error) {
 	file := filepath.Join(o.Dir, FileName)
 	raw, err := os.ReadFile(file)
 	if err != nil {
-		return nil, err
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, err
+		}
+		return nil, &EnvError{err}
 	}
 	l, err := Parse(raw)
 	if err != nil {
@@ -75,6 +89,9 @@ func Update(o UpdateOptions) ([]Change, error) {
 	if err != nil {
 		return nil, err
 	}
+	if len(changes) == 0 && len(o.Set) == 0 {
+		return nil, nil // nothing changed and nothing was asked for: the file stays as it is
+	}
 	if len(changes) > 0 {
 		trust := mapValue(doc, "trust")
 		setScalar(mapValue(trust, "mode"), "tofu")
@@ -87,7 +104,10 @@ func Update(o UpdateOptions) ([]Change, error) {
 	if _, err := Parse(out); err != nil {
 		return nil, fmt.Errorf("the updated lock does not validate, so it was not written: %w", err)
 	}
-	return changes, writeWhole(file, out)
+	if err := writeWhole(file, out); err != nil {
+		return nil, &EnvError{err}
+	}
+	return changes, nil
 }
 
 func encode(root *yaml.Node) ([]byte, error) {
@@ -143,7 +163,7 @@ func rehashBinary(node *yaml.Node, b Binary, fetch Fetcher) ([]Change, error) {
 		url := expand(b.URL, b.Version, osName, arch)
 		body, err := fetch(url)
 		if err != nil {
-			return nil, fmt.Errorf("%s %s: %w", b.Name, platform, err)
+			return nil, &EnvError{fmt.Errorf("%s %s: %w", b.Name, platform, err)}
 		}
 		changes = record(changes, b, platform, "archive", b.SHA256[platform], hexSHA256(body), mapValue(sums, platform))
 		if b.Extract == "" {
@@ -151,7 +171,7 @@ func rehashBinary(node *yaml.Node, b Binary, fetch Fetcher) ([]Change, error) {
 		}
 		exe, err := extractFile(body, expand(b.Extract, b.Version, osName, arch))
 		if err != nil {
-			return nil, fmt.Errorf("%s %s: %w", b.Name, platform, err)
+			return nil, &EnvError{fmt.Errorf("%s %s: %w", b.Name, platform, err)}
 		}
 		changes = record(changes, b, platform, "executable", b.ExecutableSHA256[platform], hexSHA256(exe), mapValue(exes, platform))
 	}

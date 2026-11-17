@@ -246,3 +246,89 @@ func TestExtractFileIgnoresALeadingDotSlashAndRefusesNonFiles(t *testing.T) {
 		t.Error("a symlink entry is not an executable")
 	}
 }
+
+// An update with no changed hash and nothing asked for leaves the file alone,
+// byte for byte, whatever its formatting (SPEC-m1 B19).
+func TestUpdateWithNothingToChangeDoesNotRewriteTheFile(t *testing.T) {
+	dir := copyExample(t)
+	var urls []string
+	fetch := archiveFetcher(t, &urls)
+	if _, err := Update(UpdateOptions{Dir: dir, Fetch: fetch}); err != nil {
+		t.Fatal(err)
+	}
+	// a hand-formatted file: an extra blank line and trailing spaces that the YAML encoder would drop
+	mangled := strings.Replace(readLock(t, dir), "\nbinaries:", "\n\n\nbinaries:   ", 1)
+	if err := os.WriteFile(filepath.Join(dir, FileName), []byte(mangled), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	changes, err := Update(UpdateOptions{Dir: dir, Fetch: fetch})
+	if err != nil || len(changes) != 0 {
+		t.Fatalf("changes %v, err %v", changes, err)
+	}
+	if readLock(t, dir) != mangled {
+		t.Error("a no-op update rewrote the file")
+	}
+	// asking for a raise is an explicit change: the file is written
+	if _, err := Update(UpdateOptions{Dir: dir, Fetch: fetch, Set: map[string]string{"golangci-lint": "2.15.1"}}); err != nil {
+		t.Fatal(err)
+	}
+	if readLock(t, dir) == mangled {
+		t.Error("an explicit raise left the file as it was")
+	}
+}
+
+// A download or a write that fails is an environment error (exit 3); an invalid
+// lock, a missing one or a pin that is not there is not (exit 2).
+func TestUpdateFailureKinds(t *testing.T) {
+	isEnv := func(err error) bool {
+		var e *EnvError
+		return errors.As(err, &e)
+	}
+	var urls []string
+	dir := copyExample(t)
+	_, err := Update(UpdateOptions{Dir: dir, Fetch: func(string) ([]byte, error) { return nil, errors.New("connection refused") }})
+	if !isEnv(err) {
+		t.Errorf("a failed download is an environment error: %v", err)
+	}
+	_, err = Update(UpdateOptions{Dir: copyExample(t), Fetch: func(string) ([]byte, error) { return []byte("not an archive"), nil }})
+	if !isEnv(err) {
+		t.Errorf("a download that is not the expected archive is an environment error: %v", err)
+	}
+	_, err = Update(UpdateOptions{Dir: copyExample(t), Fetch: archiveFetcher(t, &urls), Set: map[string]string{"no-such-tool": "1.0.0"}})
+	if err == nil || isEnv(err) {
+		t.Errorf("an unknown pin is a configuration error: %v", err)
+	}
+	_, err = Update(UpdateOptions{Dir: t.TempDir(), Fetch: archiveFetcher(t, &urls)})
+	if err == nil || isEnv(err) {
+		t.Errorf("a missing lock is a configuration error: %v", err)
+	}
+	bad := t.TempDir()
+	if err := os.WriteFile(filepath.Join(bad, FileName), []byte("protocol: \"0.4.2\"\nbogus_key: 1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err = Update(UpdateOptions{Dir: bad, Fetch: archiveFetcher(t, &urls)})
+	if err == nil || isEnv(err) {
+		t.Errorf("an invalid lock is a configuration error: %v", err)
+	}
+}
+
+func TestUpdateWriteFailureIsAnEnvironmentError(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("a read-only directory does not stop root")
+	}
+	dir := copyExample(t)
+	if err := os.Chmod(dir, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := os.Chmod(dir, 0o755); err != nil {
+			t.Error(err)
+		}
+	})
+	var urls []string
+	_, err := Update(UpdateOptions{Dir: dir, Fetch: archiveFetcher(t, &urls)})
+	var e *EnvError
+	if !errors.As(err, &e) {
+		t.Fatalf("a file that cannot be written is an environment error: %v", err)
+	}
+}

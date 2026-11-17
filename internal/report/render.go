@@ -133,7 +133,7 @@ func RenderText(r Report) string {
 		if l.Reason != "" {
 			fmt.Fprintf(&b, "  (%s)", l.Reason)
 		}
-		if msg := layerError(l); msg != "" {
+		if msg := layerError(l); msg != "" && msg != l.Reason {
 			fmt.Fprintf(&b, "  error: %s", msg)
 		}
 		b.WriteByte('\n')

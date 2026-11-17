@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -90,13 +91,28 @@ func updateLock(env cli.Env, dir string, args []string, ci bool) int {
 	changes, err := lock.Update(lock.UpdateOptions{Dir: dir, Set: set, Fetch: fetchBody})
 	if err != nil {
 		env.Stderr.Printf("gotops lock: %v\n", err)
-		return cli.ExitUsage
+		return updateExit(err)
+	}
+	if changes == nil && len(set) == 0 {
+		env.Stdout.Printf("go-tops.lock is current: every download hashes as pinned, so the file was not rewritten\n")
+		return 0
 	}
 	for _, c := range changes {
 		env.Stdout.Printf("%s %s %s: %.12s -> %.12s\n", c.Name, c.Platform, c.Kind, c.Old, c.New)
 	}
 	env.Stdout.Printf("go-tops.lock updated (%d hashes changed); review the diff before committing\n", len(changes))
 	return 0
+}
+
+// updateExit maps an update failure to §12.2: a download or a write that failed
+// is an environment error (3); an invalid lock, a missing one or a pin the
+// update cannot raise is a configuration problem (2).
+func updateExit(err error) int {
+	var env *lock.EnvError
+	if errors.As(err, &env) {
+		return cli.ExitEnvironment
+	}
+	return cli.ExitUsage
 }
 
 // exitPolicy is the code of a refusal by policy under CI=true (§12.2).

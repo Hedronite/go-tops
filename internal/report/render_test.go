@@ -163,3 +163,21 @@ func TestRenderTextSaysSkipReasonsAndTheVulnDatabase(t *testing.T) {
 		}
 	}
 }
+
+// The {error} of a failed layer is shown unless the reason already says it:
+// no layer prints the same message twice.
+func TestRenderTextPrintsTheErrorOnlyWhenItDiffersFromTheReason(t *testing.T) {
+	r := exampleReport(t)
+	r.Layers[0] = Layer{ID: "tests", Tier: 1, Outcome: "fail", Reason: "go test printed nothing", Details: map[string]any{"error": "go test printed nothing"}}
+	text := RenderText(r)
+	if n := strings.Count(text, "go test printed nothing"); n != 1 {
+		t.Errorf("the message appears %d times, want once:\n%s", n, text)
+	}
+	if strings.Contains(text, "error: go test printed nothing") {
+		t.Errorf("an error equal to the reason is not repeated:\n%s", text)
+	}
+	r.Layers[0] = Layer{ID: "tests", Tier: 1, Outcome: "fail", Reason: "the run failed", Details: map[string]any{"error": "go test printed nothing"}}
+	if text := RenderText(r); !strings.Contains(text, "(the run failed)") || !strings.Contains(text, "error: go test printed nothing") {
+		t.Errorf("a different error is shown beside the reason:\n%s", text)
+	}
+}

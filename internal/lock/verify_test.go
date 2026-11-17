@@ -347,3 +347,41 @@ func TestPinsListToolchainBinariesAndModuleTools(t *testing.T) {
 		t.Errorf("a directory with no pins lists none, got %v", p)
 	}
 }
+
+// A tool whose build fails because go.sum disagrees is a custody mismatch (exit
+// 2); one that fails on the network or the compiler is a missing tool (exit 1).
+func TestVerifyBuildFailureKinds(t *testing.T) {
+	cases := []struct {
+		name   string
+		stderr string
+		want   Status
+	}{
+		{"checksum-mismatch", "verifying module: checksum mismatch\n\tdownloaded: h1:aaa\n\tgo.sum:     h1:bbb\n\nSECURITY ERROR", StatusMismatch},
+		{"missing-go-sum-entry", "missing go.sum entry for module providing package gotest.tools/gotestsum", StatusMismatch},
+		{"updates-needed", "go: updates to go.mod needed; to update it:\n\tgo mod tidy", StatusMismatch},
+		{"network", "dial tcp: lookup proxy.golang.org: no such host", StatusMissing},
+		{"compile", "internal/x.go:4:2: undefined: y", StatusMissing},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			dir := writeLock(t, "go1.27.4", "tool", sha(t, "x"), false)
+			place(t, dir, "tool", "x")
+			writeTools(t, dir)
+			run := func(_ string, argv ...string) (string, error) {
+				if argv[1] == "env" {
+					return "go1.27.4\n", nil
+				}
+				return "", errors.New(strings.Join(argv, " ") + ": exit status 1: " + c.stderr)
+			}
+			fs := Verify(VerifyOptions{Dir: dir, Platform: platform, Run: run, LookPath: noPath})
+			f, _ := find(fs, "govulncheck")
+			wantCode := 1
+			if c.want == StatusMismatch {
+				wantCode = 2
+			}
+			if f.Status != c.want || ExitCode(fs) != wantCode {
+				t.Fatalf("exit %d, finding %+v, want status %d and exit %d", ExitCode(fs), f, c.want, wantCode)
+			}
+		})
+	}
+}

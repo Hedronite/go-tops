@@ -252,6 +252,9 @@ func verifyModuleTools(o VerifyOptions) []Finding {
 func verifyModuleTool(o VerifyOptions, t ModuleTool, tmp string) []Finding {
 	built := filepath.Join(tmp, t.Name)
 	if _, err := o.Run(o.Dir, "go", "build", "-modfile="+toolsModfile, "-o", built, t.Package); err != nil {
+		if custodyRe.MatchString(err.Error()) {
+			return []Finding{{t.Name, StatusMismatch, "the module does not match its checksum record (" + toolsModfile + ", tools/go.sum): " + err.Error()}}
+		}
 		return []Finding{{t.Name, StatusMissing, "cannot build from " + toolsModfile + ": " + err.Error()}}
 	}
 	out := []Finding{moduleVersionFinding(o, t, built, "built from "+toolsModfile)}
@@ -267,6 +270,11 @@ func fileExists(p string) bool {
 	st, err := os.Stat(p)
 	return err == nil && !st.IsDir()
 }
+
+// custodyRe matches a build that failed because what Go found disagrees with
+// the pins: a checksum that differs, a go.sum entry that is absent, or a go.mod
+// that would need an update. Network and compile failures are not custody.
+var custodyRe = regexp.MustCompile(`(?i)checksum mismatch|missing go\.sum entry|SECURITY ERROR|go\.sum|updates to go\.mod needed`)
 
 var buildInfoRe = regexp.MustCompile(`(?m)^\s*(?:mod|dep)\s+(\S+)\s+(\S+)`)
 

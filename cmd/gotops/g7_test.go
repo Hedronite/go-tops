@@ -17,7 +17,9 @@ func runIn(t *testing.T, dir string, env []string, args ...string) (code int, st
 	t.Helper()
 	cmd := exec.CommandContext(t.Context(), os.Args[0], args...)
 	cmd.Dir = dir
-	cmd.Env = append(append(os.Environ(), asMain+"=1"), env...)
+	// CI is cleared so a test does not depend on where it runs (the kit's own CI sets
+	// CI=true, which changes what lock --update and gate do); a test that wants it sets it.
+	cmd.Env = append(append(os.Environ(), asMain+"=1", "CI="), env...)
 	var out, errb bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &errb
 	err := cmd.Run()
@@ -259,5 +261,33 @@ func TestVersionListsThePinnedTools(t *testing.T) {
 	_, bare, _ := runIn(t, t.TempDir(), nil, "version")
 	if strings.Count(bare, "\n") != 2 {
 		t.Errorf("outside a repo version prints two lines:\n%s", bare)
+	}
+}
+
+// lock --update: a download that fails (here a refused connection, so the test
+// needs no network) is an environment error, exit 3; an invalid lock is exit 2;
+// a lock whose hashes are already as pinned is left alone (SPEC-m1 B19).
+func TestLockUpdateExitCodes(t *testing.T) {
+	dir := lockRepo(t, "x")
+	data, err := os.ReadFile(filepath.Join(dir, "go-tops.lock"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	refused := strings.Replace(string(data), "https://example.com/{version}/{os}-{arch}", "https://127.0.0.1:1/{version}/{os}-{arch}", 1)
+	writeFile(t, dir, "go-tops.lock", refused)
+	code, _, stderr := runIn(t, dir, nil, "lock", "--update")
+	if code != 3 || !strings.Contains(stderr, "gotools") {
+		t.Errorf("a failed download: exit %d, %q", code, stderr)
+	}
+	after, err := os.ReadFile(filepath.Join(dir, "go-tops.lock"))
+	if err != nil || string(after) != refused {
+		t.Errorf("a failed download changed the lock: %v", err)
+	}
+	writeFile(t, dir, "go-tops.lock", "protocol: \"0.4.2\"\nbogus_key: 1\n")
+	if code, _, stderr := runIn(t, dir, nil, "lock", "--update"); code != 2 {
+		t.Errorf("an invalid lock: exit %d, %q", code, stderr)
+	}
+	if code, _, _ := runIn(t, t.TempDir(), nil, "lock", "--update"); code != 2 {
+		t.Errorf("no lock: exit %d, want 2", code)
 	}
 }
