@@ -1556,7 +1556,8 @@ Report rules:
   `vacuous`): hygiene (`golangci_lint`, a release such as `v2.15.0` or `unknown`; `findings` of the
   adopter-style lint pass; and one object per check of gate 1, `tidy`, `verify`, `toolchain`
   (`go_version`, `pinned`), `format` (`files`), `lint` (`findings`, `by_linter`),
-  `vulnerabilities` and `licenses` (`allowed`), each with an `outcome` of `pass`, `fail` or
+  `vulnerabilities` and `licenses` (`allowed`), and `depguard` only when `deps.depguard` is true,
+  each with an `outcome` of `pass`, `fail` or
   `tool-missing` and a `message` that says why when it did not pass; `vulnerabilities` also
   carries `db_last_modified`, `time_dependent: true`, `fail_on`, `reachable` (OSV IDs, with
   `fixed_version` where known) and `other`, and it can change verdict with no code change,

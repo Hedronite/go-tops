@@ -165,6 +165,26 @@ func TestReportHygieneDetails(t *testing.T) {
 			}
 		})
 	}
+	// depguard is optional: present only when deps.depguard is true (section 9)
+	withGuard := func(body string) string {
+		return strings.Replace(ex, `"licenses": {`, `"depguard": `+body+`, "licenses": {`, 1)
+	}
+	if err := validateReport(t, withGuard(`{ "outcome": "pass" }`)); err != nil {
+		t.Errorf("a passing depguard check must validate: %v", err)
+	}
+	if err := validateReport(t, withGuard(`{ "outcome": "fail", "message": "a package imports a denied module" }`)); err != nil {
+		t.Errorf("a failing depguard check with a message must validate: %v", err)
+	}
+	for name, body := range map[string]string{
+		"depguard-unknown-key":      `{ "outcome": "pass", "bogus_key": 1 }`,
+		"depguard-fail-no-message":  `{ "outcome": "fail" }`,
+		"depguard-outcome-skip":     `{ "outcome": "skip" }`,
+		"depguard-takes-no-details": `{ "outcome": "pass", "files": [] }`,
+	} {
+		if err := validateReport(t, withGuard(body)); err == nil {
+			t.Errorf("%s validated", name)
+		}
+	}
 	// a failing check carries a message, and a failed layer may carry {error}
 	good := strings.Replace(ex, `"tidy": { "outcome": "pass" }`, `"tidy": { "outcome": "fail", "message": "go.mod needs tidying" }`, 1)
 	if err := validateReport(t, good); err != nil {

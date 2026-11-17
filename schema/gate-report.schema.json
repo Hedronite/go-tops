@@ -1198,6 +1198,15 @@
               }
             }
           }
+        },
+        "depguard": {
+          "description": "The depguard check. Present only when deps.depguard is true in go-tops.yaml; not in the required list.",
+          "allOf": [
+            {
+              "$ref": "#/$defs/hygieneCheck"
+            }
+          ],
+          "unevaluatedProperties": false
         }
       }
     }
