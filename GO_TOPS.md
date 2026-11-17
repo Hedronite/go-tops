@@ -1318,6 +1318,7 @@ identical to the file and validates the file against the schema.
 <!-- go-tops:example path=config/go-tops.example.lock schema=schema/lock.schema.json -->
 ```yaml
 protocol: "0.4.1"               # must match the schema protocol constant
+bogus_key: 1
 toolchain: go1.27.4             # go env GOVERSION must equal this
 
 trust:
