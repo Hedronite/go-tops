@@ -443,7 +443,7 @@ run that gets as far as running a layer writes it, whether the run passes, fails
 none. The report names every layer in range with its outcome and every law with its verdict
 (§3.3). It counts `not-run`, `not-reached`, `vacuous` and `not-evaluated` separately and never
 folds them into `pass` or `allow`. It records the numbers §3.5 and §3.3 judge by: layers enabled
-in range and layers that ran; laws required, judged and `not-evaluated` by reason; and the laws
+in range and layers that ran; laws required, judged and `not-evaluated`, with the count by reason; and the laws
 out of range, with the run's verdict covering its range only. See §12.3.
 <!-- tops-core:end report -->
 
@@ -842,7 +842,8 @@ Written on every `gate` run. Schema file: `schema/gate-report.schema.json`.
   "layer_counts": { "enabled_in_range": 4, "ran": 4 },
   "laws": {
     "catalog": 43, "judged": 18, "required": 10, "required_not_evaluated": 0,
-    "not_evaluated": { "no_reader": 22, "config_off": 0, "input_missing": 3 },
+    "not_evaluated": 25,
+    "not_evaluated_by_reason": { "no_reader": 22, "config_off": 0, "input_missing": 3 },
     "out_of_range": [],
     "results": [
       { "id": "G-17", "verdict": "allow", "reader": "analyzer" },
@@ -856,7 +857,7 @@ Written on every `gate` run. Schema file: `schema/gate-report.schema.json`.
 Report rules: every layer in range is present with an `outcome` from §3.3, and a `skip` carries
 its `reason`. A layer that is `not-run`, `not-reached` or `tool-missing` is present and fails the
 run. A law carries a `verdict`, and a `not-evaluated` law carries its reason code; the laws counts
-(`not_evaluated` by reason, `required_not_evaluated`) are separate and are never folded into
+(`not_evaluated`, `not_evaluated_by_reason`, `required_not_evaluated`) are separate and are never folded into
 `allow`. `out_of_range` lists the laws above `max_tier`; the run's `summary` covers the range
 `max_tier` selects and no more. `layer_counts` holds the layers enabled in range and the layers that ran; the run fails
 when they differ (§3.5). A CRAP violation with `"baseline": null` is a new function; otherwise
