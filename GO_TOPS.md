@@ -556,8 +556,8 @@ function.
 <!-- tops-core:end exemptions -->
 
 **The exemption count.** The number of live exemption records, those in force on the day of the
-run, is the  ledger kind of §6.7: one count per repo. Under  that count may
-only fall, so a new exemption is a regression that §6.7 gates; under  an exemption is
+run, is the `exemptions` ledger kind of §6.7: one count per repo. Under `ratchet` that count may
+only fall, so a new exemption is a regression that §6.7 gates; under `hard` an exemption is
 bounded by its expiry. This section defines the record and §6.7 defines how the count moves.
 
 Keys (G7 folds this table into §9 and the schema, then deletes it):
