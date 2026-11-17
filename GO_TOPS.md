@@ -384,7 +384,12 @@ a function is judged on the unrounded value.
 | 8 | Three guards discounted, guard bodies untested, guard-neutral coverage | 8 | 6 | 14 / 17 | 82.4% | 6.2 | meets |
 | 9 | Row 8 with the guard bodies kept in coverage | 8 | 6 | 14 / 20 | 70.0% | 7.0 | meets, charged for what the discount forgave |
 | 10 | Row 8 with `err_guard_discount: false` | 8 | 9 | 14 / 20 | 70.0% | 11.2 | fails |
-| 11 | Dispatch table with `shape: table-switch` (§6.8) | 10 | 30 | 90 / 90 | 100.0% | 30.0 | over the cap; exempt, still printed |
+| 11 | Dispatch table with `shape: table-switch` (§6.8) | 10 | 30 | 31 / 31 | 100.0% | 30.0 | over the cap; exempt, still printed |
+
+Row 11 is a function whose body is one `switch` with 29 `case` clauses and a `default`, each
+clause a single `return`: `comp` is 1 + 29 = 30 (the `default` is not counted), and the
+statements are the `switch` itself and the 30 clause bodies, 31 in all, every one covered.
+That is the table shape §6.8 defines.
 
 Rows 8 to 10 are one function of 20 statements: 3 sit in the bodies of guards that meet §6.3, and
 none of those 3 is covered; 14 of the other 17 are covered. Row 8 leaves the 3 out of both terms
@@ -425,8 +430,11 @@ for handling errors properly, and rewards the shortcuts that avoid the guard: `x
 `must(f())`, and `panic`. The profile key `complexity.err_guard_discount` (default **`true`** in
 every class) gives weight 0 to a guard that meets all of these:
 
-- it is an `if` statement with no `else`, whose condition is exactly `err != nil`, where `err` is
-  an error value assigned by the statement just before the `if` or in its init clause;
+- it is an `if` statement with no `else`, whose condition is exactly `x != nil`, where `x` is an
+  identifier of type `error` assigned by the statement just before the `if` or in its init
+  clause. The guard matches any such identifier, not only one spelled `err`: the discount follows
+  what the code does, and a variable's name neither earns it nor loses it. Below, `err` stands
+  for that identifier;
 - its body is exactly one `return` statement, and the last result of that `return` is one of:
   that `err`; a call to `fmt.Errorf` whose format is a string literal and whose operand for one
   of its `%w` verbs is that `err`; or a call to a function listed in `complexity.wrap_functions`
