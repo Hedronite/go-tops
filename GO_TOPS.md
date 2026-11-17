@@ -155,8 +155,9 @@ files itself (`go.mod`, the config, source syntax) and needs no other layer's ou
 not judge the laws whose reader is `tool`. Those map the output of a tier 1 layer (G-12 reads
 the lint JSON, G-40 the `govulncheck` output) and are judged at tier 1. In a `--max-tier 0` run
 they are out of range: listed as `not-evaluated` with reason `input_missing` and in the report's
-out-of-range list, and they do not fail that run (§3.3). Exit 0 from `--max-tier 0` therefore means the tier 0 checks passed, not
-that the gate did.
+out-of-range list, and they do not fail that run (§3.3). A `--max-tier 0` run leaves every
+required `tool`-reader law out of range, so it ends `partial`, never `pass`: it means the tier 0
+checks passed, not that the gate did, and CI refuses it (§3.4 rule 6).
 
 ### 3.3 Verdicts
 
@@ -202,11 +203,18 @@ Everywhere else an empty result is `fail` (§3.4 rule 5).
 **Required laws.** The class profile's `laws.required` lists the laws the class cannot go
 without. A required law that is `not-evaluated` **fails the gate, whatever the reason**. A law
 outside the list that is `not-evaluated` is counted in the report and never blocks. A required
-law above `--max-tier` is out of range: the report lists it as out of range, and that run's
-verdict covers its range only (§3.2). A profile's `laws.required` holds only laws at or below the
-drop-in's maximum tier, 1, so the merge gate judges every required law and this rule binds in
+law above `--max-tier`, or left out by `--only`, is out of range: the report lists it as out of
+range and the run ends `partial` (below). A profile's `laws.required` holds only laws at or below
+the drop-in's maximum tier, 1, so the merge gate judges every required law and this rule binds in
 full there. Switching off the linter behind a required law therefore fails the gate, and a
 `not-evaluated` law is never read as `allow`.
+
+**Run outcome.** The report's summary has one outcome for the whole run: `fail` when any layer or
+law fails by the tables above; `partial` when nothing in range failed but a required law is out
+of range, because the run did not judge everything the class requires; `pass` only when the run
+judged every required law and nothing failed. A `partial` run exits 0, so a developer can run a
+narrow range, but it is never reported as a pass, its text output says `PARTIAL`, and CI refuses
+it (§3.4 rule 6, §12.2).
 
 **Severity and acknowledgement.** Each law has a severity in §8.2: **R** or **A**. An instance of
 an R law is `refuse`. An instance of an A law is `ack` when it carries a recorded
@@ -239,7 +247,9 @@ These are inherited in spirit from Rust-TOPS and stated as protocol rules:
 5. **No silent empties.** A coverage profile, CRAP report, or test result that is empty fails the
    gate. A green run that measured nothing is a defect. `vacuous` is for the empty mutation diff
    only (§3.3).
-6. **No dry gates in CI.** `--dry-run` and any "names-only" mode must be refused when `CI=true`.
+6. **No dry or partial gates in CI.** `--dry-run`, any "names-only" mode and any range that
+   leaves a required law out of range (a `--max-tier` below its reader, or an `--only` that
+   excludes it) must be refused when `CI=true`. Such a run would end `partial` (§3.3).
 7. **Required means judged.** A law the profile requires that was not judged fails the gate,
    whatever the reason (§3.3).
 
@@ -264,7 +274,8 @@ Hygiene, tests and the class layers need nothing.
   Every enabled layer in range that has not run is then `not-reached`.
 - **Fewer ran than enabled fails.** The report records the number of layers enabled in range and
   the number that ran (outcome `pass`, `fail` or `vacuous`). The gate fails when they differ.
-- `--only <layer>` runs that layer and the layers it needs. The others are out of range.
+- `--only <layer>` runs that layer and the layers it needs. The others are out of range, and a
+  required law among them makes the run `partial` (§3.3), which CI refuses.
 - There is no `--changed`. The CRAP layer covers every production function on every run, and the
   mutation layer is scoped by `--base` (§6.4).
 
@@ -660,7 +671,8 @@ none. The report names every layer in range with its outcome and every law with 
 (§3.3). It counts `not-run`, `not-reached`, `vacuous` and `not-evaluated` separately and never
 folds them into `pass` or `allow`. It records the numbers §3.5 and §3.3 judge by: layers enabled
 in range and layers that ran; laws required, judged and `not-evaluated`, with the count by reason; and the laws
-out of range, with the run's verdict covering its range only. See §12.3.
+out of range; a run that leaves a required law out of range ends `partial`, never `pass`
+(§3.3). See §12.3.
 <!-- tops-core:end report -->
 
 ### 6.7 Enforcement modes
@@ -916,16 +928,17 @@ inside the single test run of gate 2 is part of that run, not a layer.
 **Leak checks by Go version.** On Go 1.27 and later the `goroutineleak` profile in
 `runtime/pprof` is the standard-library leak check: it needs no dependency and reports goroutines
 that can never run again, but it can miss a leak that a global still reaches. On Go 1.26, the
-floor, the profile is not available and the check is `goleak` (`go.uber.org/goleak`). G-42
-accepts either form where the module's `go` directive allows it.
+floor, the profile is not available and the check is `goleak.VerifyTestMain`
+(`go.uber.org/goleak`). G-42 names both forms (§8.2) and accepts the profile only where the
+module's `go` directive is 1.27 or later.
 
 **An enabled layer with no command is `not-run` and fails the gate**, and **a mapped tool that
 is missing is `tool-missing` and fails the gate** (§3.3). A layer drops out of a run only when
 the class does not require it or `go-tops.yaml` sets it `enabled: false` with a `reason`; either
 way it is `skip`, printed with the reason. `init` writes `enabled: false` with a reason for
 layers the class does not map, rather than leaving them enabled and empty. Because Go-TOPS
-pins tools in `tools/go.mod` and `go-tops.lock` (§10), a missing tool is rare and is a
-configuration error, not an environment accident.
+pins tools in `tools/go.mod` and `go-tops.lock` (§10), a missing tool is rare. It means
+the lock or the tools file is wrong, and it is still `tool-missing`, exit 1 (§12.2).
 
 ---
 
@@ -1026,7 +1039,7 @@ counts in the catalog but is neither active nor v0.1.
 | G-08 | Tests never call `time.Sleep` to wait for concurrency; use `synctest` | R | an | ✓ |
 | G-09 | Fire-and-forget work from a request uses `context.WithoutCancel`, a bound, and a shutdown path | A | an (heuristic) | |
 | G-10 | (`tui-app`) The Bubble Tea model is mutated only inside `Update`; no model writes from goroutines or `tea.Cmd` closures | R | an | |
-| G-42 | A package with a `go` statement in non-test code has a leak check in `TestMain`: a call to `goleak.VerifyTestMain` or `goleak.VerifyNone`, or, where the module's `go` directive is 1.27 or later, a `pprof.Lookup("goroutineleak")` check after `m.Run`. The predicate is syntactic: goroutines that a called library starts are not seen | R | an | |
+| G-42 | A package with a `go` statement in non-test code has a leak check in `TestMain`. On a module whose `go` directive is below 1.27 that is a call to `goleak.VerifyTestMain(m)` in the package's `TestMain`; `goleak.VerifyNone` takes a `testing.TB`, which `TestMain` does not have, so it does not satisfy the law. On 1.27 or later it is that call, or a call to `pprof.Lookup("goroutineleak")` after the call to `m.Run`, whose profile's `Count()` decides the exit code. The predicate is syntactic: goroutines that a called library starts are not seen | R | an | |
 
 **Errors**
 
@@ -1282,7 +1295,7 @@ CI rules (carried from Rust-TOPS's lessons):
 | `init --class <c>` | Writes `go-tops.yaml`, `go-tops.lock`, `tools/go.mod` with its pins, the adopter's `.golangci.yml` (style only), the workflow, the CODEOWNERS fragment, `justfile` and the adoption record `GO-TOPS.md`. It writes no laws config: the kit embeds it. Where `AGENTS.md` exists it writes only between `<!-- go-tops:begin -->` and `<!-- go-tops:end -->`, replacing the block on a re-run and appending the pair when absent; one marker without the other is a configuration error. Where `AGENTS.md` is absent it creates the file with the block. Refuses to overwrite any other existing file without `--force`. |
 | `check` | Validates `go-tops.yaml` against the **JSON Schema** (full validation, an improvement over Rust-TOPS's partial checks), plus semantic checks: protocol id, non-empty version, module name, `crap.cap ≥ 1`, `library-core`/`concurrency-runtime` keep `unexplained_survivors_max = 0`, language floor ≤ current, `advisory` carries a dated exemption, and under `ratchet` the baseline file exists and is clean against `HEAD`. |
 | `baseline` | Writes `.go-tops/baseline.json` (§6.7), the only command that does. `--init` measures and writes the first ledger when the tests are green and every feeding layer produced non-empty output (thresholds may be red); `--init --kind survivors` records the tier 2 survivor counts the same way. A plain `baseline` only lowers entries and removes paid ones. `--accept-regression --reason <text> --owner <handle>` is the one way to raise an entry or lower `judged_laws` (the PR carries the `protocol-change` label). `--rename <old-key> <new-key>` moves one key. Refused under `advisory`, and `--init` is refused when a ledger exists. |
-| `gate` | Runs every enabled layer at or below `--max-tier` (default 1), in order, each judged (§3.5), laws last. Options: `--max-tier N`, `--fail-fast`, `--dry-run` (refused in CI), `--base <ref>`, `--json`, `--only <layer>`. A mapped tool that is missing is `tool-missing` and exits 1. Exit codes: §12.2. |
+| `gate` | Runs every enabled layer at or below `--max-tier` (default 1), in order, each judged (§3.5), laws last. Options: `--max-tier N`, `--fail-fast`, `--dry-run` (refused in CI), `--base <ref>`, `--json`, `--only <layer>` (a range that leaves a required law out ends `partial` and is refused in CI). A mapped tool that is missing is `tool-missing` and exits 1. Exit codes: §12.2. |
 | `laws [list \| run \| explain G-NN]` | Lists the catalog with readers, runs the laws layer alone, explains a law. |
 | `report [--format text \| json \| junit \| sarif]` | Renders the last report. |
 | `lock [--verify \| --update]` | Verifies or updates tool pins (§10). `--verify` reads each module tool's version with `go version -m`, compares each downloaded binary's SHA-256, and compares `go env GOVERSION` with the pinned toolchain. `--update` is a reviewed change, never run in CI. |
@@ -1298,11 +1311,11 @@ before any layer runs. A run that starts returns 0 or 1.
 
 | Code | When |
 |---|---|
-| 0 | Every layer in range is `pass`, `skip` or `vacuous`; every law is `allow`, `ack` (within the ratchet limit, §3.3) or `not-evaluated` and either not required or out of range |
+| 0 | Every layer in range is `pass`, `skip` or `vacuous`; every law is `allow`, `ack` (within the ratchet limit, §3.3) or `not-evaluated` and either not required or out of range. A run that leaves a required law out of range exits 0 and reports `partial`, not `pass` (§3.3) |
 | 1 | Any layer is `fail`, `not-run`, `not-reached` or `tool-missing`; any law is `refuse`; any required law in range is `not-evaluated`; fewer layers ran than are enabled in range; a ratchet limit (§6.7) is exceeded |
-| 2 | The configuration or its custody is invalid: a schema or semantic failure of `check` (including a missing or dirty baseline under `ratchet` and an expired `advisory`), or a tool lock mismatch |
+| 2 | The configuration or its custody is invalid: a schema or semantic failure of `check` (including a missing or dirty baseline under `ratchet` and an expired `advisory`), or a tool lock mismatch (a pinned tool present at another version or hash; an absent tool is `tool-missing`, code 1) |
 | 3 | An environment error that is not a missing tool: an unreadable repository, no C compiler where `-race` needs one |
-| 4 | Refused by policy: `--dry-run` or a names-only mode when `CI=true` |
+| 4 | Refused by policy when `CI=true`: `--dry-run`, a names-only mode, or a range that leaves a required law out of range (a `--max-tier` below its reader, or an `--only` that excludes it), which would end `partial` |
 
 A missing tool has one code: 1.
 <!-- tops-core:end exit-codes -->
