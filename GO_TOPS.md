@@ -227,7 +227,7 @@ All numbers are **proposed** defaults. Tune on real repositories before 1.0.
 | | `library-core` | `binary-cli` | `tui-app` | `binary-service` | `concurrency-runtime` |
 |---|---|---|---|---|---|
 | Statement coverage floor | 85% | 70% | 65% (model/update logic) | 75% | 90% |
-| CRAP cap | 8 (provisional) | 10 | none yet | 10 | none yet |
+| CRAP cap | 8 (provisional) | 10 | 8 (provisional) | 10 | 8 (provisional) |
 | `unexplained_survivors_max` | **0** | **0** | **0** | **0** | **0** |
 | Race detector | required | required | required | required | required (+ stress) |
 | Leak detection (`goroutineleak` profile on Go 1.27, `goleak` on 1.26) | if goroutines | if goroutines | required | required | required |
@@ -240,20 +240,23 @@ All numbers are **proposed** defaults. Tune on real repositories before 1.0.
 There is one CRAP cap per class, the same for every author: the gate is the same for humans and
 agents (§1.1). What a cap means is stated in §6.2: at full coverage it is a ceiling on
 complexity. How the cap binds under each enforcement mode, including what an existing function
-above it may do, is stated once, in §6.7. `tui-app` and `concurrency-runtime` have no launch
-profile (§5.1), so no measured cap; a repo of either class states its own cap in `go-tops.yaml`.
+above it may do, is stated once, in §6.7. No class is uncapped: `tui-app` and
+`concurrency-runtime` have no launch profile (§5.1) and no measurement, so each takes 8, the
+strictest launch cap, as a provisional value until a repo of the class is measured.
 
-**Where the caps come from.** The caps are `binary-cli` 10, `binary-service` 10 and
-`library-core` 8, and the `library-core` value is **provisional**. They come from a measurement,
-not from another protocol: `calibration/2026-11-probe/` records a syntactic probe over five
-Hedronite Go repos, 761 production functions at 88% statement coverage with every suite green.
-Under the 0.4.0 rule (error guards discounted, guard bodies left out of coverage) 192 of the
-761 functions are over a cap of 6, 136 are over 8 and 90 are over 10. Of the functions over
-10, 67 are over it by complexity alone, which no test can change. A cap of 6 would fail about
-one function in four in well-covered repos; near 10 the coverage term starts to do work (§6.2,
-worked examples). `library-core` keeps the stricter value, as it did when the caps were 4 and 6,
-and it is provisional until slice M2-5 repeats the measurement with the native implementation. A higher number is not a weaker gate by itself: the ratchet (§6.7)
-and mutation (§6.4) carry the rest.
+**Where the caps come from.** The launch caps are `binary-cli` 10, `binary-service` 10 and
+`library-core` 8. They come from a measurement, not from another protocol:
+`calibration/2026-11-probe/` records a syntactic probe over five Hedronite Go repos, 761
+production functions at 88% statement coverage with every suite green. Under the 0.4.0 rule
+(error guards discounted, guard bodies left out of coverage) 192 of the 761 functions are over a
+cap of 6, 136 are over 8 and 90 are over 10. Of the functions over 10, 67 are over it by
+complexity alone, which no test can change. A cap of 6 would fail about one function in four in
+well-covered repos; near 10 the coverage term starts to do work (§6.2, worked examples).
+`library-core` keeps the stricter value, as it did when the caps were 4 and 6. The `library-core`
+cap is **provisional** until slice M2-5 repeats the measurement with the native implementation,
+and so are the caps of `tui-app` and `concurrency-runtime`, which take 8 because nothing has
+been measured for them. A higher number is not a weaker gate by itself: the ratchet (§6.7) and
+mutation (§6.4) carry the rest.
 
 ### 5.3 Profile file shape
 
