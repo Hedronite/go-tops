@@ -135,7 +135,7 @@ func Execute(ctx context.Context, cfg Config, opts Options, d Deps) (*Run, error
 
 	results := d.Laws(laws.Input{Class: cfg.Class, MaxTier: opts.MaxTier, InRange: lawsIn, Reached: !stopped, Required: required})
 	rep := assemble(cfg, opts, git, started, d.Now(), d.ToolVersion, vulnDB, layers, results)
-	return &Run{Report: rep, ExitCode: rep.Summary.ExitCode, Text: renderText(rep, cfg)}, nil
+	return &Run{Report: rep, ExitCode: rep.Summary.ExitCode, Text: report.RenderText(rep)}, nil
 }
 
 // makePlan decides, for each layer, whether it is in range (§3.2, §3.5) and
