@@ -72,10 +72,10 @@ jobs:
           echo "${RUNNER_TEMP}/golangci-lint" >> "${GITHUB_PATH}"
       - name: golangci-lint version
         run: golangci-lint version
+      # The formatters in .golangci.yml (gofmt, gofumpt, goimports) are part of
+      # this run for every package of the root module.
       - name: golangci-lint run
         run: golangci-lint run
-      - name: golangci-lint fmt
-        run: golangci-lint fmt --diff
 
   # The language-floor leg: the module must still build and pass its tests on the
   # oldest supported toolchain. The latest 1.26 patch release is named because the
