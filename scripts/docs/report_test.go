@@ -28,8 +28,10 @@ func validateReport(t *testing.T, doc string) error {
 	return sch.Validate(inst)
 }
 
-const enforcedSummary = `"summary": { "outcome": "fail", "exit_code": 1, "failed": ["crap"], "enforced": true }`
-const advisorySummary = `"summary": { "outcome": "fail", "exit_code": 0, "failed": ["crap"], "enforced": false, "advisory_expires": "2027-03-31" }`
+const (
+	enforcedSummary = `"summary": { "outcome": "fail", "exit_code": 1, "failed": ["crap"], "enforced": true }`
+	advisorySummary = `"summary": { "outcome": "fail", "exit_code": 0, "failed": ["crap"], "enforced": false, "advisory_expires": "2027-03-31" }`
+)
 
 func TestReportExampleValidates(t *testing.T) {
 	raw, err := os.ReadFile(reportExample)
@@ -61,8 +63,12 @@ func TestReportExitCodeFollowsOutcome(t *testing.T) {
 		code    int
 		valid   bool
 	}{
-		{"fail", 1, true}, {"pass", 0, true}, {"partial", 0, true},
-		{"fail", 0, false}, {"pass", 1, false}, {"partial", 1, false},
+		{"fail", 1, true},
+		{"pass", 0, true},
+		{"partial", 0, true},
+		{"fail", 0, false},
+		{"pass", 1, false},
+		{"partial", 1, false},
 	} {
 		err := validateReport(t, with(c.outcome, c.code))
 		if c.valid && err != nil {
