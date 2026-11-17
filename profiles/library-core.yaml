@@ -1,6 +1,6 @@
 # profiles/library-core.yaml
 class: library-core
-protocol: "0.4.0"
+protocol: "0.4.1"
 gates:
   coverage: { statements_floor: 85 }
   crap: { cap: 8, complexity: { err_guard_discount: true, wrap_functions: [] } }   # provisional (§5.2)
