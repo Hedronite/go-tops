@@ -5,6 +5,8 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
+	"flag"
 	"fmt"
 	"go/ast"
 	"go/parser"
@@ -284,9 +286,46 @@ func frac(a, b int) float64 {
 	return float64(a) / float64(b)
 }
 
+// result is one repo's numbers, as printed below and as written by -json.
+type result struct {
+	Repo             string           `json:"repo"`
+	Functions        int              `json:"functions"`
+	Statements       int              `json:"statements"`
+	StmtCovPct       float64          `json:"stmt_cov_pct"`
+	Guards           int              `json:"guards"`
+	GuardBodyStmts   int              `json:"guard_body_stmts"`
+	GuardBodyCovPct  float64          `json:"guard_body_cov_pct"`
+	NoProfileBlocks  int              `json:"no_profile_blocks"`
+	CCRawSum         int              `json:"cc_raw_sum"`
+	CCDiscountedSum  int              `json:"cc_discounted_sum"`
+	GuardShareOfCCPc float64          `json:"guard_share_of_decisions_pct"`
+	Caps             []float64        `json:"caps"`
+	OverCap          map[string][]int `json:"functions_over_cap"`
+	Top              []topFn          `json:"top_by_neutral_crap"`
+}
+
+type topFn struct {
+	Name         string  `json:"name"`
+	File         string  `json:"file"`
+	Line         int     `json:"line"`
+	CCRaw        int     `json:"cc_raw"`
+	Guards       int     `json:"guards"`
+	CCDisc       int     `json:"cc_disc"`
+	TableX       int     `json:"table_x"`
+	MaxCases     int     `json:"max_cases"`
+	CovPct       float64 `json:"cov_pct"`
+	NeutralCovPc float64 `json:"neutral_cov_pct"`
+	CrapRaw      float64 `json:"crap_raw"`
+	CrapDisc     float64 `json:"crap_disc"`
+	CrapNeutral  float64 `json:"crap_neutral"`
+}
+
 func main() {
+	jsonPath := flag.String("json", "", "also write the results to this file as JSON")
+	flag.Parse()
+	var results []result
 	caps := []float64{4, 5, 6, 8, 10, 15, 30}
-	for _, repo := range os.Args[1:] {
+	for _, repo := range flag.Args() {
 		modBytes, _ := os.ReadFile(filepath.Join(repo, "go.mod"))
 		module := strings.Fields(strings.SplitN(string(modBytes), "\n", 2)[0])[1]
 		prof := readProfile(repo+".cover", module)
@@ -355,6 +394,10 @@ func main() {
 				}
 			}
 		}
+		res := result{Repo: repo, Functions: len(fns), Statements: st, StmtCovPct: 100 * frac(cv, st),
+			Guards: guards, GuardBodyStmts: gst, GuardBodyCovPct: 100 * frac(gcv, gst), NoProfileBlocks: unmeasured,
+			CCRawSum: ccSum, CCDiscountedSum: ccdSum, GuardShareOfCCPc: 100 * float64(guards) / float64(ccSum-len(fns)+1),
+			Caps: caps, OverCap: over}
 		fmt.Printf("\n=== %s  functions=%d  stmts=%d  stmt_cov=%.1f%%  guards=%d  guard_body_stmts=%d  guard_body_cov=%.1f%%  no_profile_blocks=%d\n",
 			repo, len(fns), st, 100*frac(cv, st), guards, gst, 100*frac(gcv, gst), unmeasured)
 		fmt.Printf("    sum CC raw=%d  discounted=%d  (guards are %.0f%% of all decisions)\n", ccSum, ccdSum, 100*float64(guards)/float64(ccSum-len(fns)+1))
@@ -373,9 +416,23 @@ func main() {
 				break
 			}
 			ccd := f.CC - f.Guards
+			res.Top = append(res.Top, topFn{f.Name, f.File, f.Line, f.CC, f.Guards, ccd, f.TableX, f.MaxCases,
+				100 * frac(f.Cov, f.Stmts), 100 * frac(f.Cov-f.GCov, f.Stmts-f.GStmts),
+				crap(f.CC, frac(f.Cov, f.Stmts)), crap(ccd, frac(f.Cov, f.Stmts)), crap(ccd, frac(f.Cov-f.GCov, f.Stmts-f.GStmts))})
 			fmt.Printf("      %-34s %s:%d  %d %d %d %d %d  %.0f %.0f  %.1f %.1f %.1f\n", f.Name, f.File, f.Line, f.CC, f.Guards, ccd, f.TableX, f.MaxCases,
 				100*frac(f.Cov, f.Stmts), 100*frac(f.Cov-f.GCov, f.Stmts-f.GStmts),
 				crap(f.CC, frac(f.Cov, f.Stmts)), crap(ccd, frac(f.Cov, f.Stmts)), crap(ccd, frac(f.Cov-f.GCov, f.Stmts-f.GStmts)))
+		}
+		results = append(results, res)
+	}
+	if *jsonPath != "" {
+		out, err := json.MarshalIndent(results, "", "  ")
+		if err == nil {
+			err = os.WriteFile(*jsonPath, append(out, '\n'), 0o644)
+		}
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "json:", err)
+			os.Exit(1)
 		}
 	}
 }
