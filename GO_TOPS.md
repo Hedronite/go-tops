@@ -1342,9 +1342,9 @@ Written on every `gate` run. Schema file: `schema/gate-report.schema.json`.
   ],
   "layer_counts": { "enabled_in_range": 4, "ran": 4 },
   "laws": {
-    "catalog": 43, "judged": 18, "required": 10, "required_not_evaluated": 0,
-    "not_evaluated": 25,
-    "not_evaluated_by_reason": { "no_reader": 22, "config_off": 0, "input_missing": 3 },
+    "catalog": 43, "judged": 16, "required": 10, "required_not_evaluated": 0,
+    "not_evaluated": 26,
+    "not_evaluated_by_reason": { "no_reader": 23, "config_off": 0, "input_missing": 3 },
     "out_of_range": [],
     "results": [
       { "id": "G-17", "verdict": "allow", "reader": "analyzer" },
@@ -1602,7 +1602,7 @@ output and survivor ledger are published in CI artifacts.
 | **M0** spec | This doc + schemas + profiles for five classes | Reviewed; thresholds marked for calibration |
 | **M1** CLI skeleton | `init`, `check`, `gate` (tier 0–1: hygiene, tests, coverage, `report.json`) | Self-hosting green |
 | **M2** CRAP + mutation | Native CRAP; one mutation engine adapter; survivor ledger | Gate fails on a deliberately weak test |
-| **M3** laws v0.1 | 18 laws judged (native); `law-diff` CI | Report shows "18 of 43 judged" |
+| **M3** laws v0.1 | 16 laws judged (native); `law-diff` CI | Report shows "16 of 43 judged" |
 | **M4** deep layers | Fuzz, goleak, synctest, benchstat; tier 2 jobs | Nightly workflow green on examples |
 | **M5** release tier | Reproducible build, binary `govulncheck`, API-compat | Tier 3 passes on a tagged release |
 | **M6** protocol 1.0 | Calibrated thresholds; frozen law IDs; five classes proven on real repos | Three Hedronite repos adopt it |
