@@ -318,21 +318,37 @@ All numbers are **proposed** defaults. Tune on real repositories before 1.0.
 
 | | `library-core` | `binary-cli` | `tui-app` | `binary-service` | `concurrency-runtime` |
 |---|---|---|---|---|---|
-| Line coverage floor | 85% | 70% | 65% (model/update logic) | 75% | 90% |
-| CRAP cap | 4 | 6 | 6 | 5 | 4 |
-| `unexplained_survivors_max` | **0** | 2 | 2 | 1 | **0** |
+| Statement coverage floor | 85% | 70% | 65% (model/update logic) | 75% | 90% |
+| CRAP cap | 8 (provisional) | 10 | 8 (provisional) | 10 | 8 (provisional) |
+| `unexplained_survivors_max` | **0** | **0** | **0** | **0** | **0** |
 | Race detector | required | required | required | required | required (+ stress) |
-| Leak detection (`goleak`) | if goroutines | if goroutines | required | required | required |
+| Leak detection (`goroutineleak` profile on Go 1.27, `goleak` on 1.26) | if goroutines | if goroutines | required | required | required |
 | `synctest` for time/concurrency | if applicable | if applicable | if timers | if timers | required |
 | Fuzz targets | for exported decoders | for flag/arg parsers | for input parsing | for request decoders | for queue/codec boundaries |
 | Benchmark regression gate | tier 2 | no | no | tier 2 | tier 2 |
 | API-compat check | tier 3 | no | no | no | tier 3 |
 | Extra laws | G-21–G-24 | G-41 | **G-10** | G-19, G-20 | G-01–G-09 |
 
-There is one CRAP cap per class. It does not depend on who wrote the code: the gate is the same
-for humans and agents (§1.1). Under `ratchet` (§6.7) the cap applies to new functions; existing
-functions must not get worse. The `binary-cli` cap of 6 matches Rust-TOPS's `binary-cli` human
-cap; the other values are new.
+There is one CRAP cap per class, the same for every author: the gate is the same for humans and
+agents (§1.1). What a cap means is stated in §6.2: at full coverage it is a ceiling on
+complexity. How the cap binds under each enforcement mode, including what an existing function
+above it may do, is stated once, in §6.7. No class is uncapped: `tui-app` and
+`concurrency-runtime` have no launch profile (§5.1) and no measurement, so each takes 8, the
+strictest launch cap, as a provisional value until a repo of the class is measured.
+
+**Where the caps come from.** The launch caps are `binary-cli` 10, `binary-service` 10 and
+`library-core` 8. They come from a measurement, not from another protocol:
+`calibration/2026-11-probe/` records a syntactic probe over five Hedronite Go repos, 761
+production functions at 88% statement coverage with every suite green. Under the 0.4.0 rule
+(error guards discounted, guard bodies left out of coverage) 192 of the 761 functions are over a
+cap of 6, 136 are over 8 and 90 are over 10. Of the functions over 10, 67 are over it by
+complexity alone, which no test can change. A cap of 6 would fail about one function in four in
+well-covered repos; near 10 the coverage term starts to do work (§6.2, worked examples).
+`library-core` keeps the stricter value, as it did when the caps were 4 and 6. The `library-core`
+cap is **provisional** until slice M2-5 repeats the measurement with the native implementation,
+and so are the caps of `tui-app` and `concurrency-runtime`, which take 8 because nothing has
+been measured for them. A higher number is not a weaker gate by itself: the ratchet (§6.7) and
+mutation (§6.4) carry the rest.
 
 ### 5.3 Profile file shape
 
@@ -369,20 +385,77 @@ laws:
 
 ### 6.2 CRAP
 
-```
+```text
 CRAP(f) = comp(f)² × (1 − cov(f))³ + comp(f)          cov(f) ∈ [0,1]
 ```
 
-- `comp(f)` = cyclomatic complexity of function `f` computed from the AST.
-- `cov(f)` = statement coverage of `f` from the merged profile.
-- **Cap:** one per class (§5.2), the same for every author. Drop-in default: **6.0**. There is
-  no authorship marking: a marker that changes the cap is a marker an agent can choose.
-- **Enforcement:** under `hard`, every function in scope meets the cap. Under `ratchet`, new
-  functions meet the cap and no existing function's score rises above its baseline (§6.7).
-- **Scope:** the gate evaluates functions touched in the diff. A `--all` mode reports the whole
-  module and is used in tier 2 for trend tracking.
+- `comp(f)` = cyclomatic complexity of function `f` computed from the AST (§6.3).
+- `cov(f)` = statement coverage of `f` from the merged profile, guard-neutral (§6.3): the sum of
+  `NumStmt` over the profile blocks inside `f` whose count is above zero, divided by the sum of
+  `NumStmt` over all blocks inside `f`, closures included. A function that has statements and no
+  block in the profile has `cov(f) = 0`. A function with no statements left after §6.3 has
+  `cov(f) = 1`. A profile that holds no block of any production file fails the layer (§3.4,
+  rule 5).
+- **Cap:** one per class (§5.2), the same for every author. There is no authorship marking: a
+  marker that changes the cap is a marker an agent can choose. A function meets the cap when
+  `CRAP(f) ≤ cap`, computed in `float64` and compared unrounded.
+- **What the cap means.** At full coverage `cov(f) = 1` and `CRAP(f) = comp(f)`, so the cap is a
+  ceiling on complexity. A function whose `comp(f)` is above the cap fails at every coverage
+  level. A function whose `comp(f)` equals the cap passes only at `cov(f) = 1`. A function below
+  the cap passes once its coverage is high enough, and needs less the further below the cap it
+  sits. Coverage lowers the score of a function inside the ceiling; it never lifts one over it.
+- **Scope:** every production function of the module's own packages, on every run, at every tier
+  that runs the layer. Excluded: `_test.go` files, generated files (as in §6.1: `*.gen.go` and
+  files with a `// Code generated ... DO NOT EDIT.` header) and `testdata/` directories. Nothing
+  else is excluded; a function leaves the cap check only through an exemption (§6.8). There is no
+  diff scope for CRAP: a function's score also moves when a test is deleted, and the function
+  itself does not change. The module-wide report is the output of every run, not a separate mode.
+- **Enforcement** is set by `enforce` and stated once, in §6.7. This section defines the score,
+  the cap and the scope; it does not say which functions may exceed the cap under which mode.
 - **Implementation:** native (not shelled out), so the formula, counting rule, and thresholds are
   protocol-controlled. Existing tools (`crap4go`, `gaze`) are useful cross-checks **[verify]**.
+
+**Worked examples.** Every value is `CRAP = comp² × (1 − cov)³ + comp`, shown to one decimal;
+a function is judged on the unrounded value.
+
+| # | Case | Cap | `comp(f)` | Covered / total statements | `cov(f)` | `CRAP(f)` | Result |
+|---|---|---|---|---|---|---|---|
+| 1 | Complex and half-tested | 10 | 14 | 52 / 100 | 52.0% | 35.7 | fails |
+| 2 | Under the cap, tested enough | 10 | 8 | 70 / 100 | 70.0% | 9.7 | meets |
+| 3 | The same function, fewer tests | 10 | 8 | 68 / 100 | 68.0% | 10.1 | fails |
+| 4 | At the cap, fully covered | 10 | 10 | 40 / 40 | 100.0% | 10.0 | meets |
+| 5 | Above the cap, fully covered | 10 | 11 | 44 / 44 | 100.0% | 11.0 | fails at every coverage |
+| 6 | `library-core`, at the cap, fully covered | 8 | 8 | 40 / 40 | 100.0% | 8.0 | meets |
+| 7 | The same function, one statement short | 8 | 8 | 99 / 100 | 99.0% | 8.0 (8.000064) | fails: compared unrounded |
+| 8 | Three guards discounted, guard bodies untested, guard-neutral coverage | 8 | 6 | 14 / 17 | 82.4% | 6.2 | meets |
+| 9 | Row 8 with the guard bodies kept in coverage | 8 | 6 | 14 / 20 | 70.0% | 7.0 | meets, charged for what the discount forgave |
+| 10 | Row 8 with `err_guard_discount: false` | 8 | 9 | 14 / 20 | 70.0% | 11.2 | fails |
+| 11 | Dispatch table with `shape: table-switch` (§6.8) | 10 | 30 | 90 / 90 | 100.0% | 30.0 | over the cap; exempt, still printed |
+
+Rows 8 to 10 are one function of 20 statements: 3 sit in the bodies of guards that meet §6.3, and
+none of those 3 is covered; 14 of the other 17 are covered. Row 8 leaves the 3 out of both terms
+(14 of 17). Row 9 shows what leaving them in would charge (14 of 20). Row 10 turns the discount
+off, so the function has comp 9 and its guard bodies count.
+
+The coverage a function needs follows from the formula: it meets a cap when
+`cov(f) ≥ 1 − ((cap − comp(f)) / comp(f)²)^(1/3)`. Rounded up to 0.1%:
+
+| Cap | `comp(f)` | Minimum `cov(f)` |
+|---|---|---|
+| 10 | 5 | 41.6% |
+| 10 | 8 | 68.6% |
+| 10 | 9 | 76.9% |
+| 10 | 10 | 100.0% |
+| 8 | 5 | 50.7% |
+| 8 | 6 | 61.9% |
+| 8 | 7 | 72.7% |
+| 8 | 8 | 100.0% |
+
+Keys (G7 folds this table into §9 and the schema, then deletes it):
+
+| Key | Change |
+|---|---|
+| `gates.crap.scope` | **Removed.** CRAP has no diff scope. A config that still sets it fails `check` |
 
 ### 6.3 Complexity counting rule
 
@@ -398,34 +471,127 @@ for handling errors properly, and rewards the shortcuts that avoid the guard: `x
 `must(f())`, and `panic`. The profile key `complexity.err_guard_discount` (default **`true`** in
 every class) gives weight 0 to a guard that meets all of these:
 
-- the condition is `err != nil` (or `!errors.Is`/`errors.As` on the same error) for an error
-  returned by the statement just before it or in its init clause;
-- the body is a single `return` whose error result is that error, or that error wrapped with
-  `fmt.Errorf("…%w…", err)` or a constructor that wraps it;
-- there is no `else`.
+- it is an `if` statement with no `else`, whose condition is exactly `err != nil`, where `err` is
+  an error value assigned by the statement just before the `if` or in its init clause;
+- its body is exactly one `return` statement, and the last result of that `return` is one of:
+  that `err`; a call to `fmt.Errorf` whose format is a string literal and whose operand for one
+  of its `%w` verbs is that `err`; or a call to a function listed in `complexity.wrap_functions`
+  with that `err` as an argument. A bare `return` does not qualify.
 
-A guard that logs and returns `nil`, swallows the error, or does other work is counted normally
-(and `nilerr` flags the swallowing case).
+A guard that logs, swallows the error, does other work, or classifies the error is counted
+normally (and `nilerr` flags the swallowing case). A condition that tests `errors.Is`,
+`errors.As` or a comparison with a sentinel is a decision and counts. A `fmt.Errorf` that formats
+`err` with `%v`, or with no verb, does not wrap it and counts.
+
+**Wrap functions.** `complexity.wrap_functions` lists the functions a repo calls instead of
+`fmt.Errorf` to wrap an error. An entry is `import/path.Name`, matched against the import path of
+the called function's package, as the file imports it, and its name. The default is the empty
+list. List only a function whose result wraps its error argument, so that `errors.Is` finds that
+argument through the result. The list sits in `go-tops.yaml`, which CODEOWNERS covers (§11).
+
+**Guard-neutral coverage.** The discount applies to both terms of CRAP. The statements inside the
+body of a discounted guard leave the numerator and the denominator of `cov(f)`: the profile
+blocks that lie within the guard's body are not counted for `f`. A function is not charged in
+coverage for what it was forgiven in complexity. Guard bodies are the least-tested statements in
+real Go, and without this rule the untested error return the discount forgives in `comp(f)` is
+charged again in `cov(f)`. When `err_guard_discount` is `false` no guard is discounted: its
+decision counts in `comp(f)` and its body counts in `cov(f)`.
 
 The discount only makes sense if discarding the error is caught. The drop-in `.golangci.yml`
-therefore sets errcheck `check-blank: true` and `check-type-assertions: true`, and G-12 reports
-`not-evaluated` if those settings are off (§8.1, readers).
+therefore sets errcheck `check-blank: true` and `check-type-assertions: true`, and G-12 judges
+those settings (§8.1).
 
 Keep the key explicit in every config so scores are comparable across repos.
 
+Keys (G7 folds this table into §9 and the schema, then deletes it):
+
+| Key | Type | Default | Change |
+|---|---|---|---|
+| `gates.crap.complexity.err_guard_discount` | bool | `true` | Existing. Now also removes the guard's body from `cov(f)` |
+| `gates.crap.complexity.wrap_functions` | list of strings | `[]` | New. Wrap functions that count as `fmt.Errorf` with `%w` for the guard rule |
+
 ### 6.4 Mutation
 
-- Engine: pluggable adapter (`gremlins`, a `go-mutesting` fork, `mutest`, or an in-house
-  `-overlay` runner) **[verify each]**. The adapter must support restricting mutation to changed
-  lines or files; if the chosen engine cannot, Go-TOPS filters to changed files and post-filters
-  survivors to changed lines.
-- Diff base: `origin/main...HEAD` (three-dot, merge-base semantics), overridable with `--base`.
-- **Survivor accounting:** each surviving mutant is either killed by a new test or listed in
-  `.go-tops/survivors.yaml` with `reason`, `owner`, and an optional `expires` date. Only
-  *unexplained* survivors count against `unexplained_survivors_max`.
-- `library-core` and `concurrency-runtime` require **0** unexplained survivors, mirroring
-  Rust-TOPS's `library-core` rule.
-- Tier 2 runs the whole module on a schedule; engine run time can reach hours on large modules.
+- **Engine:** pluggable adapter. The starting engine is **gremlins v0.6.0**
+  (`github.com/go-gremlins/gremlins`); a `go install` build of it reports its version as `dev`,
+  so the pin is read with `go version -m` (§10). It exits 0 when mutants survive unless a
+  threshold flag is set, so the adapter judges the parsed statuses, never the exit code. Other
+  engines (`go-mutesting` forks, `mutest`, an in-house `-overlay` runner) are admitted only
+  through an adapter that maps their statuses to the classes below and meets every rule in this
+  section; none is pinned in 0.4.0. Engine output that is missing or does not parse is `fail`
+  (§3.4, rule 5). The adapter must support restricting mutation to changed lines or files; if the
+  chosen engine cannot, Go-TOPS filters to changed files and post-filters survivors to changed
+  lines.
+- **Diff base:** the merge base of `origin/main` and `HEAD` (`origin/main...HEAD`, three-dot),
+  overridable with `--base`. The diff is written to `.go-tops/mutation.diff` as
+  `git diff --unified=0 <base>...HEAD`, minus the files §6.2 excludes (`_test.go`, generated
+  files, `testdata/`) and every non-Go file.
+- **Diff outcomes:**
+  - No merge base, or a shallow clone (`git rev-parse --is-shallow-repository` prints `true`):
+    the layer is `fail`, and its message names the missing history and `fetch-depth: 0` (§11).
+  - No changed line in a production Go file: the layer is `vacuous`. It prints that it had
+    nothing to look at and counts for nothing: not as a pass, not as a failure.
+  - A non-empty diff that yields no mutants is a `pass` with `0 mutants` printed. An empty diff
+    is the only vacuous case.
+- **Statuses:** every mutant the engine reports is mapped; a status that is not in this table is
+  `fail`, never dropped.
+
+  | Engine status (gremlins) | Class | Effect |
+  |---|---|---|
+  | `KILLED` | killed | Counted as killed |
+  | `LIVED` | survivor | Unexplained unless explained below |
+  | `NOT COVERED` | survivor | As `LIVED`. No test reaches the changed code, which is what "changed code without a test" means |
+  | `TIMED OUT` | killed, listed | Counted as killed. Its key is listed in the report, so a reviewer sees which mutants hung instead of failing a test |
+  | `NOT VIABLE` | dropped | Does not compile; counted nowhere. The report prints the total dropped |
+
+- **Survivor key:** file, enclosing function, mutator, and a hash of the normalized mutated line.
+  - `file`: module-relative, slash-separated.
+  - `function`: the enclosing function, by receiver type and name as in §6.7; a function literal
+    belongs to its parent function (§6.3).
+  - `mutator`: the engine's mutator name, such as `CONDITIONALS_BOUNDARY`.
+  - `line_hash`: SHA-256, in hex, of the mutated line: the source line with the mutant applied at
+    the position the engine reports, tokenized with `go/scanner`, comments and automatic
+    semicolons dropped, tokens joined by one space. The key holds no line number, because a line number changes on the next edit.
+    Two mutants of one mutator on one line differ in the mutated line, so they have different
+    keys.
+- **Survivor accounting:** a survivor is *explained* when an unexpired entry in
+  `.go-tops/survivors.yaml` has its key, or an unexpired `mutation` exemption (§6.8) covers its
+  file or function. Only *unexplained* survivors count against `unexplained_survivors_max`. An
+  entry has these fields, all required:
+
+  ```yaml
+  survivors:
+    - file: internal/limits/parse.go
+      function: parseLimit
+      mutator: CONDITIONALS_BOUNDARY
+      line_hash: "<sha-256 of the mutated line>"
+      reason: equivalent at the boundary, the next line rejects the same input
+      owner: platform
+      expires: "2027-01-15"
+  ```
+
+  `reason` has at least three words and says why the mutant is accepted: why no test can tell it
+  from the original, or which test is owed. `expires` is a `YYYY-MM-DD` date. An entry with a
+  missing field, an unknown field, a `reason` of fewer than three words, or an `expires` that is
+  not a real day, or that is today (UTC) or earlier, explains nothing and fails the gate at tier
+  0, named in the output. An entry that matches no survivor in this run is not an error: a
+  diff-scoped run cannot see survivors outside the diff.
+- **Allowance:** `unexplained_survivors_max` is **`0` in every class**. Any unexplained survivor
+  fails the layer. The key stays in `go-tops.yaml` so the report states the limit; `0` is its only
+  valid value.
+- Tier 2 runs the whole module on a schedule, with the same statuses and key; engine run time can
+  reach hours on large modules. The unexplained survivors of that run are held by the `survivors`
+  ledger kind of §6.7: one count per file, and a count above the ledger's value fails. A legacy
+  survivor is debt that may only fall; a new survivor, or one in a file the ledger does not list,
+  fails (an absent entry means 0). The diff-scoped run at tier 1 has no such allowance:
+  `unexplained_survivors_max` stays 0.
+
+Keys (G7 folds this table into §9 and the schema, then deletes it):
+
+| Key | Change |
+|---|---|
+| `gates.mutation.unexplained_survivors_max` | Existing. The only valid value is `0`, in every class |
+| `gates.mutation.ledger` | Existing (`.go-tops/survivors.yaml`). Entry fields are now the record above, `expires` required |
 
 ### 6.5 Law verdicts
 
@@ -449,29 +615,222 @@ out of range, with the run's verdict covering its range only. See §12.3.
 
 ### 6.7 Enforcement modes
 
+<!-- tops-core:begin enforcement -->
 The top-level key `enforce` sets how floors and caps are applied. Adopters default to
 `ratchet`. Go-TOPS runs `hard` on itself.
 
 | Mode | What fails |
 |---|---|
-| `hard` | Any function in scope above the CRAP cap; coverage below the floor; any lint finding |
-| `ratchet` | A new function above the cap; an existing function whose CRAP rises above its baseline; a package whose coverage falls below its baseline (or below the floor, once it has reached it); a per-linter, per-file finding count that rises; an `Ack` count that rises |
-| `advisory` | Nothing. Needs a dated exemption in `go-tops.yaml`; the report prints the run as not enforced |
+| `hard` | A production function above the CRAP cap; a package below its coverage floor; any lint finding; any law verdict `refuse`; an unexplained mutation survivor |
+| `ratchet` | The `hard` rules, except where the ledger below holds an entry for the thing that failed: that entry's limit applies instead. Two further limits exist only here: suppression counts and the exemption count |
+| `advisory` | Nothing. Needs the `advisory` key (Keys, below); the report prints the run as not enforced. The baseline cannot be written |
 
-Baseline rules:
+**CRAP.** A function at or under the cap may change up to the cap. A function over the cap
+may not exceed its baseline score plus 0.01 (a rise of 0.01 or less is noise). A function absent
+from the baseline is new and meets the cap. So a function scoring 2 under a cap of 10 may rise to
+10, and one scoring 14.2 under a cap of 10 may not pass 14.21. Under `ratchet` no function within
+the cap is held stricter than under `hard`.
 
-- The baseline is `.go-tops/baseline.json`: CRAP per function, coverage per package, finding
-  counts per linter per file, and the ack count.
-- Only `gotops baseline` writes it, and only after a run in which every layer that feeds it
-  passed. The file is tracked and must be clean against `HEAD`.
-- Under `ratchet`, a missing baseline fails. Deleting the file is not a reset.
-- A function is identified by package path, receiver and name. A renamed function is a new
-  function. A new file starts at 0 findings; a deleted file's allowance does not move to
-  another file.
-- Lint counts are per linter, per file, not per module, so removing a finding in one file does
-  not pay for adding one in another.
-- Legacy findings stay in the baseline file. They are not wrapped in `//nolint` or
-  `//tops:ack` to zero the count.
+**The baseline is a debt ledger.** `.go-tops/baseline.json` lists only what is over the line
+today. Everything the ledger does not list is held to its `hard` rule, and an empty ledger means
+`hard`, with the suppression and exemption counts held at zero. That is stricter than `hard`,
+and it is allowed: a new suppression or exemption is a regression that needs the path below. The file is tracked, written
+with keys sorted and one entry per line so that parallel branches merge without conflict, and
+must be clean against `HEAD`.
+
+| Ledger kind | Entry key | Entry value | The ratchet checks |
+|---|---|---|---|
+| `functions` | function identity (below) | CRAP score when written | score ≤ value + 0.01. Only a function over the cap has an entry |
+| `packages` | package import path | statement coverage % and uncovered-statement count | A package under the floor fails only when its percentage falls **and** its uncovered-statement count rises. Deleting tested code can lower the percentage without raising the uncovered count, so it does not fail. A package at or over the floor, or absent, is held to the floor |
+| `findings` | linter, file | count of that linter's findings that no law maps | count ≤ value |
+| `laws` | law ID, file | count of findings that make that law `refuse` | count ≤ value; `refuse` then means "no new instance" under `ratchet` and "none" under `hard` |
+| `suppressions` | linter and file for `//nolint`; law ID and file for `//tops:ack` comments and `.go-tops/acks.yaml` entries | count of such comments and entries | count ≤ value; absent means 0. No `hard` form: under `hard` a suppression needs only its reason (§13 rule 6) |
+| `exemptions` | none (one count per repo) | number of live exemption records (§6.8) | count ≤ value; absent means 0. No `hard` form: under `hard` an exemption is bounded by its expiry  |
+| `survivors` | file | count of unexplained survivors from the tier 2 whole-module mutation run (§6.4) | count ≤ value; absent means 0, so a legacy survivor is debt and a new one fails  |
+
+A finding is counted once: a finding that a law maps counts under `laws`, not under `findings`. A
+count is by file, never by module, so removing a finding in one file does not pay for adding one
+in another. A new file starts at 0; a deleted file's allowance does not move to another file.
+
+Beside the ledger the file holds `judged_laws`, the number of laws the run judged (applicable to
+the class, verdict other than `not-evaluated`). It is a floor, not a debt: the count may not fall
+between baseline and run, so a configuration edit cannot quietly shrink what is judged.
+
+**Writing the baseline.** Only `gotops baseline` writes the file (§12.1).
+
+- `baseline --init` writes the first ledger. It runs the layers that feed the ledger (tests,
+  coverage, CRAP, hygiene, the laws) as `gate` would and judges none of them: the ledger records
+  what was **measured**, not what **passed**. It writes when the tests are green and every
+  feeding layer produced non-empty output (a non-empty coverage profile, a CRAP report with at
+  least one production function, saved lint output). Red thresholds do not stop it; red tests or
+  an empty output do. It refuses when a ledger exists and under `advisory`. A repo with nothing
+  over the line gets a valid file with an empty ledger.
+- A ledger kind fed only by tier 2 (`survivors`) is recorded the same way, from a tier 2 run:
+  `baseline --init --kind survivors`. Until it is recorded, that kind is absent and holds at its
+  `hard` form.
+- Every later write only lowers. It lowers a value, removes an entry that is no longer over
+  the line, and raises `judged_laws`. It never adds an entry and never raises one.
+- Raising an entry, adding one, or lowering `judged_laws` needs
+  `baseline --accept-regression --reason <text> --owner <handle>` and a PR that carries the
+  `protocol-change` label. The flag records the change under `regressions` in the file. `gate`
+  compares the file with its copy at the diff base (§6.4) and fails a raised or added entry, or
+  a lowered `judged_laws`, that has no matching `regressions` record. A record is removed by the
+  write that pays the entry back to its earlier value.
+- **First ledger.** When the diff base has no `.go-tops/baseline.json`, the file is a first
+  ledger, and there is no copy to compare it with. `gate` accepts it without `regressions`
+  records only if every entry equals what this run measures (a `functions` value within 0.01;
+  counts, percentages and uncovered-statement counts exactly), no entry exists for anything the
+  run measures within the line, and `judged_laws` equals the run's count. That is what
+  `baseline --init` writes on that commit, so it is the only first ledger that passes. Any entry
+  above its measured value fails, so a hand-written ledger cannot carry extra allowance. A kind
+  that the base copy lacks (the tier 2 `survivors` kind, recorded later) is a first ledger for
+  that kind and is checked the same way against the run that recorded it.
+- Under `ratchet` a missing baseline fails; deleting the file is not a reset.
+- Legacy findings stay in the ledger. They are not wrapped in `//nolint` or `//tops:ack` to zero
+  the count: the `suppressions` limit holds that route shut.
+<!-- tops-core:end enforcement -->
+
+**Function identity.** A function is identified by import path, receiver type (if any)
+and name. Where that key occurs more than once in a package (several `init` functions, or
+`foo_linux.go` and `foo_darwin.go` twins; every `.go` file in the directory counts, whatever its
+build tags), the key adds the file's name, and where it still repeats within one file, its
+position in source order (`init#2`). A function moved to another file keeps its entry when
+`git diff -M` against the diff base pairs the two files and the receiver and name are unchanged.
+For any other rename or move, `baseline --rename <old-key> <new-key>` rewrites one key (function
+or package) and never changes a value; it refuses unless the old key has vanished from the code and
+the new key exists. The same command moves a key that gained a file name when a twin of the
+function was added. The result is reviewed as part of the PR. An unpaired rename without that
+command is a new function, and a new function meets the cap.
+
+**Keys.** The rules above add one configuration key. `enforce` and `baseline` are in §9 already.
+
+| Key | Meaning |
+|---|---|
+| `advisory.reason`, `advisory.owner`, `advisory.expires` | Required when `enforce: advisory` and invalid otherwise. `expires` is a date; `check` fails once it has passed. |
+
+#### First adoption of a legacy repo
+
+The repo has 100 production functions, 8 of them over the `binary-cli` cap of 10 under the 0.4.0
+rule, which counts coverage guard-neutral (vigil's counts in `calibration/2026-11-probe/`), and
+no baseline. The ledger numbers
+below other than those two are illustrative. Every step passes by the rule named beside it; the
+measuring run is `baseline --init` itself, so no step is a red gate.
+
+1. `gotops init --class binary-cli` writes `go-tops.yaml` with `enforce: ratchet`, and no
+   baseline (§12.1). `init` runs no gate, so there is nothing to fail.
+2. `gotops baseline --init` runs the feeding layers and judges none. Rule: measured, not
+   passed. Tests are green and the profile and the CRAP report are non-empty, so it writes
+   a ledger with 8 `functions` entries (each at its current score), no `packages` entry (every
+   package meets its floor), and whatever
+   `findings`, `laws`, `suppressions` and `exemptions` counts the code has today, for example 3
+   `//nolint` in two files. `judged_laws` is the run's count.
+3. The ledger and `go-tops.yaml` are committed on the adoption branch. Rule: the baseline is
+   tracked and clean against `HEAD`. The diff base, `origin/main`, has no baseline, so the
+   ledger is a first ledger (§6.7).
+4. `gotops check` passes: the file exists and is clean (§12.1).
+5. `gotops gate` passes. Rule: first ledger. Each entry equals this run's measurement, so no
+   `regressions` record is needed. Each of the 8 functions equals its entry (limit: entry +
+   0.01); the other 92 were at or under 10 when measured and are unchanged, so they meet the
+   cap; every count equals its entry; `judged_laws` equals its recorded value; no tier 2 kind
+   is judged at tier 1. This is the first green run, with no source edit.
+6. A later PR edits one of the 8 functions, which scores 21.0, to 21.005. Rule: a rise of 0.01
+   or less is noise. An edit to 22.0 fails by the same rule; that refusal is the rule working on
+   new debt, not an adoption step.
+7. A PR refactors one of the 8 down to 8. `gate` passes (the score fell), and
+   `gotops baseline` removes its entry (writes only lower). From then on it is held to the cap
+   of 10, like the other 92.
+8. A PR deletes tested code. In a package at or over its floor the PR passes while the package
+   stays at or over it. In a package the ledger lists as under its floor, the percentage may
+   fall but the uncovered-statement count does not rise, so the package does not fail.
+9. Before the nightly tier 2 job is enabled, one tier 2 run records the legacy survivors:
+   `gotops baseline --init --kind survivors`. The nightly then fails only on a survivor
+   that is new or in a file whose count rose.
+10. CI runs `gotops gate` (§11) on the adoption PR. The base still has no baseline, so the
+    first-ledger rule applies again and the run is green on step 5's commit.
+
+### 6.8 Exemptions
+
+<!-- tops-core:begin exemptions -->
+
+Every skip is data. An exemption takes functions, or mutants, out of one layer's check, in the
+open and for a limited time. It is the only way to do so: a cap, a threshold or a survivor
+allowance is never changed for one function.
+
+```yaml
+exemptions:
+  - path: internal/wire/dispatch.go
+    symbol: Server.handleOp
+    layer: crap
+    shape: table-switch
+    reason: opcode dispatch, every arm is one call; stays a table or answers to the cap
+    owner: platform
+    expires: "2027-03-01"
+  - path: internal/legacy/**
+    layer: mutation
+    reason: frozen vendor port, replaced by the new codec in the January release
+    owner: protocol
+    expires: "2027-01-31"
+```
+
+Each entry has these fields:
+
+| Field | Required | Meaning |
+|---|---|---|
+| `path` | yes | Glob relative to the module root, slash-separated. `*` stays inside one path element; `**` crosses elements |
+| `symbol` | no | One function in the files `path` matches: `Name` for a package-level function, `Type.Name` for a method (no `*`, no parentheses, no type parameters). Without `symbol` the entry covers every function in those files |
+| `layer` | yes | `crap` or `mutation`. Any other value is malformed |
+| `shape` | no | `table-switch`. Only with `layer: crap` and a `symbol` |
+| `reason` | yes | At least three words, saying why the layer cannot judge this code |
+| `owner` | yes | A non-empty person or team handle |
+| `expires` | yes | A quoted `YYYY-MM-DD` date, UTC |
+
+**Expiry is required.** An entry is in force while today (UTC) is before `expires`. On that date
+and after, or when `expires` is missing or not a real calendar day, the entry exempts nothing
+and the gate fails with the entry named. There is no permanent exemption.
+
+**Malformed fails.** An entry with an unknown field, a missing required field, a `layer` outside
+the table, a `shape` without `layer: crap` and `symbol`, a `symbol` without `path`, a `reason`
+of fewer than three words, or a `path` that is not a valid glob exempts nothing and fails the
+gate. Exemptions are read at tier 0 (§3.2), before any layer runs, so form and expiry fail first.
+The layer an entry names then checks that it still matches: a `path` that matches no production
+file, or a `symbol` that names no function in the matching files, fails, so an exemption leaves
+the file with the code it covered.
+
+**What an exemption does.** Under `layer: crap` the covered functions are still scored and
+printed, marked exempt, and are not judged against the cap. Under `layer: mutation` the mutants
+in the covered code are not counted as survivors, and the report lists them as exempt. An
+exemption changes no other layer, no law and no coverage floor; a law is acknowledged with
+`//tops:ack` (§3.3). The gate prints every exemption in force, with its expiry, on every run.
+
+**The table-shaped `switch`.** A function that is a dispatch table has a large cyclomatic
+complexity and no real branching. Splitting it only to bring each part under the cap is a
+scar-guard violation (§3.4, rule 2); it takes a `crap` exemption with `shape: table-switch`
+instead. A function is table-shaped when:
+
+- its body is one `switch` or type `switch` statement, optionally followed by one `return`;
+- every clause of that `switch`, `default` included, has a body of exactly one statement: a
+  `return`, an assignment, an expression statement or a channel send;
+- that statement contains no `if`, `for`, `range`, `switch`, `select`, `go`, `defer`, function
+  literal, `&&` or `||`, and at most one call expression.
+
+With `shape: table-switch` the gate checks the shape on every run. The exemption holds only while
+the function stays a table: an arm that grows a guard, a nested branch, or a second call is real
+branching, the entry stops matching, and the function answers to the cap. A `switch` that is not
+table-shaped has no exemption under this rule; the general rules above apply to it, as to any
+function.
+
+<!-- tops-core:end exemptions -->
+
+**The exemption count.** The number of live exemption records, those in force on the day of the
+run, is the `exemptions` ledger kind of §6.7: one count per repo. Under `ratchet` that count may
+only fall, so a new exemption is a regression that §6.7 gates; under `hard` an exemption is
+bounded by its expiry. This section defines the record and §6.7 defines how the count moves.
+
+Keys (G7 folds this table into §9 and the schema, then deletes it):
+
+| Key | Type | Default | Change |
+|---|---|---|---|
+| `exemptions` | list of records (fields above) | `[]` | New. Lives in `go-tops.yaml`, which CODEOWNERS covers (§11) |
 
 ---
 
@@ -780,7 +1139,7 @@ CI rules (carried from Rust-TOPS's lessons):
 |---|---|
 | `init --class <c>` | Writes `go-tops.yaml`, `go-tops.lock`, `AGENTS.md`, drop-in configs, the class workflow, `justfile`, and the laws config. Refuses to overwrite without `--force`. |
 | `check` | Validates `go-tops.yaml` against the **JSON Schema** (full validation, an improvement over Rust-TOPS's partial checks), plus semantic checks: protocol id, non-empty version, module name, `crap.cap ≥ 1`, `library-core`/`concurrency-runtime` keep `unexplained_survivors_max = 0`, language floor ≤ current, `advisory` carries a dated exemption, and under `ratchet` the baseline file exists and is clean against `HEAD`. |
-| `baseline` | Writes `.go-tops/baseline.json` (§6.7) after a run in which every layer that feeds it passed. Refuses otherwise. The only command that writes the baseline. |
+| `baseline` | Writes `.go-tops/baseline.json` (§6.7), the only command that does. `--init` measures and writes the first ledger when the tests are green and every feeding layer produced non-empty output (thresholds may be red); `--init --kind survivors` records the tier 2 survivor counts the same way. A plain `baseline` only lowers entries and removes paid ones. `--accept-regression --reason <text> --owner <handle>` is the one way to raise an entry or lower `judged_laws` (the PR carries the `protocol-change` label). `--rename <old-key> <new-key>` moves one key. Refused under `advisory`, and `--init` is refused when a ledger exists. |
 | `gate` | Runs every enabled layer at or below `--max-tier` (default 1), in order, each judged (§3.5), laws last. Options: `--max-tier N`, `--fail-fast`, `--dry-run` (refused in CI), `--base <ref>`, `--json`, `--only <layer>`. A mapped tool that is missing is `tool-missing` and exits 1. Exit codes: §12.2. |
 | `laws [list \| run \| explain G-NN]` | Lists the catalog with readers, runs the laws layer alone, explains a law. |
 | `report [--format text \| json \| junit \| sarif]` | Renders the last report. |

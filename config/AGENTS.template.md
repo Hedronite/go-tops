@@ -30,7 +30,7 @@ go tool gotops report --format text
 - Error guards that only return the error count 0 toward complexity (`err_guard_discount: true`)
 - Unexplained mutation survivors ≤ `{SURVIVORS_MAX}`, on lines changed against `origin/main`
 - Race detector: required (test jobs run with `CGO_ENABLED=1`; `-race` needs cgo on Linux)
-- Under `ratchet`: new functions meet the cap, and no function, package coverage or per-file lint count gets worse than `.go-tops/baseline.json`
+- Under `ratchet`: a function over the cap may not exceed its score in `.go-tops/baseline.json` plus 0.01, and every other function meets the cap. A package under its floor fails only if its coverage percentage falls and its uncovered-statement count rises. No per-file count of lint findings, law findings, `//nolint` or `//tops:ack` comments, or unexplained survivors, and no repo exemption count, rises above its baseline entry. Only `gotops baseline` writes the baseline
 - Other class layers: see `go-tops.yaml`
 
 ## Policies (non-negotiable)
