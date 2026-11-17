@@ -46,9 +46,6 @@ jobs:
       - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version: 1.27.x
-          # No go.sum exists until the first runtime dependency lands (M1-G2),
-          # and setup-go has nothing to key a cache on without one.
-          cache: false
       - name: build
         run: go build ./...
       # Tests run with cgo on: -race needs it on Linux (GO_TOPS.md §3.1).
@@ -75,10 +72,10 @@ jobs:
           echo "${RUNNER_TEMP}/golangci-lint" >> "${GITHUB_PATH}"
       - name: golangci-lint version
         run: golangci-lint version
+      # The formatters in .golangci.yml (gofmt, gofumpt, goimports) are part of
+      # this run for every package of the root module.
       - name: golangci-lint run
         run: golangci-lint run
-      - name: golangci-lint fmt
-        run: golangci-lint fmt --diff
 
   # The language-floor leg: the module must still build and pass its tests on the
   # oldest supported toolchain. The latest 1.26 patch release is named because the
@@ -99,7 +96,6 @@ jobs:
       - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version: ${{ env.FLOOR_GO }}
-          cache: false
       - name: toolchain is the floor release
         run: |
           set -euo pipefail
