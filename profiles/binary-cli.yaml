@@ -1,4 +1,5 @@
 # profiles/binary-cli.yaml
+bogus_key: 1
 class: binary-cli
 protocol: "0.4.0"
 gates:
