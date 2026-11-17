@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -37,6 +38,39 @@ func TestReportExampleValidates(t *testing.T) {
 	}
 	if err := validateReport(t, string(raw)); err != nil {
 		t.Fatalf("the example must validate: %v", err)
+	}
+}
+
+// When the run is enforced the exit code follows the outcome: fail is 1, and
+// pass and partial are 0 (section 3.3, 12.2).
+func TestReportExitCodeFollowsOutcome(t *testing.T) {
+	raw, err := os.ReadFile(reportExample)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ex := string(raw)
+	with := func(outcome string, code int) string {
+		s := strings.Replace(ex, `"outcome": "fail", "exit_code": 1`, fmt.Sprintf(`"outcome": %q, "exit_code": %d`, outcome, code), 1)
+		if s == ex && (outcome != "fail" || code != 1) {
+			t.Fatal("the example no longer has the summary this test edits")
+		}
+		return s
+	}
+	for _, c := range []struct {
+		outcome string
+		code    int
+		valid   bool
+	}{
+		{"fail", 1, true}, {"pass", 0, true}, {"partial", 0, true},
+		{"fail", 0, false}, {"pass", 1, false}, {"partial", 1, false},
+	} {
+		err := validateReport(t, with(c.outcome, c.code))
+		if c.valid && err != nil {
+			t.Errorf("%s with exit %d must validate: %v", c.outcome, c.code, err)
+		}
+		if !c.valid && err == nil {
+			t.Errorf("%s with exit %d validated", c.outcome, c.code)
+		}
 	}
 }
 

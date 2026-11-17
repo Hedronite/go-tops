@@ -63,6 +63,7 @@ func TestLockSchemaRefusesPlantedDefects(t *testing.T) {
 		{"trust-note-empty", "note: SHA-256 values copied from the upstream release checksum file", `note: ""`},
 		{"trust-missing", "trust:\n  mode: checksum\n  note: SHA-256 values copied from the upstream release checksum file\n", ""},
 		{"protocol-const", `protocol: "0.4.1"`, `protocol: "0.4.0"`},
+		{"trust-note-blank", "note: SHA-256 values copied from the upstream release checksum file", `note: "   "`},
 		{"binaries-not-a-list", "binaries:\n  - name:", "binaries:\n    name:"},
 	}
 	for _, c := range cases {
@@ -77,6 +78,16 @@ func TestLockSchemaRefusesPlantedDefects(t *testing.T) {
 	}
 }
 
+// A lock with no binary pins nothing: the whole list, absent or empty, fails.
+func TestLockWithNoBinariesFails(t *testing.T) {
+	head := "protocol: \"0.4.1\"\ntoolchain: go1.27.4\ntrust:\n  mode: tofu\n  note: none yet\n"
+	for name, doc := range map[string]string{"empty-list": head + "binaries: []\n", "absent": head} {
+		if err := validateLock(t, doc); err == nil {
+			t.Errorf("%s validated", name)
+		}
+	}
+}
+
 func TestLockSchemaAcceptsTofuAndBareDownloads(t *testing.T) {
 	raw, err := os.ReadFile(lockExample)
 	if err != nil {
@@ -86,7 +97,7 @@ func TestLockSchemaAcceptsTofuAndBareDownloads(t *testing.T) {
 	tofu := strings.Replace(ex, "mode: checksum", "mode: tofu", 1)
 	tofu = strings.Replace(tofu, "note: SHA-256 values copied from the upstream release checksum file", "note: the release is unsigned; first download recorded", 1)
 	bare := strings.Replace(tofu, "    extract: golangci-lint-{version}-{os}-{arch}/golangci-lint\n", "", 1)
-	for name, doc := range map[string]string{"tofu": tofu, "no-extract": bare, "no-binaries": "protocol: \"0.4.1\"\ntoolchain: go1.27.4\ntrust:\n  mode: tofu\n  note: none yet\nbinaries: []\n"} {
+	for name, doc := range map[string]string{"tofu": tofu, "no-extract": bare} {
 		if err := validateLock(t, doc); err != nil {
 			t.Errorf("%s must validate: %v", name, err)
 		}

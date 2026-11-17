@@ -223,7 +223,7 @@
           }
         },
         "enforced": {
-          "description": "false exactly when enforce is advisory: the run exits 0 whatever it found, and outcome is what it would have been under hard (§6.7).",
+          "description": "false exactly when enforce is advisory: the run exits 0 whatever it found, and outcome is what it would have been under hard (§6.7). When true, exit_code is 1 for a fail outcome and 0 for pass and partial.",
           "type": "boolean"
         },
         "advisory_expires": {
@@ -258,6 +258,30 @@
               "required": [
                 "advisory_expires"
               ]
+            },
+            "if": {
+              "required": [
+                "outcome"
+              ],
+              "properties": {
+                "outcome": {
+                  "const": "fail"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "exit_code": {
+                  "const": 1
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "exit_code": {
+                  "const": 0
+                }
+              }
             }
           }
         }

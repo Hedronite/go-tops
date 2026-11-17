@@ -1310,6 +1310,7 @@ identical to the file and validates the file against the schema.
 | `protocol` | The protocol constant of the schema (§2) |
 | `toolchain` | The exact Go release, `go1.x.y`. `go env GOVERSION` must equal it |
 | `trust.mode`, `trust.note` | `checksum` (each SHA-256 copied from the upstream release checksum file) or `tofu` (trust on first use), and a note saying where the values came from or why trust on first use was needed |
+| `binaries` | At least one entry: a lock with no binary pins nothing |
 | `binaries[].name`, `.version` | The tool and its exact release, with no leading `v` |
 | `binaries[].url` | An `https` URL template. The only placeholders are `{version}`, `{os}` and `{arch}` |
 | `binaries[].extract` | Optional. Where the executable sits inside the downloaded archive, as a template with the same placeholders. Absent when the download is the executable |
@@ -1538,7 +1539,8 @@ Report rules:
   (§12.2). `outcome` is the outcome the run would have under `hard` and is never rewritten.
   `enforced` is `false` exactly when `enforce` is `advisory`: then `exit_code` is 0 whatever the
   `outcome`, and `advisory_expires` holds the `advisory.expires` date of the configuration (§6.7).
-  Under any other mode `enforced` is `true` and `advisory_expires` is absent.
+  Under any other mode `enforced` is `true`, `advisory_expires` is absent, and `exit_code` is 1
+  when `outcome` is `fail` and 0 when it is `pass` or `partial`.
 
 ---
 
