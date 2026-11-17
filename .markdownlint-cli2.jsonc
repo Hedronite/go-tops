@@ -20,11 +20,6 @@
     // groups do not appear in the heading outline or the anchors. Permanent.
     "MD036": false,
 
-    // Fenced blocks with no language: two remain in GO_TOPS.md, the section 17
-    // directory tree and the Appendix A flow diagram. Re-enable once each
-    // carries a `text` info string.
-    "MD040": false,
-
     // Table separator rows are written |---|---| under rows padded with
     // spaces, in every table of every file. The rule accepts no
     // style that mixes the two, and the choice is cosmetic. Re-enable if the
