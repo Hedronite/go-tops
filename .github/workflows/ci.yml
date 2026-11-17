@@ -83,11 +83,14 @@ jobs:
   # The language-floor leg: the module must still build and pass its tests on the
   # oldest supported toolchain. The latest 1.26 patch release is named because the
   # `go 1.26` line names a language version, not a release (GO_TOPS.md §2, §11).
+  # setup-go installs that release and sets GOTOOLCHAIN=local, so the go command
+  # runs the installed toolchain and never switches; a job-level GOTOOLCHAIN would
+  # be overridden. The guard step proves which toolchain ran.
   floor:
     name: floor
     runs-on: ubuntu-latest
     env:
-      GOTOOLCHAIN: go1.26.11
+      FLOOR_GO: "1.26.11"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -95,14 +98,14 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
-          go-version: 1.27.x
+          go-version: ${{ env.FLOOR_GO }}
           cache: false
       - name: toolchain is the floor release
         run: |
           set -euo pipefail
           got="$(go env GOVERSION)"
           echo "GOVERSION=${got}"
-          test "${got}" = "${GOTOOLCHAIN}"
+          test "${got}" = "go${FLOOR_GO}"
       - name: build
         run: go build ./...
       - name: test
