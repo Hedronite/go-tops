@@ -23,8 +23,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { leg: ubuntu, os: ubuntu-latest, go: "{TOOLCHAIN_NUM}" }
-          - { leg: macos, os: macos-latest, go: "{TOOLCHAIN_NUM}" }
+          - { leg: ubuntu, os: ubuntu-latest, go: "{TOOLCHAIN_NUM}", lint_platform: linux-amd64 }
+          - { leg: macos, os: macos-latest, go: "{TOOLCHAIN_NUM}", lint_platform: darwin-arm64 }
           - { leg: floor, os: ubuntu-latest, go: "{GO_FLOOR}" }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -37,6 +37,30 @@ jobs:
           cache-dependency-path: |
             go.sum
             tools/go.sum
+      # The gate runs golangci-lint from .go-tops/bin or PATH (GO_TOPS.md §10), so it
+      # is installed before the gate. The archive is checked against the SHA-256
+      # pinned here, the same value as go-tops.lock for the platform, and the gate
+      # checks the installed executable against the lock before it runs it. A bump
+      # is a new hash here and a reviewed change to the lock.
+      - name: install golangci-lint v{GOLANGCI_VERSION}
+        if: matrix.leg != 'floor'
+        env:
+          VERSION: "{GOLANGCI_VERSION}"
+          PLATFORM: ${{ matrix.lint_platform }}
+        run: |
+          set -euo pipefail
+          case "$PLATFORM" in
+            linux-amd64)  sha={GOLANGCI_SHA_LINUX_AMD64} ;;
+            darwin-arm64) sha={GOLANGCI_SHA_DARWIN_ARM64} ;;
+            *) echo "::error::no pinned hash for $PLATFORM"; exit 1 ;;
+          esac
+          archive="$RUNNER_TEMP/golangci-lint.tar.gz"
+          curl --fail --silent --show-error --location --output "$archive" \
+            "https://github.com/golangci/golangci-lint/releases/download/v$VERSION/golangci-lint-$VERSION-$PLATFORM.tar.gz"
+          echo "$sha  $archive" | shasum -a 256 -c -
+          mkdir -p "$RUNNER_TEMP/golangci-lint"
+          tar -xzf "$archive" --strip-components=1 -C "$RUNNER_TEMP/golangci-lint"
+          echo "$RUNNER_TEMP/golangci-lint" >> "$GITHUB_PATH"
       # setup-go installs the latest release of the floor language version; this
       # step proves the floor leg runs it and not another toolchain.
       - name: toolchain is the floor release
@@ -69,5 +93,10 @@ jobs:
         if: always() && matrix.leg != 'floor'
         with:
           name: go-tops-${{ matrix.leg }}
-          path: .go-tops/
+          # Hidden files are off by default and .go-tops is a hidden directory;
+          # the downloaded binaries in .go-tops/bin are not an artifact.
+          path: |
+            .go-tops/
+            !.go-tops/bin/
+          include-hidden-files: true
           if-no-files-found: warn

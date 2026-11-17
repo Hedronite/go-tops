@@ -65,6 +65,7 @@ func Run(o Options, stdout, stderr Printer) int {
 	}
 	if o.Offline {
 		stdout.Printf("note: --offline: tools/go.sum is not written; run go -C tools mod tidy\n")
+		stdout.Printf("note: until tools/go.sum exists, the workflow's setup-go cache (cache-dependency-path: go.sum and tools/go.sum) finds no file in a module with no dependencies, and the job can fail at setup\n")
 		return ExitOK
 	}
 	return runTidy(o, stderr)
