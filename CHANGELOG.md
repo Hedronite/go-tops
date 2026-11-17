@@ -10,7 +10,7 @@ All notable changes to this project are listed here. The protocol version and th
   - Facts and pins:
     - R28: the header and §1 cite Rust-TOPS protocol 1.2.0 on `main` and the release tag `cargo-tops` v0.3.0; "destined to become" and "(proposed)" are removed; §14 is rechecked against `rust-tops` `main`, with five corrections and the tiers row.
     - R28 / Q12: the build-suite companion line is removed; Appendix B cites avito-tech go-mutesting v2.3.1.
-    - R29: §2 pins golangci-lint v2.15.0, gotestsum v1.13.0, govulncheck v1.9.0, gremlins v0.6.0 and goleak v1.3.0, with benchstat `[verify]`; template G-08 names `synctest.Sleep` and `httptest.NewTestServer`.
+    - R29: §2 pins golangci-lint v2.15.0, gotestsum v1.13.0, govulncheck v1.9.0, gremlins v0.6.0 and goleak v1.3.0; benchstat has no release tags, so (settled in the mechanics step) a pseudo-version is pinned in `tools/go.mod` at adoption and it runs at tier 2 only, on a named host; template G-08 names `synctest.Sleep` and `httptest.NewTestServer`.
   - Ratchet:
     - R1: a function at or under the cap may change up to the cap; one over it may not exceed its baseline plus 0.01; a function absent from the baseline is new and meets the cap.
     - R2: the baseline is a debt ledger of what is over the line; an empty ledger means `hard`, with suppression and exemption counts held at zero.
