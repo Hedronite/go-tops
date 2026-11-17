@@ -36,6 +36,7 @@ All notable changes to this project are listed here. The protocol version and th
 
 ### Changed
 
+- **GO_TOPS.md §17, no version bump** (descriptive text). "In the repository today" lists the tree M1 built: the root module files, `go-tops.yaml` and `go-tops.lock`, `ci.yml`, `cmd/gotops/`, `internal/` with `cli`, `config`, `cover`, `doctor`, `gate`, `initcmd`, `laws`, `layers`, `lock` and `report`, and `tools/`. The second tree keeps only what is still planned, and the self-hosting paragraph says the CRAP output is published from M2 and the survivor ledger from M4.
 - **Protocol 0.4.2** (`GO_TOPS.md`, `schema/`, `profiles/`, `config/`, `scripts/docs/`). The three findings M1 raised while the CLI was built, bundled into one bump.
   - The lock pins the executable (QA of the lock verify draft): an entry with `extract` carries `executable_sha256` per platform, required with `extract` and absent without it, because the SHA-256 of an archive cannot verify the installed executable. §10 says which hash the gate and `lock --verify` compare. The example lock carries the four golangci-lint v2.15.0 executable hashes, computed from archives whose SHA-256 equals the upstream checksum file, and its trust note says so.
   - Strict YAML (§9): no anchors, aliases or merge keys, repeated or non-string keys, second documents or unquoted dates in the files `check` reads.

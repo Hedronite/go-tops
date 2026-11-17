@@ -1727,13 +1727,27 @@ In the repository today:
 go-tops/
 ├── .github/
 │   ├── CODEOWNERS
-│   └── workflows/docs.yml           # docs CI
+│   └── workflows/
+│       ├── ci.yml                   # the gate job and the report assertion (§11)
+│       └── docs.yml                 # docs CI
 ├── calibration/2026-11-probe/       # the CRAP calibration record: README, probe/, run.sh, results.json
+├── cmd/gotops/                      # CLI entry: one file per command
 ├── config/
-│   ├── AGENTS.template.md           # the AGENTS.md that gotops init will write
+│   ├── AGENTS.template.md           # the AGENTS.md that gotops init writes
 │   ├── go-tops.example.yaml         # the §9 example
 │   ├── go-tops.example.lock         # the §10 example
 │   └── gate-report.example.json     # the §12.3 example
+├── internal/
+│   ├── cli/                         # command registry
+│   ├── config/                      # go-tops.yaml load, schema validation, class defaults
+│   ├── cover/                       # coverage profile parse and merge
+│   ├── doctor/                      # environment diagnosis
+│   ├── gate/                        # layer runner, tiers, outcomes
+│   ├── initcmd/                     # gotops init
+│   ├── laws/                        # the §8.2 catalog table; the laws layer stub
+│   ├── layers/                      # hygiene, tests and coverage
+│   ├── lock/                        # go-tops.lock load, verify, update
+│   └── report/                      # report writer and text renderer
 ├── profiles/                        # binary-cli, binary-service, library-core (§5.3)
 ├── schema/
 │   ├── go-tops.schema.json          # go-tops.yaml and profiles
@@ -1741,40 +1755,33 @@ go-tops/
 │   ├── lock.schema.json             # go-tops.lock
 │   └── core.schema.json             # shared definitions; the TOPS shared core replaces it by sync
 ├── scripts/docs/                    # the docs checker (Go, its own go.mod)
-├── .gitignore
-├── .markdownlint-cli2.jsonc
+├── tools/                           # go.mod and go.sum: pinned module tools, run with go tool -modfile
+├── .gitignore  .golangci.yml  .markdownlint-cli2.jsonc
 ├── AGENTS.md  CHANGELOG.md  CLAUDE.md  GO_TOPS.md  README.md
+├── embed.go  go.mod  go.sum
+├── go-tops.yaml                     # Go-TOPS gates itself
+├── go-tops.lock
 └── LICENSE  LICENSE-APACHE  LICENSE-MIT
 ```
 
-From M1 onward:
+Still planned (§19):
 
 ```text
 go-tops/
-├── cmd/gotops/                      # CLI entry
 ├── internal/
-│   ├── config/                      # go-tops.yaml load + schema validation
-│   ├── gate/                        # layer runner, tiers, outcomes
-│   ├── layers/                      # hygiene, tests, coverage, crap, mutation, fuzz, bench...
-│   ├── cover/                       # profile parse and merge
+│   ├── layers/                      # crap, mutation, fuzz, bench... (hygiene, tests and coverage exist)
 │   ├── complexity/                  # AST cyclomatic counting
 │   ├── crap/                        # scoring, guard-neutral coverage, identity
 │   ├── mutate/                      # engine adapters + survivor ledger
-│   ├── laws/                        # catalog loader
-│   ├── analyzers/                   # go/analysis analyzers (G-NN)
-│   ├── lock/                        # go-tops.lock verify/update
-│   └── report/                      # JSON/text/JUnit/SARIF
+│   └── analyzers/                   # go/analysis analyzers (G-NN)
 ├── laws/                            # G-NN.yaml metadata
 ├── testdata/lints/                  # fixture module: one break per delegated rule (§8)
-├── tools/go.mod                     # pinned tool modules, run with go tool -modfile
-├── examples/                        # one repo per launch class
-├── go-tops.yaml                     # Go-TOPS gates itself
-├── go-tops.lock
-└── go.mod
+└── examples/                        # one repo per launch class
 ```
 
-**Self-hosting:** Go-TOPS must pass its own gate at tier 1 before any release; its own CRAP
-output and survivor ledger are published in CI artifacts. It runs `hard` on itself once its laws
+**Self-hosting:** Go-TOPS must pass its own gate at tier 1 before any release. Its own CRAP
+output is published in CI artifacts from M2, when the CRAP layer lands, and its survivor ledger
+from M4, when the mutation layer does. It runs `hard` on itself once its laws
 layer judges the profile's required laws (M5). Until then it runs `advisory` under the bootstrap
 rule of §6.7: `go-tops.yaml` carries an `advisory` key whose expiry is the M5 target, and its own
 CI requires gates 1–3 `pass` in the report, so the gate keeps its teeth on what the CLI already
