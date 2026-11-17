@@ -615,3 +615,14 @@ func TestDepguardCheckFailsOnEmptyOrBrokenOutput(t *testing.T) {
 		}
 	}
 }
+
+// A failed check always carries a message, even when the tool printed nothing:
+// the report schema requires one for every check that did not pass.
+func TestFailedCheckWithNoOutputStillSaysWhy(t *testing.T) {
+	f := newFake(t)
+	f.on("go mod verify", gate.Output{ExitCode: 1})
+	msg := onlyFails(t, runLayer(t, f, gate.Config{}), "go mod verify")
+	if strings.TrimSpace(msg) == "" {
+		t.Fatal("no message")
+	}
+}

@@ -139,8 +139,14 @@ func (h *run) tool(name string) ([]string, error) {
 
 func passed(name string) step { return step{name: name, outcome: gate.Pass} }
 
+// failed is a failed check. A failed check always says why, because the report
+// schema requires a message: a tool that failed and printed nothing says so.
 func failed(name, format string, a ...any) step {
-	return step{name: name, outcome: gate.Fail, message: fmt.Sprintf(format, a...)}
+	msg := strings.TrimSpace(fmt.Sprintf(format, a...))
+	if msg == "" {
+		msg = "failed and printed nothing"
+	}
+	return step{name: name, outcome: gate.Fail, message: msg}
 }
 
 func missing(name string, err error) step {
