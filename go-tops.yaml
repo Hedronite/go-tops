@@ -44,7 +44,7 @@ gates:
   mutation:
     enabled: false
     reason: the mutation layer lands at M4
-    expires: "2027-03-15"
+    expires: "2027-03-01"
 
 layers:
   fuzz:  { targets: ["./internal/config:FuzzLoad"] }
