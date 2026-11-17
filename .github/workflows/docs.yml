@@ -25,8 +25,13 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      # Pinned tool version; the config is .markdownlint-cli2.jsonc.
-      - run: npx --yes markdownlint-cli2@0.24.1
+      # Pinned by commit SHA. The action ships markdownlint-cli2 (0.24.0) and
+      # every dependency inside its committed dist/ bundle, so this one pin fixes
+      # the whole tool; there is no unpinned npm install. The rules come from
+      # .markdownlint-cli2.jsonc, whose ignores still apply to these globs.
+      - uses: DavidAnson/markdownlint-cli2-action@696eb3f2509270d7b882d2aa68347bc676e7af34 # v25.0.0
+        with:
+          globs: "**/*.md"
 
   selftest:
     name: selftest
@@ -84,11 +89,11 @@ jobs:
         with:
           go-version-file: scripts/docs/go.mod
           cache-dependency-path: scripts/docs/go.sum
-      # --allow-vacuous: no example blocks exist yet. The step that adds them
-      # removes this flag, so zero examples fails from then on.
+      # No --allow-vacuous: zero examples fails, and so does a YAML or JSON
+      # block in sections 5.3, 9 or 12.3 that has no go-tops:example marker.
       - name: example blocks match their files and validate
         working-directory: scripts/docs
-        run: go run . -root ../.. -checks parse,examples --allow-vacuous
+        run: go run . -root ../.. -checks parse,examples
 
   markers:
     name: markers
