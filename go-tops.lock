@@ -3,7 +3,7 @@ toolchain: go1.27.4             # go env GOVERSION must equal this (GO_TOPS.md ย
 
 trust:
   mode: checksum
-  note: SHA-256 values copied from the upstream release checksum file, golangci-lint-2.15.0-checksums.txt
+  note: archive SHA-256 values copied from the upstream release checksum file, golangci-lint-2.15.0-checksums.txt; executable SHA-256 values computed from those verified archives
 
 # Downloaded binaries only. Module tools (gotestsum, govulncheck, go-licenses and
 # gotops itself) are pinned in tools/go.mod (GO_TOPS.md ยง10).

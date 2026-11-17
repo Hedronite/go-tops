@@ -28,7 +28,7 @@ gates:
   hygiene:
     golangci_lint: { config: .golangci.yml }
     govulncheck:   { fail_on: reachable }
-    deps:          { licenses: { allow: [MIT, Apache-2.0, BSD-3-Clause, BSD-2-Clause, ISC] } }
+    deps:          { depguard: true, licenses: { allow: [MIT, Apache-2.0, BSD-3-Clause, BSD-2-Clause, ISC] } }
   tests:
     race: true
     shuffle: true
@@ -44,7 +44,7 @@ gates:
   mutation:
     enabled: false
     reason: the mutation layer lands at M4
-    expires: "2027-03-15"
+    expires: "2027-03-01"
 
 layers:
   fuzz:  { targets: ["./internal/config:FuzzLoad"] }

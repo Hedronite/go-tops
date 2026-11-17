@@ -15,9 +15,11 @@ Milestone M1 is done: the `gotops` CLI (`version`, `check`, `init`, `gate`, `rep
 |---|---|
 | **M0, M0.5** spec | `GO_TOPS.md` 0.4.0, three schemas, profiles for three launch classes, a calibration record, docs CI |
 | **M1** CLI (done) | `init`, `check`, `gate` at tier 1 (hygiene, tests, coverage), `report`, `lock`, `doctor`, `report.json`; Go-TOPS gates itself under the advisory bootstrap rule |
-| M2 (next) | Native CRAP and the ratchet; M4 adds mutation |
-| M3 | Dry adoption on a scratch repo, kit fixes |
-| M4–M7 | Mutation, laws v0.1 (16 of 43 laws judged by analyzers), deep layers, release tier, protocol 1.0, extras |
+| M2 (next) | Native CRAP and the ratchet: complexity, guard-neutral coverage, the baseline ledger, exemptions |
+| M3 | First adopter: `vigil` gated under `ratchet` |
+| M4 | Mutation: a gremlins adapter and the survivor ledger |
+| M5 | Laws v0.1: 16 of 43 laws judged by analyzers; the kit switches its own gate to `hard` |
+| M6–M7 | Deep layers and the second and third adopters; the release tier and protocol 1.0 |
 
 The full roadmap is in [`GO_TOPS.md` §19](GO_TOPS.md#19-roadmap).
 
