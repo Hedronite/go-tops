@@ -10,3 +10,14 @@
 /calibration/     @VirtualMachinist @NebuHedron
 /scripts/         @VirtualMachinist @NebuHedron
 /.github/         @VirtualMachinist @NebuHedron
+
+# The kit's code and the files that set or pin its gate. A change to any of
+# these changes what the gate means, so it is reviewed like a protocol change.
+/go.mod           @VirtualMachinist @NebuHedron
+/embed.go         @VirtualMachinist @NebuHedron
+/tools/           @VirtualMachinist @NebuHedron
+/cmd/             @VirtualMachinist @NebuHedron
+/internal/        @VirtualMachinist @NebuHedron
+/.golangci.yml    @VirtualMachinist @NebuHedron
+/go-tops.yaml     @VirtualMachinist @NebuHedron
+/go-tops.lock     @VirtualMachinist @NebuHedron
