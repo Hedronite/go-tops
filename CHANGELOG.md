@@ -6,6 +6,16 @@ All notable changes to this project are listed here. The protocol version and th
 
 ### Changed
 
+- **Protocol 0.4.1** (`GO_TOPS.md`, `schema/`, `profiles/`, `config/`, `scripts/docs/`). It settles how Go-TOPS gates itself before its laws layer exists, and the lock schema that §18 had deferred.
+  - Self-hosting bootstrap (D1): §6.7, §17 and §19 say that Go-TOPS runs `advisory` on itself, with an `advisory` key whose expiry is the M5 target, until its laws layer judges the profile's required laws, and `hard` after; until then its own CI requires gates 1–3 `pass` in the report. §16 item 11 is requalified; items 29 to 31 are new. The §19 M1 exit reads "self-hosting at tier 1 under the bootstrap rule of §6.7".
+  - `gate` under `advisory`: a run that starts exits 0; codes 2, 3 and 4 still apply. `summary.outcome` stays the outcome the run would have under `hard`; `summary.enforced` is `false` and `summary.advisory_expires` is present; the text output says `NOT ENFORCED (advisory, expires <date>): outcome <OUTCOME>`. Stated in §6.7, §12.2 and §12.3; `gate-report.schema.json` ties the summary to `enforce` and the report example carries `enforced`.
+  - The lock schema: `schema/lock.schema.json` (2020-12, strict) with `protocol`, `toolchain` (an exact `go1.x.y`), `trust` (`checksum` or `tofu`, with a note) and `binaries[]` (name, exact version, URL template, optional `extract`, and a SHA-256 for each of darwin/arm64, darwin/amd64, linux/amd64 and linux/arm64). `config/go-tops.example.lock` is the marked §10 example, with the golangci-lint v2.15.0 checksums from its release file. §18 lists four schemas and the deferral is gone.
+  - Lock and report hardening (QA): `binaries` needs at least one entry and `trust.note` a non-space character; when `enforced` is `true` the summary `exit_code` follows the `outcome` (`fail` is 1, `pass` and `partial` are 0).
+  - Backend findings: a failed tests, coverage, CRAP or mutation layer may carry `{error}` in place of its figures; §10 says a downloaded binary resolves to `.go-tops/bin/<name>`, then `PATH`, and is checked against the lock before it runs.
+  - `config/AGENTS.template.md` takes a `{PROTOCOL}` placeholder in place of the stale 0.3.0 line, and its verification paragraph follows the §3.1 gate order; §4.1 lists the placeholder.
+  - §12.1: `check` validates `go-tops.lock` against the lock schema and `lock --verify` reads the lock by it. The §19 M5 row says the kit switches its own gate to `hard` there.
+  - Version 0.4.1 in the header, the §2 row, the three schema constants, the profiles and the examples.
+  - Docs checker: the version check covers the lock schema; a `.lock` example is read as YAML; §10 is an example section, so an unmarked block there fails; six examples. Self-tests plant a bad lock key, a short SHA, a missing platform and the advisory report cases.
 - **Protocol 0.4.0** (`GO_TOPS.md`, `schema/`, `profiles/`, `config/`). R-numbers are findings of the 2026-11-16 assessment; X-numbers are the 2026-11-17 decisions.
   - Facts and pins:
     - R28: the header and §1 cite Rust-TOPS protocol 1.2.0 on `main` and the release tag `cargo-tops` v0.3.0; "destined to become" and "(proposed)" are removed; §14 is rechecked against `rust-tops` `main`, with five corrections and the tiers row.

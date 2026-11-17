@@ -1,0 +1,2 @@
+protocol: "0.4.0"
+toolchain: go1.27.4
