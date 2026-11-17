@@ -1584,6 +1584,12 @@ wrong; the config wins.
 20. **Mutation allowance is zero in every class:** statuses map to survivors, killed and dropped; a survivor has a stable key; tier 2 survivors are ledgered per file. (§6.4) *New in 0.4.0.*
 21. **A seam for the shared core:** the sections on verdicts, the report, enforcement, exemptions and exit codes sit between `tops-core` markers, and the shared definitions live in `schema/core.schema.json`, so a TOPS shared core can replace them by a checked sync. (§3.3, §6.6, §6.7, §6.8, §12.2, §18) *New in 0.4.0.*
 22. **Schemas, profiles and examples are files:** `schema/`, `profiles/` and `config/` hold them, and docs CI keeps every example block in this document identical to its file and valid against its schema. (§5.3, §9, §12.3, §18) *New in 0.4.0.*
+23. **One test run:** `go test -json -race -shuffle=on -count=1 -coverprofile=… -coverpkg=./...` feeds the tests, coverage and CRAP gates, parsed natively; `gotestsum` is optional display. (§3.1) *New in 0.4.0.*
+24. **Laws read their own lint pass:** the kit embeds the law lint configuration and runs it as its own pass, so editing the adopter's `.golangci.yml` cannot weaken a law; every enabled law has a fixture. (§8.1) *New in 0.4.0.*
+25. **Tool pins:** module tools live in `tools/go.mod` and run with `go tool -modfile`; `go-tops.lock` holds downloaded binaries and the toolchain only. (§10) *New in 0.4.0.*
+26. **One CI job and house standard first:** the drop-in is one job that runs `gotops gate`, with `fetch-depth: 0`; a macOS leg is required where the kit runs on Macs, and there is no Windows leg. (§11) *New in 0.4.0.*
+27. **Launch profiles follow adopters:** `binary-cli`, `binary-service` and `library-core`; `tui-app` and `concurrency-runtime` are schema-valid without a profile. (§5.1) *New in 0.4.0.*
+28. **The language floor is a policy:** the oldest Go release still supported upstream, compared as a language version, with the toolchain pin checked separately. (§2) *New in 0.4.0.*
 
 ---
 
@@ -1703,6 +1709,7 @@ tier 1 (merge gate)
   3 coverage  → read from that run's profile · floors
   4 crap      → native CRAP over the same profile · one cap per class · ratchet vs baseline
   5 mutation  → diff-scoped · unexplained survivors 0 · vacuous on an empty diff
+  6 class     → layers that run a command · allocation counts at tier 1
   ★ laws      → analyzer laws (tier 0) and tool laws (tier 1), judged last
                 refuse fails · a required law not-evaluated fails
 tier 2 (nightly)    timed fuzz · full mutation · race stress · bench regression · full matrix
