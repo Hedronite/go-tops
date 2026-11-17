@@ -1714,7 +1714,7 @@ wrong; the config wins.
 31. **What `gate` exits under `advisory`:** 0 for a run that starts; codes 2, 3 and 4 still apply. The report keeps the outcome the run would have under `hard`, with `summary.enforced` `false` and `summary.advisory_expires`. (§6.7, §12.2, §12.3) *New in 0.4.1.*
 32. **The lock pins the executable:** an entry with `extract` carries `executable_sha256` per platform, and the gate and `lock --verify` compare the installed executable with it, because the archive hash cannot verify an installed file. (§10) *New in 0.4.2.*
 33. **Strict YAML:** the files `check` reads are strict YAML, so one text has one meaning in every reader. (§9) *New in 0.4.2.*
-34. **Hygiene details are typed:** the hygiene layer reports `golangci_lint`, `findings`, `steps` and, where govulncheck ran, `vuln`, or `{error}` when it measured nothing. (§12.3) *New in 0.4.2.*
+34. **Hygiene details are typed:** the hygiene layer reports `golangci_lint`, `findings` and one object per check of gate 1 (`tidy`, `verify`, `toolchain`, `format`, `lint`, `vulnerabilities`, `licenses`), each with its `outcome`, or `{error}` when it measured nothing. (§12.3) *New in 0.4.2.*
 
 ---
 
