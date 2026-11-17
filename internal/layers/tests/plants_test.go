@@ -93,8 +93,73 @@ func TestPlantDataRace(t *testing.T) {
 		"a/a_test.go": "package a\n\nimport (\n\t\"sync\"\n\t\"testing\"\n)\n\nfunc TestRace(t *testing.T) {\n\tvar wg sync.WaitGroup\n\tfor i := 0; i < 2; i++ {\n\t\twg.Add(1)\n\t\tgo func() { defer wg.Done(); Inc() }()\n\t}\n\twg.Wait()\n}\n",
 	}
 	tr, _ := runBoth(t, writeModule(t, racy), 0)
-	if tr.Outcome != gate.Fail || !strings.Contains(tr.Reason, "data race") {
+	if tr.Outcome != gate.Fail || !strings.Contains(tr.Reason, "TestRace") {
 		t.Fatalf("%s: %s", tr.Outcome, tr.Reason)
+	}
+}
+
+// A passing test that prints the race banner has not raced: the run passes,
+// because the gate reads the result of the run and not the text a test logs.
+func TestPlantRaceBannerInALogIsNotARace(t *testing.T) {
+	logs := files{"a/a_test.go": "package a\n\nimport \"testing\"\n\nfunc TestAdd(t *testing.T) {\n\tt.Log(\"WARNING: DATA RACE\")\n\tif Add(1, 2) != 3 {\n\t\tt.Fatal(\"no\")\n\t}\n}\n"}
+	tr, _ := runBoth(t, writeModule(t, logs), 0)
+	if tr.Outcome != gate.Pass {
+		t.Fatalf("%s: %s", tr.Outcome, tr.Reason)
+	}
+}
+
+// B15: an inherited GOFLAGS must not hide a test from the gate. Each flag below
+// would skip, shorten or blind the run; the broken test still fails it.
+func TestPlantInheritedGOFLAGSDoNotHideABrokenTest(t *testing.T) {
+	broken := files{"a/a_test.go": "package a\n\nimport (\n\t\"testing\"\n)\n\nfunc TestOK(t *testing.T) {}\n\nfunc TestBroken(t *testing.T) {\n\tif testing.Short() {\n\t\tt.Skip(\"short\")\n\t}\n\tt.Fatal(\"broken\")\n}\n"}
+	vetBroken := files{"a/a_test.go": "package a\n\nimport (\n\t\"fmt\"\n\t\"testing\"\n)\n\nfunc TestOK(t *testing.T) {}\n\nfunc TestVet(t *testing.T) {\n\tfmt.Printf(\"%d\\n\", \"x\")\n}\n"}
+	for _, c := range []struct {
+		flags string
+		mod   files
+	}{
+		{"-skip=TestBroken", broken}, {"-short", broken}, {"-run=TestOK", broken}, {"-vet=off", vetBroken},
+	} {
+		t.Run(c.flags, func(t *testing.T) {
+			t.Setenv("GOFLAGS", c.flags)
+			tr, _ := runBoth(t, writeModule(t, c.mod), 0)
+			if tr.Outcome != gate.Fail {
+				t.Fatalf("GOFLAGS=%s: %s: %s; the broken test was hidden from the gate", c.flags, tr.Outcome, tr.Reason)
+			}
+		})
+	}
+}
+
+// The same through `go env -w`, which an empty GOFLAGS would not override: the
+// settings file names GOFLAGS=-skip=TestBroken.
+func TestPlantGOFLAGSFromTheGoEnvFileDoNotHideABrokenTest(t *testing.T) {
+	envFile := filepath.Join(t.TempDir(), "goenv")
+	if err := os.WriteFile(envFile, []byte("GOFLAGS=-skip=TestBroken\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("GOENV", envFile)
+	t.Setenv("GOFLAGS", "")
+	broken := files{"a/a_test.go": "package a\n\nimport \"testing\"\n\nfunc TestOK(t *testing.T) {}\n\nfunc TestBroken(t *testing.T) { t.Fatal(\"broken\") }\n"}
+	tr, _ := runBoth(t, writeModule(t, broken), 0)
+	if tr.Outcome != gate.Fail {
+		t.Fatalf("%s: %s; the go env file hid the broken test", tr.Outcome, tr.Reason)
+	}
+}
+
+// A parent test whose only subtest is skipped ran nothing.
+func TestPlantParentWithOnlyASkippedSubtest(t *testing.T) {
+	skipped := files{"a/a_test.go": "package a\n\nimport \"testing\"\n\nfunc TestParent(t *testing.T) {\n\tt.Run(\"sub\", func(t *testing.T) { t.Skip(\"later\") })\n}\n"}
+	tr, _ := runBoth(t, writeModule(t, skipped), 0)
+	if tr.Outcome != gate.Fail || !strings.Contains(tr.Reason, "no test ran") {
+		t.Fatalf("%s: %s", tr.Outcome, tr.Reason)
+	}
+}
+
+// The tests figure counts leaf tests: one test with two passing subtests is two.
+func TestPlantTestsFigureCountsLeaves(t *testing.T) {
+	subs := files{"a/a_test.go": "package a\n\nimport \"testing\"\n\nfunc TestParent(t *testing.T) {\n\tt.Run(\"a\", func(t *testing.T) {})\n\tt.Run(\"b\", func(t *testing.T) {})\n}\n\nfunc TestOther(t *testing.T) {}\n"}
+	tr, _ := runBoth(t, writeModule(t, subs), 0)
+	if tr.Outcome != gate.Pass || tr.Details["tests"] != 3 {
+		t.Fatalf("%s %v: want 3 leaves (Parent/a, Parent/b, Other)", tr.Outcome, tr.Details)
 	}
 }
 

@@ -38,8 +38,13 @@ var Command = []string{
 	"-coverprofile=" + ProfilePath, "-coverpkg=./...", "./...",
 }
 
-// Env is added to the environment of the test run.
-var Env = []string{"CGO_ENABLED=1"}
+// Env is added to the environment of the test run. CGO_ENABLED=1 because -race
+// needs cgo. GOFLAGS is set to the one flag the run already passes: the go
+// command takes an inherited GOFLAGS, from the environment or from `go env -w`,
+// and would apply -skip, -short, -vet=off or -run to the gate's own run, so
+// tests would be hidden from it. An empty GOFLAGS does not override a `go env
+// -w` setting; a non-empty one does.
+var Env = []string{"CGO_ENABLED=1", "GOFLAGS=-count=1"}
 
 // Tests is gate 2.
 type Tests struct{}
@@ -112,8 +117,12 @@ func judge(r *Result, out gate.Output) gate.Result {
 	if len(r.FailedTests) > 0 {
 		problems = append(problems, fmt.Sprintf("%d test(s) failed: %s", len(r.FailedTests), joinMax(r.FailedTests, 5)))
 	}
-	if len(r.Races) > 0 {
-		problems = append(problems, "data race detected in "+joinMax(r.Races, 3))
+	// A race inside a test fails that test, which is reported above. A race the
+	// detector finds outside any test exits 66. The gate reads the result of
+	// the run, never the text a test logs: a test that prints the race banner
+	// and passes has not raced.
+	if out.ExitCode == raceExit {
+		problems = append(problems, fmt.Sprintf("data race detected (go test exited %d, the race detector's exit status)", raceExit))
 	}
 	if r.Ran() == 0 && len(problems) == 0 {
 		problems = append(problems, fmt.Sprintf("no test ran (%d skipped): a green run that measured nothing is a failure", r.Skipped))
@@ -133,6 +142,9 @@ func judge(r *Result, out gate.Output) gate.Result {
 	}
 	return gate.Result{Outcome: gate.Fail, Reason: msg, Details: map[string]any{"error": msg}}
 }
+
+// raceExit is the exit status of a program the race detector found a race in.
+const raceExit = 66
 
 // figures are the typed details of the tests layer (schema/gate-report.schema.json).
 func figures(r *Result) map[string]any {
