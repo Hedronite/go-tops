@@ -46,13 +46,14 @@ Plus a practice layer (human and agent working rules, §13 and `AGENTS.md`) and 
   code.
 - Encode Go's real hazards (goroutine leaks, context misuse, unbounded I/O, resource leaks, race
   conditions) as checkable **laws**, not folklore.
-- Be hermetic: pinned tools, reproducible results, no network surprises.
+- Be hermetic: pinned tools and toolchain, one test run, and reproducible results for every layer but one. The vulnerability layer reads a database that moves, and says so (§3.1).
 - Be honest: a layer that was not evaluated is reported as not evaluated, never as a pass.
 
 ### 1.2 Non-goals
 
-- Not a test framework. Go-TOPS shells out to `go test`, `gotestsum`, fuzzing, and friends; it
-  does not replace them.
+- Not a test framework. Go-TOPS runs `go test` once and parses its JSON (§3.1), and shells out to
+  fuzzing and the other tools; it does not replace them. `gotestsum` is an optional display
+  wrapper.
 - Not a style guide. Formatting and idiom checks belong to `gofumpt`/golangci-lint; Go-TOPS only
   requires that they pass.
 - Not a replacement for review. Several layers (oracle-first testing, scar-guard) are policy
@@ -77,12 +78,12 @@ Plus a practice layer (human and agent working rules, §13 and `AGENTS.md`) and 
 | Protocol version | **0.4.0-dev** (in progress; 0.3.0 was the last draft; 1.0.0 is set by the criterion in §19) |
 | Package version | 0.0.0 (unreleased) |
 | Language floor ("MSRV" analogue) | Go **1.26**, the oldest Go release still supported upstream (a policy: the floor moves when upstream drops support). The floor is a language version, compared in Go's own order (`go/version.Lang`), so a `go 1.26` and a `go 1.26.4` directive both meet it. Matrix tests floor and current (current: Go 1.27) |
-| Toolchain pin | `toolchain` directive in `go.mod` plus `GOTOOLCHAIN=local` in CI |
-| Tool lock | `go-tops.lock` (see §10) |
+| Toolchain pin | The exact Go release in `go-tops.lock` (§10). `GOTOOLCHAIN=local` makes the `go` command use the toolchain it ships with and never reads the `toolchain` line, so a runner with another patch release would pass silently: the gate therefore checks that `go env GOVERSION` equals the pin (§3.1, G-33). A `toolchain` line is optional, and a missing one is accepted when the `go` line names a patch release |
+| Tool pins | `tools/go.mod` for module tools; `go-tops.lock` for downloaded binaries and the toolchain (§10) |
 | golangci-lint | **v2.15.0** (exact; latest on 2026-11-17, released 2026-10-16; Go 1.27 support since v2.13.0) |
 | `gotestsum` | **v1.13.0** (exact; optional display wrapper over `go test -json`) |
 | `govulncheck` | **v1.9.0** (exact) |
-| `benchstat` | `golang.org/x/perf/cmd/benchstat` has no release tags: a pseudo-version is pinned at adoption **[verify]** G6 (R26 places it at tier 2) |
+| `benchstat` | `golang.org/x/perf/cmd/benchstat` has no release tags, so a pseudo-version is pinned in `tools/go.mod` at adoption (§10); it runs at tier 2 only, on a named host (§3.1) |
 | Mutation engine | `gremlins` **v0.6.0** (exact; the starting engine, 0.x, flags may change; accounting rules are G4's, R20) |
 | `goleak` | `go.uber.org/goleak` **v1.3.0** (exact; the leak check on Go 1.26; on 1.27 and later the `goroutineleak` profile in `runtime/pprof` is the stdlib alternative, and G5 states which layer uses which) |
 
@@ -904,8 +905,8 @@ wrong; the config wins.
 | Area | Rust-TOPS (`rust-tops` `main`, read 2026-11-17) | Go-TOPS (this spec) | Why |
 |---|---|---|---|
 | Invocation | `cargo tops` external subcommand | `go tool gotops` / `gotops` | Go has no external-subcommand mechanism |
-| Test runner | `cargo nextest` + `cargo test --doc` | `gotestsum` over `go test` incl. `Example*` | Native equivalents |
-| Coverage | `cargo llvm-cov` → LCOV | `go test -coverprofile` + `covdata` merge; LCOV optional | Go's own format; integration via `GOCOVERDIR` |
+| Test runner | `cargo nextest` + `cargo test --doc` | One `go test -json -race -shuffle=on -count=1` run, incl. `Example*`, parsed natively; `gotestsum` is optional display | Native equivalents; one run feeds tests, coverage and CRAP |
+| Coverage | `cargo llvm-cov` → LCOV | The profile of that run (`-coverprofile`, `-coverpkg=./...`) + `covdata` merge, in statements; LCOV optional | Go's own format; integration via `GOCOVERDIR`; Go has no line or branch figure |
 | CRAP | external `cargo crap --lcov` | **Native** implementation | Control of formula and counting rule; no mature single Go tool |
 | Mutation | `cargo mutants --in-diff` | Pluggable engine adapter + diff filter | Go engines vary in diff support |
 | Deps/supply chain | `cargo deny check` | `govulncheck` + `depguard` + license scan + `go mod verify` | Go splits these concerns |
@@ -915,11 +916,11 @@ wrong; the config wins.
 | Unmapped layer | `NotRun`; fails the gate | `not-run`; fails the gate | Same rule: an enabled layer that ran nothing proves nothing |
 | Enforcement | `gate` judges the coverage floors and the CRAP threshold on new and changed functions; a CRAP baseline holds existing ones (§2.1, §16); no mode setting | `hard`, `ratchet` (adopter default), `advisory`, with a baseline file (§6.7) | Adopt on existing code without splitting functions to pass |
 | Tiers | Tiers 0–5 with a cadence per layer (§3); `gate` default `--max-tier 1` | Tiers 0–3 defined in §3.2 | Four cadences cover Go's layers: laws, merge gate, nightly, release |
-| Classes | 11 in schema, 8 with profiles | 12 in schema, 5 with profiles (adds `tui-app`) | Hedronite ships TUIs and services |
+| Classes | 11 in schema, 8 with profiles | 12 in schema, 3 with launch profiles (`binary-cli`, `binary-service`, `library-core`; adds `tui-app`) | Profiles follow the repos that exist |
 | `check` | Validates `rust-tops.yaml` against the schema | Full JSON Schema validation | Same rule |
 | Report | Optional report schema exists; CLI does not write it | Always writes `report.json` | Make results inspectable |
 | `init` | Does not write the lock file | Writes the lock file | First gate run is already pinned |
-| CI floor | The drop-in runs `cargo tops gate --max-tier 1` with `fetch-depth: 0`; mutation and Darwin lanes are overlay comments | Real jobs on tiers, off only by config | Unrun layers prove nothing |
+| CI floor | The drop-in runs `cargo tops gate --max-tier 1` with `fetch-depth: 0`; mutation and Darwin lanes are overlay comments | One `gate` job running `gotops gate`, with a required macOS leg and no Windows leg; scheduled tier 2 and tag tier 3 jobs; `fetch-depth: 0` | A job that runs tools one by one can be green while the gate is red |
 | Missing tool | Missing mapped tool fails gate | Same; tools are resolved via `tool` directive + lock | Hermeticity |
 | Toolchain pin | `rust-toolchain.toml`, MSRV | `go` + `toolchain` directives, language-floor job | Go equivalent |
 | Reproducible env | Nix flake | Optional Nix flake (later) | Lower priority |
