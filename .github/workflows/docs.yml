@@ -121,9 +121,9 @@ jobs:
         with:
           go-version-file: scripts/docs/go.mod
           cache-dependency-path: scripts/docs/go.sum
-      - name: lint config reasons and workflow pins
+      - name: lint config reasons, workflow pins and protocol version agreement
         working-directory: scripts/docs
-        run: go run . -root ../.. -checks parse,lintconfig,workflow
+        run: go run . -root ../.. -checks parse,lintconfig,workflow,version
 
   docs:
     name: docs

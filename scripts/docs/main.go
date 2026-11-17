@@ -59,6 +59,7 @@ var checks = []struct {
 	{"markers", checkMarkers},
 	{"lintconfig", checkLintConfig},
 	{"workflow", checkWorkflow},
+	{"version", checkVersion},
 }
 
 func checkNames() []string {

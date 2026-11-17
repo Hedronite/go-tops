@@ -1,5 +1,7 @@
 # Fixture protocol
 
+**Spec status:** 0.4.0 (fixture) · **Date:** 2026-11-17
+
 ## 1. Catalog (draft: 3 laws, `G-01`…`G-03`)
 
 | ID | Law | Sev | Reader | v0.1 |
@@ -29,6 +31,12 @@ The report derives its counts from the catalog and the law files:
 - `catalog`: every law row, retired ones included (3);
 - `active`: laws not retired (2);
 - `judged`: applicable laws with a verdict other than not-evaluated.
+
+## 2. Pins
+
+| Item | Value |
+|---|---|
+| Protocol version | **0.4.0** (fixture) |
 
 ### 5.3 Profile file shape
 

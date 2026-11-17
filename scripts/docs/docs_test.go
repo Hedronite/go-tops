@@ -195,6 +195,34 @@ func TestMarkedAndOutOfSectionBlocksPass(t *testing.T) {
 	}
 }
 
+// The protocol version is one value in the header, the section 2 row and both
+// schema constants; changing any one fails only the version check.
+func TestVersionDisagreementFails(t *testing.T) {
+	cases := []struct{ name, file, old, new, reason string }{
+		{"header-dev", "GO_TOPS.md", "0.4.0 (fixture) \u00b7", "0.4.0-dev (fixture) \u00b7", `says "0.4.0-dev"`},
+		{"section-2-row", "GO_TOPS.md", "**0.4.0** (fixture)", "**0.3.0** (fixture)", `section 2 row says "0.3.0"`},
+		{"go-tops-schema", "schema/go-tops.schema.json", `"0.4.0"`, `"0.5.0"`, `schema/go-tops.schema.json protocol const says "0.5.0"`},
+		{"gate-report-schema", "schema/gate-report.schema.json", `"0.4.0"`, `"0.3.0"`, `schema/gate-report.schema.json protocol const says "0.3.0"`},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			root := fixture(t, "")
+			editFile(t, root, c.file, c.old, c.new)
+			code, out := runDocs(root)
+			if got := failedChecks(out); code != 1 || len(got) != 1 || got[0] != "version" || !strings.Contains(out, c.reason) {
+				t.Fatalf("exit %d, want only version failing with %q:\n%s", code, c.reason, out)
+			}
+		})
+	}
+}
+
+func TestMissingSchemaFailsVersion(t *testing.T) {
+	root := fixture(t, "", "schema/gate-report.schema.json")
+	if code, out := runDocs(root); code != 1 || !strings.Contains(out, "schema/gate-report.schema.json: not found") {
+		t.Fatalf("exit %d:\n%s", code, out)
+	}
+}
+
 func TestMissingExampleFileFails(t *testing.T) {
 	root := fixture(t, "")
 	if err := os.Remove(filepath.Join(root, "examples", "cfg.yaml")); err != nil {
