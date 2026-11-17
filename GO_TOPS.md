@@ -1,6 +1,6 @@
 # Go-TOPS: Go Testing and Optimization Protocol Suite
 
-**Spec status:** 0.4.0 (0.3.0 was the last draft) · **Date:** 2026-11-17 · **Owner:** Hedronite
+**Spec status:** 0.4.1 (0.4.0 was the previous revision) · **Date:** 2026-11-17 · **Owner:** Hedronite
 **Modeled on:** [Rust-TOPS](https://github.com/Hedronite/rust-tops) (protocol 1.2.0 on `main`; the latest release tag, `cargo-tops` v0.3.0, carries protocol 1.1.0, and `main` holds package 0.4.0, untagged; read 2026-11-17)
 
 > **Changes from 0.2.0 to 0.3.0:** One CRAP cap per class; authorship marking removed (§5.2, §6.2).
@@ -75,7 +75,7 @@ Plus a practice layer (human and agent working rules, §13 and `AGENTS.md`) and 
 
 | Item | Value |
 |---|---|
-| Protocol version | **0.4.0** (0.3.0 was the last draft; 1.0.0 is set by the criterion in §19) |
+| Protocol version | **0.4.1** (0.4.0 was the previous revision; 1.0.0 is set by the criterion in §19) |
 | Package version | 0.0.0 (unreleased) |
 | Language floor ("MSRV" analogue) | Go **1.26**, the oldest Go release still supported upstream (a policy: the floor moves when upstream drops support). The floor is a language version, compared in Go's own order (`go/version.Lang`), so a `go 1.26` and a `go 1.26.4` directive both meet it. Matrix tests floor and current (current: Go 1.27) |
 | Toolchain pin | The exact Go release in `go-tops.lock` (§10). `GOTOOLCHAIN=local` makes the `go` command use the toolchain it ships with and never reads the `toolchain` line, so a runner with another patch release would pass silently: the gate therefore checks that `go env GOVERSION` equals the pin (§3.1, G-33). A `toolchain` line is optional: with or without one, and whether the `go` line names a language version (`go 1.26`) or a patch release (`go 1.27.4`), the pin is the release in the lock |
@@ -405,7 +405,7 @@ its own fuzz globs in `layers.fuzz.targets`, which G-43 reads.
 ```yaml
 # profiles/binary-cli.yaml
 class: binary-cli
-protocol: "0.4.0"
+protocol: "0.4.1"
 gates:
   coverage: { statements_floor: 70 }
   crap: { cap: 10, complexity: { err_guard_discount: true, wrap_functions: [] } }
@@ -421,7 +421,7 @@ laws:
 ```yaml
 # profiles/binary-service.yaml
 class: binary-service
-protocol: "0.4.0"
+protocol: "0.4.1"
 gates:
   coverage: { statements_floor: 75 }
   crap: { cap: 10, complexity: { err_guard_discount: true, wrap_functions: [] } }
@@ -437,7 +437,7 @@ laws:
 ```yaml
 # profiles/library-core.yaml
 class: library-core
-protocol: "0.4.0"
+protocol: "0.4.1"
 gates:
   coverage: { statements_floor: 85 }
   crap: { cap: 8, complexity: { err_guard_discount: true, wrap_functions: [] } }   # provisional (§5.2)
@@ -693,13 +693,26 @@ out of range; a run that leaves a required law out of range ends `partial`, neve
 
 <!-- tops-core:begin enforcement -->
 The top-level key `enforce` sets how floors and caps are applied. Adopters default to
-`ratchet`. Go-TOPS runs `hard` on itself.
+`ratchet`. Go-TOPS runs `hard` on itself once its laws layer judges the profile's required laws
+(M5). Until then it runs `advisory`, with an `advisory` key whose expiry is the M5 target, and its
+own CI requires gates 1–3 `pass` in the report. That is the bootstrap rule: a `hard` run of a
+profile that requires laws fails while no reader judges them (§3.3), so the kit does not claim
+`hard` before it can meet it.
 
 | Mode | What fails |
 |---|---|
 | `hard` | A production function above the CRAP cap; a package below its coverage floor; any lint finding; any law verdict `refuse`; an unexplained mutation survivor |
 | `ratchet` | The `hard` rules, except where the ledger below holds an entry for the thing that failed: that entry's limit applies instead. Two further limits exist only here: suppression counts and the exemption count |
 | `advisory` | Nothing. Needs the `advisory` key (§9); the report prints the run as not enforced. The baseline cannot be written |
+
+**Under `advisory`.** `gotops gate` exits 0 for any run that starts, whatever its layers and laws
+found. Codes 2, 3 and 4 still apply, because they are decided before any layer runs (§12.2), and
+`partial` and `--dry-run` are still refused in CI. The report keeps the honest result:
+`summary.outcome` is the outcome the run would have under `hard` (`pass`, `fail` or `partial`) and
+is never rewritten, `summary.enforced` is `false`, and `summary.advisory_expires` repeats the
+`advisory.expires` date (§12.3). The text output says so:
+`NOT ENFORCED (advisory, expires <date>): outcome <OUTCOME>`. A CI that must hold part of the gate
+under `advisory` reads the report, as the bootstrap rule above does.
 
 **CRAP.** A function at or under the cap may change up to the cap. A function over the cap
 may not exceed its baseline score plus 0.01 (a rise of 0.01 or less is noise). A function absent
@@ -1176,7 +1189,7 @@ depth fails.
 
 <!-- go-tops:example path=config/go-tops.example.yaml schema=schema/go-tops.schema.json -->
 ```yaml
-protocol: "0.4.0"            # must match the schema's protocol constant
+protocol: "0.4.1"            # must match the schema's protocol constant
 version: "0.1.0"             # this config's version (non-empty)
 module: github.com/acme/myapp
 class: binary-cli            # one of the schema's classes
@@ -1277,7 +1290,9 @@ Purpose: make the gate reproducible, with one pin mechanism for each kind of too
   tool dependencies. `go-tops.lock` does not repeat these versions.
 - **`go-tops.lock`** holds only what a module cannot: the downloaded binaries (golangci-lint,
   for one; its project advises binary installs), each with its URL template and SHA-256 per
-  OS/arch, and the Go toolchain with its exact version.
+  OS/arch, and the Go toolchain with its exact version. It is YAML, and
+  `schema/lock.schema.json` (§18) validates it, with `additionalProperties: false` at every
+  object.
 - **`gotops lock --verify`** re-checks every pin. For a module tool it builds the binary and
   reads the module version with `go version -m` (a `go install` build reports its own version as
   `dev`, so `--version` text is never compared), then compares it with `tools/go.mod`. For a
@@ -1286,6 +1301,40 @@ Purpose: make the gate reproducible, with one pin mechanism for each kind of too
 - **Trust model:** checksum-verified. Where an upstream release is mutable or unsigned, use
   trust-on-first-use and record that in the lock. `gotops lock --update` is a reviewed change,
   never an automatic one.
+
+**The lock file.** The example below is `config/go-tops.example.lock`: docs CI keeps the block
+identical to the file and validates the file against the schema.
+
+| Key | Meaning |
+|---|---|
+| `protocol` | The protocol constant of the schema (§2) |
+| `toolchain` | The exact Go release, `go1.x.y`. `go env GOVERSION` must equal it |
+| `trust.mode`, `trust.note` | `checksum` (each SHA-256 copied from the upstream release checksum file) or `tofu` (trust on first use), and a note saying where the values came from or why trust on first use was needed |
+| `binaries[].name`, `.version` | The tool and its exact release, with no leading `v` |
+| `binaries[].url` | An `https` URL template. The only placeholders are `{version}`, `{os}` and `{arch}` |
+| `binaries[].extract` | Optional. Where the executable sits inside the downloaded archive, as a template with the same placeholders. Absent when the download is the executable |
+| `binaries[].sha256` | The SHA-256 of the downloaded file, one per platform: `darwin/arm64`, `darwin/amd64`, `linux/amd64` and `linux/arm64`. All four are required |
+
+<!-- go-tops:example path=config/go-tops.example.lock schema=schema/lock.schema.json -->
+```yaml
+protocol: "0.4.1"               # must match the schema protocol constant
+toolchain: go1.27.4             # go env GOVERSION must equal this
+
+trust:
+  mode: checksum
+  note: SHA-256 values copied from the upstream release checksum file
+
+binaries:
+  - name: golangci-lint
+    version: "2.15.0"
+    url: https://github.com/golangci/golangci-lint/releases/download/v{version}/golangci-lint-{version}-{os}-{arch}.tar.gz
+    extract: golangci-lint-{version}-{os}-{arch}/golangci-lint
+    sha256:
+      darwin/arm64: d1e409481a8ca846c4bc97e781eb5cb1bd5c23353a0b3977a1cbda1b1b6447d5
+      darwin/amd64: 767b899a28285e88ded2823d5dcc4bc5ef681173eb2d80f029a7b17ee4ece3b8
+      linux/amd64: 9b7fe6a6bf6334b98decf8d86b11415ea7889afdabdd1959fdce23af2a9ebcea
+      linux/arm64: b4d8f17068b35ee6060cc2f69a16fb48740d706fbba81661c318649c114a6998
+```
 
 ---
 
@@ -1366,6 +1415,10 @@ before any layer runs. A run that starts returns 0 or 1.
 | 4 | Refused by policy when `CI=true`: `--dry-run`, a names-only mode, or a range that leaves a required law out of range (a `--max-tier` below its reader, or an `--only` that excludes it), which would end `partial` |
 
 A missing tool has one code: 1.
+
+Under `enforce: advisory` a run that starts exits 0 whatever its layers and laws found, and codes
+2, 3 and 4 apply as above. The report's `summary.outcome` still holds the outcome the run would
+have had under `hard`, and `summary.enforced` is `false` (§6.7, §12.3).
 <!-- tops-core:end exit-codes -->
 
 ### 12.3 Report: `.go-tops/report.json`
@@ -1377,7 +1430,7 @@ CI keeps the block identical to the file and validates the file against the sche
 <!-- go-tops:example path=config/gate-report.example.json schema=schema/gate-report.schema.json -->
 ```json
 {
-  "protocol": "0.4.0",
+  "protocol": "0.4.1",
   "tool_version": "0.0.0",
   "module": "github.com/acme/myapp",
   "class": "binary-cli",
@@ -1445,7 +1498,7 @@ CI keeps the block identical to the file and validates the file against the sche
       { "id": "G-43", "verdict": "not-evaluated", "reason": "no_reader", "reader": "analyzer" }
     ]
   },
-  "summary": { "outcome": "fail", "exit_code": 1, "failed": ["crap"] }
+  "summary": { "outcome": "fail", "exit_code": 1, "failed": ["crap"], "enforced": true }
 }
 ```
 
@@ -1482,7 +1535,10 @@ Report rules:
   exemption). `exemptions` lists every exemption in force on the day of the run, as
   the records of §6.8.
 - The summary's `exit_code` is 0 or 1: a run refused before any layer runs writes no report
-  (§12.2).
+  (§12.2). `outcome` is the outcome the run would have under `hard` and is never rewritten.
+  `enforced` is `false` exactly when `enforce` is `advisory`: then `exit_code` is 0 whatever the
+  `outcome`, and `advisory_expires` holds the `advisory.expires` date of the configuration (§6.7).
+  Under any other mode `enforced` is `true` and `advisory_expires` is absent.
 
 ---
 
@@ -1586,7 +1642,7 @@ wrong; the config wins.
 
 ---
 
-## 16. Decisions (resolved for v0.4.0; remaining calibration items noted)
+## 16. Decisions (resolved for v0.4.1; remaining calibration items noted)
 
 1. **Complexity rule (`err_guard_discount`):** **true** in every class, for guards that only return the error (wrapped or not). errcheck `check-blank` and `check-type-assertions` are required, so discarding the error is not cheaper than handling it. Explicit in every profile. (§6.3) *Changed in 0.3.0; 0.2.0 turned it off for `library-core` and `concurrency-runtime`.*
 2. **Authorship marking:** None. One CRAP cap per class for every author. (§5.2, §6.2) *Changed in 0.3.0; 0.2.0 used an `Authored-By: agent` trailer that raised the cap.*
@@ -1598,7 +1654,7 @@ wrong; the config wins.
 8. **Report format extras:** Defer SARIF/JUnit to M7 or later. `report.json` sufficient for v0.2.
 9. **Distribution:** Module + `go install` / `go tool` first. GoReleaser binaries and Nix flake later (M7).
 10. **Naming:** Confirmed **Go-TOPS** / `gotops` / `github.com/Hedronite/go-tops`.
-11. **Enforcement:** `enforce` is `hard`, `ratchet` or `advisory`. Adopters default to `ratchet`; Go-TOPS runs `hard` on itself. (§6.7) *New in 0.3.0.*
+11. **Enforcement:** `enforce` is `hard`, `ratchet` or `advisory`. Adopters default to `ratchet`; Go-TOPS runs `hard` on itself once its laws layer judges the profile's required laws (M5) and `advisory` until then (decisions 29 and 31). (§6.7) *New in 0.3.0; amended in 0.4.1.*
 12. **Race and cgo:** Test jobs run with `CGO_ENABLED=1` because `-race` requires cgo on Linux. Builds and releases stay `CGO_ENABLED=0` outside `cgo-bridge`. (§3.1, G-26) *New in 0.3.0.*
 13. **Unmapped layers:** An enabled layer with no command is `not-run` and fails the gate. (§3.3, §7) *New in 0.3.0.*
 14. **CRAP caps from a measurement:** `binary-cli` and `binary-service` 10, `library-core` 8; `tui-app` and `concurrency-runtime` take 8 until a repo of the class is measured. One cap per class for every author. The `library-core` cap and the two unmeasured caps are provisional. (§5.2, §6.2, `calibration/2026-11-probe/`) *New in 0.4.0.*
@@ -1616,6 +1672,9 @@ wrong; the config wins.
 26. **One CI job and house standard first:** the drop-in is one job that runs `gotops gate`, with `fetch-depth: 0`; a macOS leg is required where the kit runs on Macs, and there is no Windows leg. (§11) *New in 0.4.0.*
 27. **Launch profiles follow adopters:** `binary-cli`, `binary-service` and `library-core`; `tui-app` and `concurrency-runtime` are schema-valid without a profile. (§5.1) *New in 0.4.0.*
 28. **The language floor is a policy:** the oldest Go release still supported upstream, compared as a language version, with the toolchain pin checked separately. (§2) *New in 0.4.0.*
+29. **The kit's bootstrap:** until its laws layer judges the profile's required laws (M5), Go-TOPS runs `advisory` on itself, with the `advisory` key, an expiry at the M5 target and a CI that requires gates 1–3 `pass`; then it runs `hard`. (§6.7, §17, §19) *New in 0.4.1.*
+30. **The tool lock has a schema:** `schema/lock.schema.json` validates `go-tops.lock`, and `config/go-tops.example.lock` is a checked example. (§10, §18) *New in 0.4.1.*
+31. **What `gate` exits under `advisory`:** 0 for a run that starts; codes 2, 3 and 4 still apply. The report keeps the outcome the run would have under `hard`, with `summary.enforced` `false` and `summary.advisory_expires`. (§6.7, §12.2, §12.3) *New in 0.4.1.*
 
 ---
 
@@ -1632,11 +1691,13 @@ go-tops/
 ├── config/
 │   ├── AGENTS.template.md           # the AGENTS.md that gotops init will write
 │   ├── go-tops.example.yaml         # the §9 example
+│   ├── go-tops.example.lock         # the §10 example
 │   └── gate-report.example.json     # the §12.3 example
 ├── profiles/                        # binary-cli, binary-service, library-core (§5.3)
 ├── schema/
 │   ├── go-tops.schema.json          # go-tops.yaml and profiles
 │   ├── gate-report.schema.json      # .go-tops/report.json
+│   ├── lock.schema.json             # go-tops.lock
 │   └── core.schema.json             # shared definitions; the TOPS shared core replaces it by sync
 ├── scripts/docs/                    # the docs checker (Go, its own go.mod)
 ├── .gitignore
@@ -1672,7 +1733,11 @@ go-tops/
 ```
 
 **Self-hosting:** Go-TOPS must pass its own gate at tier 1 before any release; its own CRAP
-output and survivor ledger are published in CI artifacts.
+output and survivor ledger are published in CI artifacts. It runs `hard` on itself once its laws
+layer judges the profile's required laws (M5). Until then it runs `advisory` under the bootstrap
+rule of §6.7: `go-tops.yaml` carries an `advisory` key whose expiry is the M5 target, and its own
+CI requires gates 1–3 `pass` in the report, so the gate keeps its teeth on what the CLI already
+builds.
 
 ---
 
@@ -1682,20 +1747,19 @@ The schemas are files in `schema/`, JSON Schema 2020-12:
 
 | File | What it validates |
 |---|---|
-| `schema/go-tops.schema.json` | `go-tops.yaml` and the class profiles in `profiles/`: one shape for both. `additionalProperties: false` at every object, so an unknown key at any depth fails. Its `protocol` is the constant `0.4.0` |
+| `schema/go-tops.schema.json` | `go-tops.yaml` and the class profiles in `profiles/`: one shape for both. `additionalProperties: false` at every object, so an unknown key at any depth fails. Its `protocol` is the constant `0.4.1` |
 | `schema/gate-report.schema.json` | `.go-tops/report.json` (§12.3): every layer with its tier and outcome, every law with its verdict and reason code, the laws counts, the vulnerability database timestamp and the shuffle seed |
-| `schema/core.schema.json` | The definitions the other two share: layer outcomes, law verdicts, reason codes, run outcomes, enforcement modes, law IDs, the baseline ledger and the exemption record. Both schemas `$ref` it and define none of these again. It is a local copy: the TOPS shared core will replace it by a checked sync |
+| `schema/core.schema.json` | The definitions the configuration and report schemas share: layer outcomes, law verdicts, reason codes, run outcomes, enforcement modes, law IDs, the baseline ledger and the exemption record. Both `$ref` it and define none of these again. It is a local copy: the TOPS shared core will replace it by a checked sync |
+| `schema/lock.schema.json` | `go-tops.lock` (§10): the toolchain, the trust mode and the downloaded binaries, each with an exact version, a URL template and a SHA-256 for each of four platforms. `additionalProperties: false` at every object. Its `protocol` is the constant `0.4.1` |
 
 `schema/core.schema.json` also defines the entries of the two ledger files that `check`
 validates: `survivorEntry` for `.go-tops/survivors.yaml` (§6.4) and `ackEntry` for
-`.go-tops/acks.yaml` (§3.3). The schema of `go-tops.lock` is not part of 0.4.0: the lock is
-written and read by the CLI, so its schema lands with slice M1-G6 of the roadmap, which
-builds `lock --verify`.
+`.go-tops/acks.yaml` (§3.3).
 
 When prose and schema disagree, fix the schema first, then the prose (§3.4). The schemas carry
 no `$id`: their `$ref`s are relative, so a checkout validates with no network. A published
 `$id` URL waits until the schemas are published. Docs CI validates the example blocks of §5.3,
-§9 and §12.3 against these schemas on every pull request.
+§9, §10 and §12.3 against these schemas on every pull request.
 
 ---
 
@@ -1706,7 +1770,7 @@ The plan of record. Each milestone is a set of slices, one branch and one pull r
 | Milestone | Contents | Exit criterion |
 |---|---|---|
 | **M0.5** protocol 0.4.0 | This document, the schemas, the launch profiles and the docs CI that checks them | 0.4.0 merged; every example in this document validates against its schema |
-| **M1** `gotops` CLI | `init`, `check`, `gate` at tiers 0–1, `report.json`; Go-TOPS gates itself | Self-hosting green at tier 1 |
+| **M1** `gotops` CLI | `init`, `check`, `gate` at tiers 0–1, `report.json`; Go-TOPS gates itself | Self-hosting at tier 1 under the bootstrap rule of §6.7 |
 | **M2** native CRAP and the ratchet | Complexity and CRAP, guard-neutral coverage, the baseline ledger, exemptions | The gate fails a complex uncovered function and passes a legacy repo under `ratchet` |
 | **M3** first adopter | `vigil` gated under `ratchet`; adopt, gate and review skills | One real repo gated |
 | **M4** mutation | A gremlins adapter, the survivor ledger, diff outcomes, a spike on an overlay runner | The gate fails a deliberately weak test |

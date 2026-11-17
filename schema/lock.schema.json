@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Go-TOPS tool lock",
+  "description": "go-tops.lock (section 10): the Go toolchain and the downloaded binaries, each pinned by an exact version and a SHA-256 per platform. Module tools are pinned in tools/go.mod, not here. The file is YAML.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "protocol",
+    "toolchain",
+    "trust",
+    "binaries"
+  ],
+  "properties": {
+    "protocol": {
+      "const": "0.4.1"
+    },
+    "toolchain": {
+      "description": "The exact Go release the gate runs on; go env GOVERSION must equal it (section 2).",
+      "type": "string",
+      "pattern": "^go1\\.[0-9]+\\.[0-9]+$"
+    },
+    "trust": {
+      "description": "How the SHA-256 values were obtained (section 10).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "note"
+      ],
+      "properties": {
+        "mode": {
+          "description": "checksum: each value was copied from the upstream release checksum file. tofu: trust on first use, because the upstream release is mutable or unsigned.",
+          "enum": [
+            "checksum",
+            "tofu"
+          ]
+        },
+        "note": {
+          "description": "Where the values came from, or why trust on first use was needed.",
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "binaries": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/binary"
+      }
+    }
+  },
+  "$defs": {
+    "binary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "version",
+        "url",
+        "sha256"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$"
+        },
+        "version": {
+          "description": "The exact release, with no leading v; the url template spells the tag.",
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(-[0-9A-Za-z.-]+)?$"
+        },
+        "url": {
+          "description": "An https URL template. The only placeholders are {version}, {os} and {arch}.",
+          "type": "string",
+          "pattern": "^https://([^\\s{}]|\\{(version|os|arch)\\})+$"
+        },
+        "extract": {
+          "description": "Where the executable sits inside the downloaded archive, as a template with the same placeholders. Absent when the download is the executable.",
+          "type": "string",
+          "pattern": "^([^\\s{}]|\\{(version|os|arch)\\})+$"
+        },
+        "sha256": {
+          "description": "The SHA-256 of the downloaded file, one per platform. All four are required.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "darwin/arm64",
+            "darwin/amd64",
+            "linux/amd64",
+            "linux/arm64"
+          ],
+          "properties": {
+            "darwin/arm64": {
+              "$ref": "#/$defs/sha256"
+            },
+            "darwin/amd64": {
+              "$ref": "#/$defs/sha256"
+            },
+            "linux/amd64": {
+              "$ref": "#/$defs/sha256"
+            },
+            "linux/arm64": {
+              "$ref": "#/$defs/sha256"
+            }
+          }
+        }
+      }
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  }
+}

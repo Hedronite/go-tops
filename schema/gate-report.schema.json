@@ -22,7 +22,7 @@
   ],
   "properties": {
     "protocol": {
-      "const": "0.4.0"
+      "const": "0.4.1"
     },
     "tool_version": {
       "type": "string",
@@ -202,7 +202,8 @@
       "required": [
         "outcome",
         "exit_code",
-        "failed"
+        "failed",
+        "enforced"
       ],
       "properties": {
         "outcome": {
@@ -220,8 +221,47 @@
             "type": "string",
             "minLength": 1
           }
+        },
+        "enforced": {
+          "description": "false exactly when enforce is advisory: the run exits 0 whatever it found, and outcome is what it would have been under hard (§6.7).",
+          "type": "boolean"
+        },
+        "advisory_expires": {
+          "description": "The advisory.expires date of the configuration. Present when enforced is false, absent otherwise.",
+          "$ref": "core.schema.json#/$defs/date"
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": [
+              "enforced"
+            ],
+            "properties": {
+              "enforced": {
+                "const": false
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "advisory_expires"
+            ],
+            "properties": {
+              "exit_code": {
+                "const": 0
+              }
+            }
+          },
+          "else": {
+            "not": {
+              "required": [
+                "advisory_expires"
+              ]
+            }
+          }
+        }
+      ]
     },
     "exemptions": {
       "description": "Every exemption in force on the day of the run (§6.8).",
@@ -231,6 +271,39 @@
       }
     }
   },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "enforce": {
+            "const": "advisory"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "summary": {
+            "properties": {
+              "enforced": {
+                "const": false
+              }
+            }
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "summary": {
+            "properties": {
+              "enforced": {
+                "const": true
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
   "$defs": {
     "layer": {
       "type": "object",
