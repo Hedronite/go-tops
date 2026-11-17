@@ -1143,6 +1143,11 @@ CI rules (carried from Rust-TOPS's lessons):
   fragment covering `go-tops.yaml`, `.golangci.yml`, `.go-tops/`, `go-tops.lock`, `tools/` and
   `.github/workflows/go-tops.yml`. The Go-TOPS repo keeps its own `law-diff` check, which fails
   PRs that weaken or remove a law without a protocol-change label.
+- **The first tier 2 run checks the `survivors` ledger kind.** That kind is fed only by the
+  whole-module mutation run, so the first-ledger check of §6.7 cannot run for it at tier 1: the
+  first `deep` run that records it applies the check, and it passes only when each entry equals
+  what that run measured. Until then the kind is absent and holds at its `hard` form, so the
+  `deep` schedule is enabled after `gotops baseline --init --kind survivors` has run once.
 - A layer the class requires runs in these jobs; none ships as a commented-out job. A layer is
   off only by `enabled: false` with a reason (§7).
 - Pin actions by commit SHA; minimal `permissions:`; cache `GOMODCACHE`/`GOCACHE` by `go.sum` and
