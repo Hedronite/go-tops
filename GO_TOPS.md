@@ -404,7 +404,6 @@ its own fuzz globs in `layers.fuzz.targets`, which G-43 reads.
 <!-- go-tops:example path=profiles/binary-cli.yaml schema=schema/go-tops.schema.json -->
 ```yaml
 # profiles/binary-cli.yaml
-bogus_key: 1
 class: binary-cli
 protocol: "0.4.0"
 gates:
