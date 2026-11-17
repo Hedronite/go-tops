@@ -69,7 +69,7 @@ func TestBasePasses(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("base fixture must pass, got exit %d:\n%s", code, out)
 	}
-	for _, want := range []string{"catalog 3 (active 2, retired 1), v0.1 1", "2 examples", "2 balanced pairs", "docs: PASS"} {
+	for _, want := range []string{"catalog 3 (active 2, retired 1), v0.1 1", "3 examples", "2 balanced pairs", "docs: PASS"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("output lacks %q:\n%s", want, out)
 		}
@@ -81,6 +81,7 @@ func TestPlantedDefectsFail(t *testing.T) {
 	cases := []struct{ overlay, check, reason string }{
 		{"count-mismatch", "counts", `"2 of 3 laws judged" states v01 = 2; the catalog has v01 = 1`},
 		{"bad-key", "examples", "additional properties 'tierr' not allowed"},
+		{"bad-lock-key", "examples", "additional properties 'bogus_key' not allowed"},
 		{"bad-type", "examples", "minimum"},
 		{"drifted-block", "examples", `first difference at line 2: block "tier: 2", file "tier: 1"`},
 		{"invalid-yaml-example", "examples", "invalid YAML"},
@@ -161,11 +162,13 @@ func editFile(t *testing.T, root, rel, old, new string) {
 	}
 }
 
-// Every YAML or JSON block in sections 5.3, 9 and 12.3 must carry a marker.
+// Every YAML or JSON block in sections 5.3, 9, 10 and 12.3 must carry a marker.
 func TestUnmarkedBlocksInExampleSectionsFail(t *testing.T) {
 	const prose = "Prose only: no example block here."
 	cases := []struct{ name, old, new, reason string }{
 		{"yaml-in-section-9", "## 9. Configuration\n\n" + prose, "## 9. Configuration\n\n```yaml\nprotocol: \"0.4.0\"\n```", "fenced yaml block in section 9 has no go-tops:example marker"},
+		{"yaml-in-section-10", "## 10. Tool pins\n\n" + prose, "## 10. Tool pins\n\n```yaml\nprotocol: \"0.4.0\"\n```", "fenced yaml block in section 10 has no go-tops:example marker"},
+		{"section-10-renumbered", "## 10. Tool pins", "## 12. Tool pins", "section 10 not found"},
 		{"json-in-section-12.3", "### 12.3 Report\n\n" + prose, "### 12.3 Report\n\n```json\n{}\n```", "fenced json block in section 12.3 has no go-tops:example marker"},
 		{"yml-in-section-5.3", "### 5.3 Profile file shape\n\n" + prose, "### 5.3 Profile file shape\n\n```yml\na: 1\n```", "fenced yml block in section 5.3 has no go-tops:example marker"},
 		{"subsection-of-9", "## 9. Configuration\n\n" + prose, "## 9. Configuration\n\n### 9.1 Keys\n\n```yaml\na: 1\n```", "fenced yaml block in section 9 has no go-tops:example marker"},
@@ -187,21 +190,22 @@ func TestMarkedAndOutOfSectionBlocksPass(t *testing.T) {
 	root := fixture(t, "")
 	editFile(t, root, "GO_TOPS.md", "## 9. Configuration\n\nProse only: no example block here.",
 		"## 9. Configuration\n\n<!-- go-tops:example path=examples/cfg.yaml schema=schema/cfg.schema.json -->\n\n```yaml\nprotocol: \"0.4.0\"\ntier: 1\n```")
-	editFile(t, root, "GO_TOPS.md", "## 10. After the example sections\n\nProse only.",
-		"## 10. After the example sections\n\n```yaml\nnot: an example section\n```")
+	editFile(t, root, "GO_TOPS.md", "## 11. After the example sections\n\nProse only.",
+		"## 11. After the example sections\n\n```yaml\nnot: an example section\n```")
 	code, out := runDocs(root)
-	if code != 0 || !strings.Contains(out, "3 examples") {
-		t.Fatalf("a marked block in section 9 and an unmarked one in section 10 must pass, exit %d:\n%s", code, out)
+	if code != 0 || !strings.Contains(out, "4 examples") {
+		t.Fatalf("a marked block in section 9 and an unmarked one in section 11 must pass, exit %d:\n%s", code, out)
 	}
 }
 
-// The protocol version is one value in the header, the section 2 row and both
-// schema constants; changing any one fails only the version check.
+// The protocol version is one value in the header, the section 2 row and each
+// schema constant; changing any one fails only the version check.
 func TestVersionDisagreementFails(t *testing.T) {
 	cases := []struct{ name, file, old, new, reason string }{
 		{"header-dev", "GO_TOPS.md", "0.4.0 (fixture) \u00b7", "0.4.0-dev (fixture) \u00b7", `says "0.4.0-dev"`},
 		{"section-2-row", "GO_TOPS.md", "**0.4.0** (fixture)", "**0.3.0** (fixture)", `section 2 row says "0.3.0"`},
 		{"go-tops-schema", "schema/go-tops.schema.json", `"0.4.0"`, `"0.5.0"`, `schema/go-tops.schema.json protocol const says "0.5.0"`},
+		{"lock-schema", "schema/lock.schema.json", `"0.4.0"`, `"0.4.2"`, `schema/lock.schema.json protocol const says "0.4.2"`},
 		{"gate-report-schema", "schema/gate-report.schema.json", `"0.4.0"`, `"0.3.0"`, `schema/gate-report.schema.json protocol const says "0.3.0"`},
 	}
 	for _, c := range cases {
@@ -213,6 +217,13 @@ func TestVersionDisagreementFails(t *testing.T) {
 				t.Fatalf("exit %d, want only version failing with %q:\n%s", code, c.reason, out)
 			}
 		})
+	}
+}
+
+func TestMissingLockSchemaFailsVersion(t *testing.T) {
+	root := fixture(t, "", "schema/lock.schema.json")
+	if code, out := runDocs(root); code != 1 || !strings.Contains(out, "schema/lock.schema.json: not found") {
+		t.Fatalf("exit %d:\n%s", code, out)
 	}
 }
 

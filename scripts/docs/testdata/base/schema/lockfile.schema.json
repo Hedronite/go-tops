@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["protocol", "toolchain"],
+  "properties": {
+    "protocol": { "type": "string" },
+    "toolchain": { "type": "string", "pattern": "^go1\\.[0-9]+\\.[0-9]+$" }
+  }
+}
