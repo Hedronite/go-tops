@@ -47,11 +47,14 @@ type Binary struct {
 	Version string `yaml:"version" json:"version"` // exact, no leading v
 	URL     string `yaml:"url" json:"url"`         // https template: {version}, {os}, {arch}
 	// Extract is where the executable sits inside a downloaded archive. Empty
-	// when the download is the executable. SHA256 is then the hash of the
-	// archive, not of the executable.
+	// when the download is the executable.
 	Extract string `yaml:"extract,omitempty" json:"extract,omitempty"`
-	// SHA256 holds the hash of the downloaded file per platform ("darwin/arm64").
+	// SHA256 holds the hash of the downloaded file per platform ("darwin/arm64"):
+	// the archive when there is an extract path.
 	SHA256 map[string]string `yaml:"sha256" json:"sha256"`
+	// ExecutableSHA256 holds the hash of the executable inside the archive per
+	// platform. The schema requires it with Extract and forbids it without.
+	ExecutableSHA256 map[string]string `yaml:"executable_sha256,omitempty" json:"executable_sha256,omitempty"`
 }
 
 // Error is a lock that does not load: the file is missing, is not valid YAML

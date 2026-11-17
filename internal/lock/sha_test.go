@@ -31,9 +31,16 @@ func TestFileSHA256(t *testing.T) {
 }
 
 func lockFor(sha, extract string) *Lock {
+	// with extract, the archive hash differs from the executable's: the lock
+	// holds both, and the installed file is the executable
+	exe := map[string]string(nil)
+	if extract != "" {
+		exe = map[string]string{"linux/amd64": sha, "darwin/arm64": sha}
+		sha = strings.Repeat("9", 64)
+	}
 	b := Binary{
 		Name: "tool", Version: "1.0.0", URL: "https://example.com/{version}", Extract: extract,
-		SHA256: map[string]string{"linux/amd64": sha, "darwin/arm64": sha},
+		SHA256: map[string]string{"linux/amd64": sha, "darwin/arm64": sha}, ExecutableSHA256: exe,
 	}
 	return &Lock{Binaries: []Binary{b}}
 }
@@ -59,13 +66,38 @@ func TestVerifyBinary(t *testing.T) {
 	}
 }
 
-// An entry with an extract path holds the hash of the archive: the installed
-// executable cannot be compared, and the check says so rather than passing.
-func TestVerifyBinaryWithExtractIsNotVerifiable(t *testing.T) {
+// 0.4.2: an entry with an extract path is verified against executable_sha256,
+// the hash of the executable inside the archive, and not against the archive's.
+func TestVerifyBinaryWithExtractUsesTheExecutableHash(t *testing.T) {
 	p := write(t, t.TempDir(), "tool", "abc")
-	err := lockFor(abcSHA, "tool-{version}/tool").VerifyBinary("tool", p, "linux/amd64")
-	if !errors.Is(err, ErrNotVerifiable) {
+	l := lockFor(abcSHA, "tool-{version}/tool") // executable hash is abc's; archive hash is nines
+	if err := l.VerifyBinary("tool", p, "linux/amd64"); err != nil {
+		t.Fatalf("the executable matches executable_sha256: %v", err)
+	}
+	err := l.VerifyBinary("tool", write(t, t.TempDir(), "tool", "abd"), "linux/amd64")
+	if err == nil || !strings.Contains(err.Error(), "executable_sha256") {
+		t.Fatalf("a different executable must fail, naming the field: %v", err)
+	}
+	// the archive hash is not the one compared
+	arch := lockFor(abcSHA, "tool-{version}/tool")
+	arch.Binaries[0].ExecutableSHA256["linux/amd64"] = strings.Repeat("9", 64)
+	if err := arch.VerifyBinary("tool", p, "linux/amd64"); err == nil {
+		t.Fatal("a file that matches neither hash verified")
+	}
+}
+
+// An extract entry with no executable_sha256 for the platform cannot be
+// verified: ErrNotVerifiable. The schema makes this unreachable for a loaded lock.
+func TestVerifyBinaryWithExtractAndNoExecutableHashIsNotVerifiable(t *testing.T) {
+	p := write(t, t.TempDir(), "tool", "abc")
+	l := lockFor(abcSHA, "tool-{version}/tool")
+	l.Binaries[0].ExecutableSHA256 = nil
+	if err := l.VerifyBinary("tool", p, "linux/amd64"); !errors.Is(err, ErrNotVerifiable) {
 		t.Fatalf("err = %v, want ErrNotVerifiable", err)
+	}
+	l = lockFor(abcSHA, "tool-{version}/tool")
+	if err := l.VerifyBinary("tool", p, "linux/arm64"); !errors.Is(err, ErrNotVerifiable) {
+		t.Fatalf("a platform with no executable hash: err = %v, want ErrNotVerifiable", err)
 	}
 }
 
@@ -86,7 +118,8 @@ func TestNewVerifier(t *testing.T) {
 	if err := v("tool", p); err == nil {
 		t.Fatal("verified with no lock file")
 	}
-	lockText := strings.Replace(goodLock, "    extract: golangci-lint-{version}-{os}-{arch}/golangci-lint\n", "", 1)
+	lockText, _, _ := strings.Cut(goodLock, "    executable_sha256:") // the download is the executable: no executable_sha256
+	lockText = strings.Replace(lockText, "    extract: golangci-lint-{version}-{os}-{arch}/golangci-lint\n", "", 1)
 	lockText = strings.Replace(lockText, "name: golangci-lint", "name: tool", 1)
 	for _, plat := range []string{"darwin/arm64", "darwin/amd64", "linux/amd64", "linux/arm64"} {
 		i := strings.Index(lockText, "      "+plat+": ")

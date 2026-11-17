@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-const goodLock = `protocol: "0.4.1"
+const goodLock = `protocol: "0.4.2"
 toolchain: go1.27.4
 trust:
   mode: checksum
@@ -24,6 +24,11 @@ binaries:
       darwin/amd64: 767b899a28285e88ded2823d5dcc4bc5ef681173eb2d80f029a7b17ee4ece3b8
       linux/amd64: 9b7fe6a6bf6334b98decf8d86b11415ea7889afdabdd1959fdce23af2a9ebcea
       linux/arm64: b4d8f17068b35ee6060cc2f69a16fb48740d706fbba81661c318649c114a6998
+    executable_sha256:
+      darwin/arm64: 71b89744ef6dd92dad9026b70489d1ad660da79ef90dfb5aabe995d916bec8a9
+      darwin/amd64: e04962742507a5f37a4002a7a8b2b549f6864f17807eb5d534d947f6311a051f
+      linux/amd64: d9af4564c05beb2f5e130119aec45e5e89d28e5017d558d3ca382659f2427894
+      linux/arm64: 14680d7674eb1fed0405446670e15dcffb74e979ef0dcd41f998c088fd6babfb
 `
 
 // §10: the example lock of the protocol loads into the types the gate reads.
@@ -32,7 +37,7 @@ func TestLoadTheExampleLock(t *testing.T) {
 	if err != nil {
 		t.Fatalf("the protocol's own example lock does not load: %v", err)
 	}
-	if l.Protocol != "0.4.1" || l.Toolchain != "go1.27.4" || l.Trust.Mode != "checksum" || l.Trust.Note == "" {
+	if l.Protocol != "0.4.2" || l.Toolchain != "go1.27.4" || l.Trust.Mode != "checksum" || l.Trust.Note == "" {
 		t.Errorf("header %+v", l)
 	}
 	b, ok := l.Binary("golangci-lint")
@@ -89,7 +94,9 @@ func TestSchemaBreaksAreRefusedWithAPointer(t *testing.T) {
 		{"version with v", `version: "2.15.0"`, `version: "v2.15.0"`, "/binaries/0/version"},
 		{"http url", "url: https://example.com", "url: http://example.com", "/binaries/0/url"},
 		{"unknown placeholder", "{os}-{arch}.tar.gz", "{platform}.tar.gz", "/binaries/0/url"},
-		{"protocol", `protocol: "0.4.1"`, `protocol: "0.4.0"`, "/protocol"},
+		{"protocol", `protocol: "0.4.2"`, `protocol: "0.4.1"`, "/protocol"},
+		{"short executable sha", "e04962742507a5f37a4002a7a8b2b549f6864f17807eb5d534d947f6311a051f", "e0496274", "/binaries/0/executable_sha256/darwin~1amd64"},
+		{"executable sha with no extract", "    extract: golangci-lint-{version}-{os}-{arch}/golangci-lint\n", "", "/binaries/0"},
 		{"upper-case name", "name: golangci-lint", "name: GolangciLint", "/binaries/0/name"},
 	}
 	for _, c := range cases {
@@ -164,5 +171,28 @@ func TestLoadDirReadsTheFileAtTheRoot(t *testing.T) {
 	}
 	if _, err := LoadDir(dir); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// 0.4.2: an entry with an extract path carries executable_sha256 for every
+// platform, and the loader exposes it.
+func TestExecutableSHA256IsLoadedAndRequiredWithExtract(t *testing.T) {
+	l := parseOK(t, goodLock)
+	b := l.Binaries[0]
+	if b.ExecutableSHA256["linux/amd64"] != "d9af4564c05beb2f5e130119aec45e5e89d28e5017d558d3ca382659f2427894" || len(b.ExecutableSHA256) != 4 {
+		t.Fatalf("executable_sha256 %v", b.ExecutableSHA256)
+	}
+	i := strings.Index(goodLock, "    executable_sha256:")
+	if i < 0 {
+		t.Fatal("no executable_sha256 block in the fixture")
+	}
+	msg := parseBad(t, goodLock[:i])
+	if !strings.Contains(msg, "/binaries/0") || !strings.Contains(msg, "executable_sha256") {
+		t.Errorf("extract without executable_sha256: %q", msg)
+	}
+	// an entry with no extract carries no executable_sha256: the download is the executable
+	plain := strings.Replace(goodLock[:i], "    extract: golangci-lint-{version}-{os}-{arch}/golangci-lint\n", "", 1)
+	if l := parseOK(t, plain); l.Binaries[0].ExecutableSHA256 != nil {
+		t.Errorf("executable_sha256 %v on an entry without extract", l.Binaries[0].ExecutableSHA256)
 	}
 }
