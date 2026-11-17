@@ -21,6 +21,9 @@ func renderText(rep report.Report, cfg Config) string {
 		}
 		b.WriteByte('\n')
 	}
+	if rep.VulnDBTimestamp != nil {
+		fmt.Fprintf(&b, "  vulnerability database as of %s; time-dependent: the same commit can change verdict when it moves\n", *rep.VulnDBTimestamp)
+	}
 	lw := rep.Laws
 	fmt.Fprintf(&b, "  laws         %d of %d judged in this release; %d apply to the class, %d required, %d required not evaluated\n",
 		lw.Judged, lw.Catalog, lw.Applicable, lw.Required, lw.RequiredNotEvaluated)

@@ -354,3 +354,20 @@ func TestLawsBlockCounts(t *testing.T) {
 		}
 	}
 }
+
+// §3.1, §12.3: the vulnerability layer is time-dependent. The timestamp of
+// the database it read reaches the report's vuln_db_timestamp and the text; a
+// run whose layers read none leaves it null.
+func TestVulnDBTimestampReachesTheReport(t *testing.T) {
+	c := cfg()
+	c.RequiredLaws = nil
+	ls := gateLayers(nil, nil)
+	ls[0] = &fakeLayer{id: "hygiene", tier: 1, res: Result{Outcome: Pass, VulnDBTimestamp: "2026-11-17T09:12:44Z"}}
+	r := mustRun(t, c, opts(), deps(ls))
+	if r.Report.VulnDBTimestamp == nil || *r.Report.VulnDBTimestamp != "2026-11-17T09:12:44Z" {
+		t.Fatalf("vuln_db_timestamp = %v", r.Report.VulnDBTimestamp)
+	}
+	if !strings.Contains(r.Text, "2026-11-17T09:12:44Z") || !strings.Contains(r.Text, "time-dependent") {
+		t.Errorf("text does not say the layer is time-dependent:\n%s", r.Text)
+	}
+}

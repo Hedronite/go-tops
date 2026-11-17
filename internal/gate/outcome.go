@@ -62,6 +62,11 @@ type Result struct {
 	Outcome Outcome
 	// Reason explains a skip, a not-reached or a tool-missing. A skip needs one.
 	Reason string
+	// VulnDBTimestamp is the timestamp of the vulnerability database the
+	// layer read (RFC 3339), for the report's vuln_db_timestamp. Only the layer
+	// that runs govulncheck sets it; the vulnerability layer is time-dependent
+	// (§3.1).
+	VulnDBTimestamp string
 	// Details are the layer's figures. The report schema types them for tests,
 	// coverage, crap and mutation, and requires them when the layer ran.
 	Details map[string]any

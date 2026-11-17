@@ -131,10 +131,10 @@ func Execute(ctx context.Context, cfg Config, opts Options, d Deps) (*Run, error
 		return nil, &ExitError{Code: ExitEnv, Err: err}
 	}
 
-	layers, stopped := runLayers(ctx, env, plan, opts)
+	layers, stopped, vulnDB := runLayers(ctx, env, plan, opts)
 
 	results := d.Laws(laws.Input{Class: cfg.Class, MaxTier: opts.MaxTier, InRange: lawsIn, Reached: !stopped, Required: required})
-	rep := assemble(cfg, opts, git, started, d.Now(), d.ToolVersion, layers, results)
+	rep := assemble(cfg, opts, git, started, d.Now(), d.ToolVersion, vulnDB, layers, results)
 	return &Run{Report: rep, ExitCode: rep.Summary.ExitCode, Text: renderText(rep, cfg)}, nil
 }
 
@@ -180,8 +180,9 @@ func makePlan(ls []Layer, cfg Config, opts Options) ([]planned, error) {
 // runLayers runs every enabled layer in range in gate order, each judged
 // (§3.5): a failure does not stop the layers that do not depend on it. It
 // returns the report entries and whether --fail-fast stopped the run.
-func runLayers(ctx context.Context, env *Env, plan []planned, opts Options) ([]report.Layer, bool) {
+func runLayers(ctx context.Context, env *Env, plan []planned, opts Options) ([]report.Layer, bool, string) {
 	var out []report.Layer
+	vulnDB := ""
 	outcome := map[string]Outcome{}
 	stopped := false
 	for _, p := range plan {
@@ -209,13 +210,16 @@ func runLayers(ctx context.Context, env *Env, plan []planned, opts Options) ([]r
 			}
 		}
 		outcome[l.ID()] = res.Outcome
+		if res.VulnDBTimestamp != "" {
+			vulnDB = res.VulnDBTimestamp
+		}
 		entry.Outcome, entry.Reason, entry.Details = string(res.Outcome), res.Reason, res.Details
 		out = append(out, entry)
 		if opts.FailFast && p.enabled() && !stopped && (res.Outcome == Fail || res.Outcome == NotRun || res.Outcome == ToolMissing) {
 			stopped = true
 		}
 	}
-	return out, stopped
+	return out, stopped, vulnDB
 }
 
 func describe(o Outcome) string {
@@ -257,7 +261,7 @@ func judge(l Layer, r Result) Result {
 }
 
 // assemble builds the report and the verdict of the run (§3.3, §12.3).
-func assemble(cfg Config, opts Options, git report.Git, started, ended time.Time, toolVersion string, layers []report.Layer, results []laws.Result) report.Report {
+func assemble(cfg Config, opts Options, git report.Git, started, ended time.Time, toolVersion, vulnDB string, layers []report.Layer, results []laws.Result) report.Report {
 	rep := report.Report{
 		Protocol: report.Protocol, ToolVersion: toolVersion, Module: cfg.Module, Class: cfg.Class, Enforce: cfg.Enforce,
 		Git: git, MaxTier: opts.MaxTier,
@@ -265,6 +269,9 @@ func assemble(cfg Config, opts Options, git report.Git, started, ended time.Time
 		DurationMS: ended.Sub(started).Milliseconds(),
 		Exemptions: cfg.Exemptions,
 		Layers:     layers,
+	}
+	if vulnDB != "" {
+		rep.VulnDBTimestamp = &vulnDB
 	}
 	var failed []string
 	for _, l := range layers {
