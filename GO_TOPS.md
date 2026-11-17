@@ -532,7 +532,7 @@ The top-level key `enforce` sets how floors and caps are applied. Adopters defau
 **CRAP.** A function at or under the cap may change up to the cap. A function over the cap
 may not exceed its baseline score plus 0.01 (a rise of 0.01 or less is noise). A function absent
 from the baseline is new and meets the cap. So a function scoring 2 under a cap of 10 may rise to
-10, and one scoring 14.2 under a cap of 6 may not pass 14.21. Under `ratchet` no function within
+10, and one scoring 14.2 under a cap of 10 may not pass 14.21. Under `ratchet` no function within
 the cap is held stricter than under `hard`.
 
 **The baseline is a debt ledger.** `.go-tops/baseline.json` lists only what is over the line
@@ -577,9 +577,18 @@ between baseline and run, so a configuration edit cannot quietly shrink what is 
 - Raising an entry, adding one, or lowering `judged_laws` needs
   `baseline --accept-regression --reason <text> --owner <handle>` and a PR that carries the
   `protocol-change` label. The flag records the change under `regressions` in the file. `gate`
-  compares the file with its copy at the diff base (§6.4) and fails a raised or added entry, or a lowered `judged_laws`, that has no
-  matching `regressions` record. A record is removed by the write that pays the entry back to its
-  earlier value.
+  compares the file with its copy at the diff base (§6.4) and fails a raised or added entry, or
+  a lowered `judged_laws`, that has no matching `regressions` record. A record is removed by the
+  write that pays the entry back to its earlier value.
+- **First ledger.** When the diff base has no `.go-tops/baseline.json`, the file is a first
+  ledger, and there is no copy to compare it with. `gate` accepts it without `regressions`
+  records only if every entry equals what this run measures (a `functions` value within 0.01;
+  counts, percentages and uncovered-statement counts exactly), no entry exists for anything the
+  run measures within the line, and `judged_laws` equals the run's count. That is what
+  `baseline --init` writes on that commit, so it is the only first ledger that passes. Any entry
+  above its measured value fails, so a hand-written ledger cannot carry extra allowance. A kind
+  that the base copy lacks (the tier 2 `survivors` kind, recorded later) is a first ledger for
+  that kind and is checked the same way against the run that recorded it.
 - Under `ratchet` a missing baseline fails; deleting the file is not a reset.
 - Legacy findings stay in the ledger. They are not wrapped in `//nolint` or `//tops:ack` to zero
   the count: the `suppressions` limit holds that route shut.
@@ -593,7 +602,8 @@ position in source order (`init#2`). A function moved to another file keeps its 
 `git diff -M` against the diff base pairs the two files and the receiver and name are unchanged.
 For any other rename or move, `baseline --rename <old-key> <new-key>` rewrites one key (function
 or package) and never changes a value; it refuses unless the old key has vanished from the code and
-the new key exists. The result is reviewed as part of the PR. An unpaired rename without that
+the new key exists. The same command moves a key that gained a file name when a twin of the
+function was added. The result is reviewed as part of the PR. An unpaired rename without that
 command is a new function, and a new function meets the cap.
 
 **Keys.** The rules above add one configuration key. `enforce` and `baseline` are in §9 already.
@@ -604,8 +614,9 @@ command is a new function, and a new function meets the cap.
 
 #### First adoption of a legacy repo
 
-The repo has 100 production functions, 16 of them over the cap of 6 under the 0.3.0 counting
-rule (vigil's counts in `calibration/2026-11-probe/`), and no baseline. The ledger numbers
+The repo has 100 production functions, 8 of them over the `binary-cli` cap of 10 under the 0.4.0
+rule, which counts coverage guard-neutral (vigil's counts in `calibration/2026-11-probe/`), and
+no baseline. The ledger numbers
 below other than those two are illustrative. Every step passes by the rule named beside it; the
 measuring run is `baseline --init` itself, so no step is a red gate.
 
@@ -613,30 +624,33 @@ measuring run is `baseline --init` itself, so no step is a red gate.
    baseline (§12.1). `init` runs no gate, so there is nothing to fail.
 2. `gotops baseline --init` runs the feeding layers and judges none. Rule: measured, not
    passed. Tests are green and the profile and the CRAP report are non-empty, so it writes
-   a ledger with 16 `functions` entries (each at its current score), no `packages` entry (every
+   a ledger with 8 `functions` entries (each at its current score), no `packages` entry (every
    package meets its floor), and whatever
    `findings`, `laws`, `suppressions` and `exemptions` counts the code has today, for example 3
    `//nolint` in two files. `judged_laws` is the run's count.
 3. The ledger and `go-tops.yaml` are committed on the adoption branch. Rule: the baseline is
-   tracked and clean against `HEAD`.
+   tracked and clean against `HEAD`. The diff base, `origin/main`, has no baseline, so the
+   ledger is a first ledger (§6.7).
 4. `gotops check` passes: the file exists and is clean (§12.1).
-5. `gotops gate` passes: each of the 16 functions equals its entry (limit: entry + 0.01); the
-   other 84 were at or under 6 when measured and are unchanged, so they meet the cap; every
-   count equals its entry; `judged_laws` equals its recorded value; no tier 2 kind is
-   judged at tier 1. This is the first green run, with no source edit.
-6. A later PR edits one of the 16 functions from 20.0 to 20.005. Rule: a rise of 0.01 or less is
-   noise. An edit from 20.0 to 21.0 fails by the same rule; that refusal is the rule working on
+5. `gotops gate` passes. Rule: first ledger. Each entry equals this run's measurement, so no
+   `regressions` record is needed. Each of the 8 functions equals its entry (limit: entry +
+   0.01); the other 92 were at or under 10 when measured and are unchanged, so they meet the
+   cap; every count equals its entry; `judged_laws` equals its recorded value; no tier 2 kind
+   is judged at tier 1. This is the first green run, with no source edit.
+6. A later PR edits one of the 8 functions, which scores 21.0, to 21.005. Rule: a rise of 0.01
+   or less is noise. An edit to 22.0 fails by the same rule; that refusal is the rule working on
    new debt, not an adoption step.
-7. A PR refactors one of the 16 down to 5. `gate` passes (the score fell), and
+7. A PR refactors one of the 8 down to 8. `gate` passes (the score fell), and
    `gotops baseline` removes its entry (writes only lower). From then on it is held to the cap
-   of 6, like the other 84.
+   of 10, like the other 92.
 8. A PR deletes tested code. In a package at or over its floor the PR passes while the package
    stays at or over it. In a package the ledger lists as under its floor, the percentage may
    fall but the uncovered-statement count does not rise, so the package does not fail.
 9. Before the nightly tier 2 job is enabled, one tier 2 run records the legacy survivors:
    `gotops baseline --init --kind survivors`. The nightly then fails only on a survivor
    that is new or in a file whose count rose.
-10. CI runs `gotops gate` (§11). It is green on step 5's commit.
+10. CI runs `gotops gate` (§11) on the adoption PR. The base still has no baseline, so the
+    first-ledger rule applies again and the run is green on step 5's commit.
 
 ### 6.8 Exemptions
 
