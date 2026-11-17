@@ -93,7 +93,7 @@ and schema together.
 
 ### 3.1 Gate order
 
-Gates run in this order. A failing gate stops the run unless `--keep-going` is set.
+Gates run in this order. How a run proceeds past a failing gate, and which gates need which, is stated in §3.5.
 
 | # | Gate | Command(s) | Pass condition |
 |---|---|---|---|
@@ -103,7 +103,7 @@ Gates run in this order. A failing gate stops the run unless `--keep-going` is s
 | 4 | **CRAP** | native CRAP over the same profile + cyclomatic complexity (§6.2) | No production function above its cap (§6.2, §6.7) |
 | 5 | **Mutation (diff)** | mutation engine restricted to lines changed against the merge base of `origin/main` (§6.4) | No unexplained survivor (`unexplained_survivors_max` is 0, §6.4) |
 | 6 | **Class layers** | fuzz, leak detection, synctest-required tests, benchmark regression, cgo/unsafe checks, alloc budgets, as the class requires. Allocation counts (`testing.AllocsPerRun`, `allocs/op`) are exact and gate at tier 1; time per op gates only at tier 2, on a named host, with `benchstat` significance | Per-class (§5) |
-| ★ | **Laws** | Go-TOPS analyzers (§8) | No `Refuse`; `not-evaluated` never counts as a pass |
+| ★ | **Laws** | Go-TOPS analyzers (§8) | No `refuse`; `not-evaluated` never counts as a pass |
 
 ★ The laws layer is **tier 0** (it defines the floor) but **executes last**, matching Rust-TOPS,
 where the laws layer is tier 0 and runs after the mapped commands.
@@ -446,7 +446,7 @@ tool" is rare and is a configuration error, not an environment accident.
 
 Laws encode Go-specific hazards as named, numbered rules. Rust-TOPS 1.1.0 defines 53 laws
 (H-01…H-53) in a Bend2-based layer where 15 have fact readers judged by `bend` and 38 report
-`not-evaluated`. Go-TOPS uses the same honesty model (`Refuse` fails, `Ack` requires
+`not-evaluated`. Go-TOPS uses the same honesty model (`refuse` fails, `ack` requires
 acknowledgement, `not-evaluated` never counts as a pass), implemented natively: the laws layer
 is a `go/analysis` multichecker (`gotops-laws`), tier 0, always on.
 
@@ -478,9 +478,11 @@ golangci-lint run --config .go-tops/laws.golangci.yml --enable-only <linters in 
 
 and each delegated law reads its findings from the saved JSON. The adopter's `.golangci.yml` is
 style only: the law pass never reads it, so no setting in it can weaken a law, and a law cannot
-go quiet because a linter was switched off. A pass that did not run leaves its laws
-`not-evaluated`; a result file that is missing or does not parse fails the layer (§3.4, rule 5);
-a run with no findings still writes a valid document. The pass is a second lint run over the
+go quiet because a linter was switched off, so `config_off` cannot arise for a delegated law.
+The pass runs when the laws whose reader is `tool` are in range, which is tier 1 (§3.2). A pass
+that did not run leaves its laws `not-evaluated` with reason `input_missing`; a result file that
+is missing or does not parse fails the layer (§3.4, rule 5); a run with no findings still writes
+a valid document. The pass is a second lint run over the
 same packages and shares the analysis cache with gate 1; its cost is measured at M5.
 
 **Law → linter → settings.** The settings belong to the kit. Changing one is a protocol change
@@ -625,7 +627,7 @@ Each law lives in `laws/G-NN.yaml`:
 ```yaml
 id: G-17
 title: "No context.Background outside main, wiring, and tests"
-severity: Refuse
+severity: refuse      # refuse (catalog R) | ack (catalog A)
 status: active            # active | retired | planned
 classes: [library-core, binary-service, concurrency-runtime, binary-cli, tui-app]
 reader: analyzer
@@ -850,9 +852,11 @@ is a new function; otherwise `baseline` is the score it must not exceed.
 
 ---
 
-## 13. Policies (`POLICIES.md` and `AGENTS.md`)
+## 13. Policies
 
-Practice rules for humans and agents, enforced by review and, where possible, by the laws layer:
+Practice rules for humans and agents, enforced by review and, where possible, by the laws layer. They
+live in this section and `init` writes them into the adopting repo's `AGENTS.md`; there is no
+separate policies file:
 
 1. Write the oracle from the contract before the code (G-28).
 2. Never split a function only to lower its CRAP score (scar-guard).
