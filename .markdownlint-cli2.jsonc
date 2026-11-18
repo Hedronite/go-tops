@@ -24,7 +24,12 @@
     // spaces, in every table of every file. The rule accepts no
     // style that mixes the two, and the choice is cosmetic. Re-enable if the
     // tables are ever normalised.
-    "MD060": false
+    "MD060": false,
+
+    // The public README uses GitHub-flavored HTML for a centered product mark,
+    // a badge row, and a short table of contents. MD033 forbids inline HTML;
+    // those tags are required for the mark-first layout.
+    "MD033": false
   },
   "globs": ["**/*.md"],
   "ignores": [
