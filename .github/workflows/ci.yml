@@ -1,10 +1,14 @@
 name: ci
 
-# Build, test and lint CI for the gotops CLI, until the CLI gates its own repo
-# (M1-G8 replaces this file with the one `gate` job of GO_TOPS.md §11). Read-only;
+# Go-TOPS gating itself: the one `gate` job of GO_TOPS.md §11. Read-only;
 # superseded runs are cancelled; every action is pinned by commit SHA (the
 # comment names the release). One aggregate job, `ci`, needs the rest: it is the
-# check a ruleset on main requires. The docs workflow (docs.yml) stays as it is.
+# check a ruleset on main requires. The docs workflow (docs.yml) is separate and
+# stays as it is.
+#
+# The kit runs `enforce: advisory` until the laws layer lands at M5 (§6.7), so the
+# gate exits 0 whatever it finds. The step "assert the report" is what holds the
+# kit to the bar until then: see go-tops.yaml.
 
 on:
   pull_request:
@@ -18,123 +22,171 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+env:
+  # The exact release go-tops.lock pins: the gate compares `go env GOVERSION` with
+  # it, so a new release is a reviewed change to the lock and to this line.
+  CURRENT_GO: "1.27.4"
+  # The latest 1.26 patch release: the `go 1.26` line names a language version,
+  # not a release (GO_TOPS.md §2, §11).
+  FLOOR_GO: "1.26.11"
+
 jobs:
-  build:
-    name: ${{ matrix.name }}
+  gate:
+    name: gate (${{ matrix.name }})
     strategy:
       fail-fast: false
       matrix:
         include:
           - name: ubuntu
             os: ubuntu-latest
+            floor: false
             lint_platform: linux-amd64
-            lint_sha256: 9b7fe6a6bf6334b98decf8d86b11415ea7889afdabdd1959fdce23af2a9ebcea
-          # macOS is a required leg: Darwin differs from Linux in cgo, paths and
-          # the toolchain (GO_TOPS.md §11). macos-latest runners are arm64.
+          # macOS is a required leg: Darwin differs from Linux in cgo, paths and the
+          # toolchain (GO_TOPS.md §11). macos-latest runners are arm64.
           - name: macos
             os: macos-latest
+            floor: false
             lint_platform: darwin-arm64
-            lint_sha256: d1e409481a8ca846c4bc97e781eb5cb1bd5c23353a0b3977a1cbda1b1b6447d5
+          # The language-floor leg: the module must still build and pass its tests on
+          # the oldest supported toolchain. It builds and tests directly, because a
+          # gate pinned to the current release cannot judge the floor and `--only
+          # tests` would end `partial`, which CI refuses (GO_TOPS.md §11).
+          - name: floor
+            os: ubuntu-latest
+            floor: true
+            lint_platform: linux-amd64
     runs-on: ${{ matrix.os }}
     steps:
-      # fetch-depth 0: the gate's mutation diff needs history (GO_TOPS.md §6.4),
-      # and the legs must match what the gate job will use.
+      # fetch-depth 0: the mutation diff needs history (GO_TOPS.md §6.4).
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
+      # setup-go sets GOTOOLCHAIN=local, so the go command runs exactly the release
+      # installed here and never switches.
       - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
-          go-version: 1.27.x
-      # golangci-lint is installed before anything that runs the tests: the hygiene
-      # tests run the real tool, and a test that ends tool-missing proves nothing.
-      # The release tarball is fetched and checked against the SHA-256 pinned in
-      # the matrix above before anything in it runs. The pin is exact (GO_TOPS.md
-      # §2); a new version means a new hash in this file, in a reviewed change.
+          go-version: ${{ matrix.floor && env.FLOOR_GO || env.CURRENT_GO }}
+          cache-dependency-path: |
+            go.sum
+            tools/go.sum
+
+      # golangci-lint is installed before anything that runs the tests, on every leg:
+      # the hygiene tests run the real tool, and a test that ends tool-missing proves
+      # nothing. The tarball is checked against the SHA-256 pinned below (the same
+      # value as go-tops.lock's `sha256` for the platform), and the gate checks the
+      # installed executable against the lock's `executable_sha256` before it runs
+      # it, so a wrong file is a lock mismatch, not a quiet pass. The tool is found
+      # on PATH (GO_TOPS.md §10); a bump is a new hash here and a new lock entry.
       - name: install golangci-lint v2.15.0
         env:
           VERSION: 2.15.0
           PLATFORM: ${{ matrix.lint_platform }}
-          SHA256: ${{ matrix.lint_sha256 }}
         run: |
           set -euo pipefail
+          case "${PLATFORM}" in
+            linux-amd64)  sha=9b7fe6a6bf6334b98decf8d86b11415ea7889afdabdd1959fdce23af2a9ebcea ;;
+            darwin-arm64) sha=d1e409481a8ca846c4bc97e781eb5cb1bd5c23353a0b3977a1cbda1b1b6447d5 ;;
+            *) echo "::error::no pinned hash for ${PLATFORM}"; exit 1 ;;
+          esac
           archive="${RUNNER_TEMP}/golangci-lint.tar.gz"
           curl --fail --silent --show-error --location --output "${archive}" \
             "https://github.com/golangci/golangci-lint/releases/download/v${VERSION}/golangci-lint-${VERSION}-${PLATFORM}.tar.gz"
-          echo "${SHA256}  ${archive}" | shasum -a 256 -c -
+          echo "${sha}  ${archive}" | shasum -a 256 -c -
           mkdir -p "${RUNNER_TEMP}/golangci-lint"
           tar -xzf "${archive}" --strip-components=1 -C "${RUNNER_TEMP}/golangci-lint"
           echo "${RUNNER_TEMP}/golangci-lint" >> "${GITHUB_PATH}"
       - name: golangci-lint version
         run: golangci-lint version
-      - name: build
-        run: go build ./...
-      # Tests run with cgo on: -race needs it on Linux (GO_TOPS.md §3.1).
-      - name: test
-        env:
-          CGO_ENABLED: "1"
-        run: go test -race -shuffle=on -count=1 ./...
-      # The formatters in .golangci.yml (gofmt, gofumpt, goimports) are part of
-      # this run for every package of the root module.
-      - name: golangci-lint run
-        run: golangci-lint run
 
-  # The language-floor leg: the module must still build and pass its tests on the
-  # oldest supported toolchain. The latest 1.26 patch release is named because the
-  # `go 1.26` line names a language version, not a release (GO_TOPS.md §2, §11).
-  # setup-go installs that release and sets GOTOOLCHAIN=local, so the go command
-  # runs the installed toolchain and never switches; a job-level GOTOOLCHAIN would
-  # be overridden. The guard step proves which toolchain ran.
-  floor:
-    name: floor
-    runs-on: ubuntu-latest
-    env:
-      FLOOR_GO: "1.26.11"
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
-        with:
-          go-version: ${{ env.FLOOR_GO }}
+      # --- the language-floor leg ---
       - name: toolchain is the floor release
+        if: ${{ matrix.floor }}
         run: |
           set -euo pipefail
           got="$(go env GOVERSION)"
           echo "GOVERSION=${got}"
           test "${got}" = "go${FLOOR_GO}"
-      # The same pinned, SHA-checked golangci-lint as the legs above, before the
-      # tests: the floor leg runs the hygiene tests against the real tool too.
-      - name: install golangci-lint v2.15.0
-        env:
-          VERSION: 2.15.0
-          PLATFORM: linux-amd64
-          SHA256: 9b7fe6a6bf6334b98decf8d86b11415ea7889afdabdd1959fdce23af2a9ebcea
-        run: |
-          set -euo pipefail
-          archive="${RUNNER_TEMP}/golangci-lint.tar.gz"
-          curl --fail --silent --show-error --location --output "${archive}" \
-            "https://github.com/golangci/golangci-lint/releases/download/v${VERSION}/golangci-lint-${VERSION}-${PLATFORM}.tar.gz"
-          echo "${SHA256}  ${archive}" | shasum -a 256 -c -
-          mkdir -p "${RUNNER_TEMP}/golangci-lint"
-          tar -xzf "${archive}" --strip-components=1 -C "${RUNNER_TEMP}/golangci-lint"
-          echo "${RUNNER_TEMP}/golangci-lint" >> "${GITHUB_PATH}"
-      - name: golangci-lint version
-        run: golangci-lint version
-      - name: build
+      - name: floor build
+        if: ${{ matrix.floor }}
         run: go build ./...
-      - name: test
+      - name: floor test
+        if: ${{ matrix.floor }}
         env:
           CGO_ENABLED: "1"
         run: go test -race -shuffle=on -count=1 ./...
+
+      # --- the full gate legs ---
+      # The kit gates the code in this checkout, so it runs it with `go run`: no
+      # tag of go-tops exists to pin, and tools/go.mod holds the module tools the
+      # gate runs (gotestsum, govulncheck, go-licenses), not gotops itself. An
+      # adopter runs the pinned build, `go tool -modfile=tools/go.mod gotops gate`
+      # (GO_TOPS.md §11).
+      - name: gotops gate
+        if: ${{ !matrix.floor }}
+        run: go run ./cmd/gotops gate
+      # Always: the report and the saved lint and coverage output are what you read
+      # when the gate or the assertion below is red. Hidden files are off by default.
+      - name: upload .go-tops
+        if: ${{ always() && !matrix.floor }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: go-tops-${{ matrix.name }}
+          path: |
+            .go-tops/
+            !.go-tops/bin/
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 14
+      # The bootstrap rule of GO_TOPS.md §6.7 and §17: the gate exits 0 under
+      # advisory, so this step reads the report and fails unless
+      #   - hygiene, tests and coverage are `pass`;
+      #   - crap and mutation are `skip` with an `expires` that has not passed;
+      #   - every required law is `not-evaluated` for `no_reader`, and none was judged;
+      #   - the run is reported as not enforced, and every enabled layer ran.
+      # To plant a failure locally, change .go-tops/report.json and run this step's
+      # script from the repository root.
+      - name: assert the report
+        if: ${{ !matrix.floor }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s .go-tops/report.json
+          problems="$(jq -r --arg today "$(date -u +%F)" '
+            def layer($id): [.layers[] | select(.id == $id)] | if length == 1 then .[0] else null end;
+            [
+              ( ("hygiene", "tests", "coverage") as $id
+                | layer($id) as $l
+                | select($l == null or $l.outcome != "pass")
+                | "\($id): outcome \($l.outcome // "absent"), want pass" ),
+              ( ("crap", "mutation") as $id
+                | layer($id) as $l
+                | select($l == null or $l.outcome != "skip" or (($l.expires // "") <= $today))
+                | "\($id): want skip with an expires after \($today), got \($l.outcome // "absent") expires \($l.expires // "none")" ),
+              ( select(.laws.required < 1 or .laws.required_not_evaluated != .laws.required)
+                | "laws: \(.laws.required_not_evaluated) of \(.laws.required) required laws are not-evaluated, want all" ),
+              ( (.laws.results // [])[]
+                | select(.verdict != "not-evaluated" or .reason != "no_reader")
+                | "law \(.id): \(.verdict) \(.reason // ""), want not-evaluated with no_reader" ),
+              ( select(.summary.enforced != false)
+                | "summary.enforced is \(.summary.enforced), want false under advisory" ),
+              ( select(.enforce != "advisory")
+                | "enforce is \(.enforce), want advisory" ),
+              ( select(.layer_counts.ran != .layer_counts.enabled_in_range)
+                | "layers: \(.layer_counts.ran) ran of \(.layer_counts.enabled_in_range) enabled in range" )
+            ] | .[]' .go-tops/report.json)"
+          if [ -n "${problems}" ]; then
+            while IFS= read -r line; do echo "::error::${line}"; done <<< "${problems}"
+            exit 1
+          fi
+          echo "report assertion: ok"
 
   ci:
     name: ci
     # Runs even when a dependency failed, was skipped or was cancelled, and
     # fails unless every one of them succeeded: a skipped job must not pass.
     if: ${{ always() }}
-    needs: [build, floor]
+    needs: [gate]
     runs-on: ubuntu-latest
     steps:
       - name: every ci job succeeded

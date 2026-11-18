@@ -61,6 +61,11 @@ linters:
     # test waits on a clock instead of the thing it means to wait for (use
     # testing/synctest). The exclusions below scope each pattern.
     - forbidigo
+    # depguard: the dependency policy of GO_TOPS.md §3.1 gate 1, and the standing
+    # rule that go-tops takes no runtime dependency beyond its two (the schema
+    # validator and the YAML decoder) without an explicit decision. The allow list
+    # below is the whole policy: an import outside it is a finding.
+    - depguard
     # usetesting: t.Context, t.TempDir, t.Setenv and t.Chdir replace the os and
     # context calls that leak state between tests, which matters because the
     # gate shuffles tests (-shuffle=on).
@@ -72,6 +77,19 @@ linters:
       check-type-assertions: true
       exclude-functions:
         - (io.ReadCloser).Close
+    depguard:
+      rules:
+        kit:
+          list-mode: strict
+          files:
+            - $all
+          allow:
+            - $gostd
+            # Standard library, but newer than depguard's $gostd list.
+            - go/version
+            - github.com/Hedronite/go-tops
+            - github.com/santhosh-tekuri/jsonschema/v6
+            - go.yaml.in/yaml/v3
     errorlint:
       errorf: true
       asserts: true

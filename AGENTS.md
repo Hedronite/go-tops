@@ -1,4 +1,4 @@
-# Agent standing orders (Go-TOPS 0.4.1)
+# Agent standing orders (Go-TOPS 0.4.2)
 
 Goal: correct, dense, fast Go.
 Production: the fewest lines that keep the named invariants and measured performance.
@@ -9,7 +9,7 @@ The protocol text is [`GO_TOPS.md`](GO_TOPS.md). This file is the harness for wo
 
 ## State
 
-Protocol 0.4.1; M1 in progress. The Go code is the docs checker in `scripts/docs/` (its own `go.mod`) and the `gotops` CLI shell in the root module (`cmd/gotops/`, `internal/cli/`). The shell has `version` and `--help` and nothing else: `check`, `gate` and the other commands have not landed, so `go tool gotops` does not exist yet. CI is docs CI (`.github/workflows/docs.yml`: Markdown, links, counts, examples and markers) and build CI (`.github/workflows/ci.yml`: build, race tests and lint on Linux and macOS, and a build and test leg on the language floor). The gate does not gate this repo yet. Do not document, run or claim a command that has not landed.
+Protocol 0.4.2; M1 done; next M2. The Go code is the docs checker in `scripts/docs/` (its own `go.mod`) and the `gotops` CLI in the root module (`cmd/gotops/`, `internal/`): `version`, `check`, `init`, `gate`, `report`, `lock` and `doctor`. `gate` runs hygiene, tests and coverage at tier 1; CRAP and mutation are off in `go-tops.yaml` until M2 and M4, and the laws layer is a stub until M5. CI is docs CI (`.github/workflows/docs.yml`) and the one `gate` job of `.github/workflows/ci.yml`, which runs `go run ./cmd/gotops gate` under `enforce: advisory` and then asserts the report (GO_TOPS.md §6.7). Do not document, run or claim a command or layer that has not landed (`baseline`, `laws`, `survivors`, CRAP, mutation).
 
 Points from 0.3.0 that code must follow (see the change note at the top of `GO_TOPS.md`):
 
@@ -17,7 +17,7 @@ Points from 0.3.0 that code must follow (see the change note at the top of `GO_T
 2. Test jobs run with `CGO_ENABLED=1`, because `-race` needs cgo on Linux. Builds and releases use `CGO_ENABLED=0`.
 3. An enabled layer with no command is `not-run` and fails the gate. Only `enabled: false` in config turns a layer off.
 4. The error-guard discount applies in every class, and only to guards that return the error. Blank discards (`_ =`, `x, _ :=`) are caught by errcheck `check-blank`.
-5. Adopters are gated by `ratchet` against `.go-tops/baseline.json`. This repo gates itself `hard`.
+5. Adopters are gated by `ratchet` against `.go-tops/baseline.json`. This repo gates itself `advisory` until the laws layer lands at M5 (§6.7, protocol 0.4.1): its CI asserts that hygiene, tests and coverage pass in the report, and `go-tops.yaml` switches to `hard` at M5.
 6. There is no Bend2 or Lean layer. The `go/analysis` analyzers are the laws layer.
 
 ## Do this

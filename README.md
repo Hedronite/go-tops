@@ -7,17 +7,19 @@ A written spec, a JSON Schema, per-class profiles, a laws layer of `go/analysis`
 
 ## Status
 
-Draft. Protocol **0.4.0**. The package is unreleased (0.0.0). The only code is the docs checker in `scripts/docs/`, which docs CI runs; there is no `gotops` yet.
+Draft. Protocol **0.4.2**. The package is unreleased (0.0.0), and no tag exists.
 
-This repo has closed milestone M0.5, protocol 0.4.0 with its schemas, profiles and docs CI. The next milestone is M1. `go tool gotops` does not exist yet, and nothing here is ready to copy into CI.
+Milestone M1 is done: the `gotops` CLI (`version`, `check`, `init`, `gate`, `report`, `lock`, `doctor`) judges hygiene, tests and coverage at tier 1, and this repo's own CI gates it with `go run ./cmd/gotops gate`. Go-TOPS runs `advisory` on itself until its laws layer lands at M5 (§6.7), and its CI asserts the gates that exist. The next milestone is M2: native CRAP and the ratchet. CRAP, mutation and the laws layer do not run yet, no adopter has used the kit, and nothing here is released or ready to copy into CI.
 
 | Milestone | Contents |
 |---|---|
 | **M0, M0.5** spec | `GO_TOPS.md` 0.4.0, three schemas, profiles for three launch classes, a calibration record, docs CI |
-| M1 CLI | `init`, `check`, `gate` at tiers 0–1, `report.json`; Go-TOPS gates itself |
-| M2 | Native CRAP, one mutation-engine adapter, survivor ledger |
-| M3 | Laws v0.1: 16 of 43 laws judged by analyzers |
-| M4–M7 | Deep layers, release tier, protocol 1.0, extras |
+| **M1** CLI (done) | `init`, `check`, `gate` at tier 1 (hygiene, tests, coverage), `report`, `lock`, `doctor`, `report.json`; Go-TOPS gates itself under the advisory bootstrap rule |
+| M2 (next) | Native CRAP and the ratchet: complexity, guard-neutral coverage, the baseline ledger, exemptions |
+| M3 | First adopter: `vigil` gated under `ratchet` |
+| M4 | Mutation: a gremlins adapter and the survivor ledger |
+| M5 | Laws v0.1: 16 of 43 laws judged by analyzers; the kit switches its own gate to `hard` |
+| M6–M7 | Deep layers and the second and third adopters; the release tier and protocol 1.0 |
 
 The full roadmap is in [`GO_TOPS.md` §19](GO_TOPS.md#19-roadmap).
 
@@ -44,8 +46,11 @@ The full list is in [`CHANGELOG.md`](CHANGELOG.md).
 
 | Path | What it is |
 |---|---|
-| [`GO_TOPS.md`](GO_TOPS.md) | The protocol, 0.4.0 |
-| [`schema/`](schema/) | The JSON Schemas: configuration, gate report, and the shared core definitions |
+| [`GO_TOPS.md`](GO_TOPS.md) | The protocol, 0.4.2 |
+| [`schema/`](schema/) | The JSON Schemas: configuration, gate report, tool lock, and the shared core definitions |
+| [`cmd/gotops/`](cmd/gotops/), [`internal/`](internal/) | The `gotops` CLI: one file per command, and the layers, runner, lock, report and `init` packages behind them |
+| [`go-tops.yaml`](go-tops.yaml), [`go-tops.lock`](go-tops.lock), [`tools/`](tools/) | Go-TOPS gating itself: its configuration, its tool pins and its pinned module tools |
+| [`.github/workflows/ci.yml`](.github/workflows/ci.yml) | The one `gate` job: Linux, macOS and the language floor, then the report assertion |
 | [`profiles/`](profiles/) | The launch profiles: `binary-cli`, `binary-service`, `library-core` |
 | [`calibration/2026-11-probe/`](calibration/2026-11-probe/) | The calibration record behind the CRAP caps, with the probe and the script that reproduces it |
 | [`scripts/docs/`](scripts/docs/) | The docs checker that docs CI runs |

@@ -13,6 +13,16 @@ junit.xml
 # Gate report is written on every run; the ledgers in .go-tops/ are tracked
 /.go-tops/report.json
 
+# Saved lint output of each run, and the law pass's generated config; the ledgers
+# (baseline.json, survivors.yaml, acks.yaml) are tracked
+/.go-tops/lint-style.json
+/.go-tops/lint-laws.json
+/.go-tops/laws.golangci.yml
+
+# Downloaded tool binaries: go-tops.lock pins them, the gate checks their SHA-256
+# (GO_TOPS.md §10)
+/.go-tops/bin/
+
 # Local workspace
 go.work
 go.work.sum
