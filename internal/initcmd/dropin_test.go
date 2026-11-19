@@ -1,9 +1,6 @@
 package initcmd
 
 import (
-	"os"
-	"os/exec"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -18,6 +15,7 @@ import (
 // default.
 
 type step struct {
+	ID   string            `yaml:"id"`
 	Name string            `yaml:"name"`
 	If   string            `yaml:"if"`
 	Uses string            `yaml:"uses"`
@@ -174,6 +172,13 @@ func TestOfflineNoteExplainsTheCachePathCaveat(t *testing.T) {
 // with == or != to a quoted string, always(), && , || and parentheses.
 func ifRuns(t *testing.T, expr, event, leg string) bool {
 	t.Helper()
+	return ifRunsIn(t, expr, event, leg, "")
+}
+
+// ifRunsIn is ifRuns for a dispatch with the given mode input ("" when the
+// event has no inputs); inputs.mode may be compared like the other names.
+func ifRunsIn(t *testing.T, expr, event, leg, mode string) bool {
+	t.Helper()
 	if strings.TrimSpace(expr) == "" {
 		return true
 	}
@@ -197,7 +202,7 @@ func ifRuns(t *testing.T, expr, event, leg string) bool {
 		case "always()":
 			return true
 		}
-		vals := map[string]string{"matrix.leg": leg, "github.event_name": event}
+		vals := map[string]string{"matrix.leg": leg, "github.event_name": event, "inputs.mode": mode}
 		got, known := vals[tok]
 		if !known || pos+1 >= len(toks) {
 			t.Fatalf("condition %q: cannot read %q", expr, tok)
@@ -256,9 +261,14 @@ func workflowOn(t *testing.T, dir string) (map[string]any, int) {
 // of the steps that run on one event and leg.
 func stepsRunning(t *testing.T, steps []step, event, leg string) []string {
 	t.Helper()
+	return stepsRunningIn(t, steps, event, leg, "")
+}
+
+func stepsRunningIn(t *testing.T, steps []step, event, leg, mode string) []string {
+	t.Helper()
 	var out []string
 	for _, s := range steps {
-		if !ifRuns(t, s.If, event, leg) {
+		if !ifRunsIn(t, s.If, event, leg, mode) {
 			continue
 		}
 		name := s.Name
@@ -286,6 +296,16 @@ func TestWorkflowIsOneJobWithADispatchTrigger(t *testing.T) {
 	if jobs != 1 {
 		t.Errorf("the drop-in is one job, got %d", jobs)
 	}
+	// The dispatch takes one input, a choice of init or refresh: never free text.
+	inputs := asMap(t, asMap(t, on["workflow_dispatch"])["inputs"])
+	mode := asMap(t, inputs["mode"])
+	opts, ok := mode["options"].([]any)
+	if !ok {
+		t.Fatalf("the mode input has no options: %v", mode)
+	}
+	if len(inputs) != 1 || mode["type"] != "choice" || len(opts) != 2 || opts[0] != "init" || opts[1] != "refresh" || mode["default"] != "init" {
+		t.Errorf("the dispatch input is one choice of init or refresh, defaulting to init: %v", inputs)
+	}
 }
 
 // On a manual dispatch only the ubuntu leg acts (it is the ledger leg), and it
@@ -310,20 +330,30 @@ func TestOnDispatchOnlyTheLedgerLegWritesTheFirstLedger(t *testing.T) {
 			t.Errorf("on a dispatch the %s leg must do nothing, but runs %v", leg, got)
 		}
 	}
-	got := stepsRunning(t, steps, "workflow_dispatch", "ubuntu")
-	for _, want := range []string{"actions/checkout", "actions/setup-go", "install golangci-lint", "write the first ledger", "go-tops-baseline"} {
-		if !has(got, want) {
-			t.Errorf("on a dispatch the ubuntu leg lacks %q: runs %v", want, got)
+	for _, c := range []struct{ mode, runs, not string }{
+		{"init", "write the first ledger", "refresh the ledger"},
+		{"refresh", "refresh the ledger", "write the first ledger"},
+	} {
+		got := stepsRunningIn(t, steps, "workflow_dispatch", "ubuntu", c.mode)
+		for _, want := range []string{"actions/checkout", "actions/setup-go", "install golangci-lint", c.runs, "go-tops-baseline"} {
+			if !has(got, want) {
+				t.Errorf("on a dispatch with mode %s the ubuntu leg lacks %q: runs %v", c.mode, want, got)
+			}
 		}
-	}
-	for _, not := range []string{"gate", "ratchet", "floor"} {
-		if has(got, not) {
-			t.Errorf("on a dispatch the ubuntu leg runs a %q step: %v", not, got)
+		for _, not := range []string{"gate", "ratchet", "floor", c.not} {
+			if has(got, not) {
+				t.Errorf("on a dispatch with mode %s the ubuntu leg runs a %q step: %v", c.mode, not, got)
+			}
+		}
+		for _, leg := range []string{"macos", "floor"} {
+			if got := stepsRunningIn(t, steps, "workflow_dispatch", leg, c.mode); len(got) != 0 {
+				t.Errorf("on a dispatch with mode %s the %s leg must do nothing, but runs %v", c.mode, leg, got)
+			}
 		}
 	}
 	for _, event := range []string{"push", "pull_request"} {
 		for _, leg := range []string{"ubuntu", "macos", "floor"} {
-			if has(stepsRunning(t, steps, event, leg), "write the first ledger") || has(stepsRunning(t, steps, event, leg), "go-tops-baseline") {
+			if got := stepsRunning(t, steps, event, leg); has(got, "write the first ledger") || has(got, "refresh the ledger") || has(got, "go-tops-baseline") {
 				t.Errorf("on %s the %s leg writes a ledger", event, leg)
 			}
 		}
@@ -354,6 +384,19 @@ func TestBaselineStepsRunInitAndUploadTheFile(t *testing.T) {
 	if steps[initStep].Run != "go tool -modfile=tools/go.mod gotops baseline --init" || steps[initStep].Env["GOTOOLCHAIN"] != "local" {
 		t.Errorf("init step %q env %v", steps[initStep].Run, steps[initStep].Env)
 	}
+	// refresh is the plain lowering write, and --accept-regression is never run in CI.
+	refresh := indexOf2(steps, func(s step) bool { return s.Name == "refresh the ledger" })
+	if refresh < install || refresh > upload || steps[refresh].Run != "go tool -modfile=tools/go.mod gotops baseline" || steps[refresh].Env["GOTOOLCHAIN"] != "local" {
+		t.Errorf("the refresh step is the plain baseline write between the install and the upload: %d %+v", refresh, steps[refresh])
+	}
+	for _, s := range steps {
+		if strings.Contains(s.Run, "--accept-regression") {
+			t.Errorf("--accept-regression is manual, but step %q runs it", s.Name)
+		}
+		if strings.Contains(s.Run, "inputs") || strings.Contains(s.Run, "${{") {
+			t.Errorf("step %q puts an expression in a command; inputs only pick a step: %q", s.Name, s.Run)
+		}
+	}
 	up := steps[upload]
 	if !strings.HasPrefix(up.Uses, "actions/upload-artifact@") || up.With["path"] != ".go-tops/baseline.json" || up.With["include-hidden-files"] != true || up.With["if-no-files-found"] != "error" {
 		t.Errorf("the ledger is uploaded from a hidden directory, and a missing file is an error: %v", up)
@@ -362,72 +405,5 @@ func TestBaselineStepsRunInitAndUploadTheFile(t *testing.T) {
 	gate := indexOf2(steps, func(s step) bool { return strings.Contains(s.Run, "gotops gate") })
 	if steps[gate].Env["GOTOOLCHAIN"] != "local" || steps[install].Env["PLATFORM"] != "${{ matrix.lint_platform }}" {
 		t.Errorf("the gate and the baseline steps share the install and the toolchain: gate %v, install %v", steps[gate].Env, steps[install].Env)
-	}
-}
-
-// reportWith writes a gate report with the given enforce mode and ratchet
-// outcome ("" for no ratchet object) and returns the directory.
-func reportWith(t *testing.T, enforce, outcome string) string {
-	t.Helper()
-	dir := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(dir, ".go-tops"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	doc := `{"enforce": "` + enforce + `"`
-	if outcome != "" {
-		doc += `, "ratchet": {"outcome": "` + outcome + `"}`
-	}
-	doc += "}"
-	if err := os.WriteFile(filepath.Join(dir, ".go-tops", "report.json"), []byte(doc), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	return dir
-}
-
-// C3b: the ubuntu leg is the ledger leg, and CI fails when it reports a ratchet
-// outcome of skip (the recorded build matches no leg, so nothing is ever judged).
-// The assertion is run here against reports.
-func TestRatchetAssertionFailsWhenTheLedgerLegSkips(t *testing.T) {
-	if _, err := exec.LookPath("jq"); err != nil {
-		t.Skip("jq is not installed; the runners have it")
-	}
-	dir := newModule(t, "github.com/acme/demo", "1.26")
-	if code, _, errs := run(opts(dir, "binary-cli")); code != ExitOK {
-		t.Fatal(errs)
-	}
-	steps := workflowSteps(t, dir)
-	gate := indexOf2(steps, func(s step) bool { return strings.Contains(s.Run, "gotops gate") })
-	i := indexOf2(steps, func(s step) bool { return strings.Contains(s.Name, "ratchet") })
-	if i < 0 || i < gate {
-		t.Fatalf("the ratchet assertion (%d) must come after the gate (%d)", i, gate)
-	}
-	for _, c := range []struct {
-		event, leg string
-		want       bool
-	}{{"push", "ubuntu", true}, {"pull_request", "ubuntu", true}, {"push", "macos", false}, {"push", "floor", false}, {"workflow_dispatch", "ubuntu", false}} {
-		if got := ifRuns(t, steps[i].If, c.event, c.leg); got != c.want {
-			t.Errorf("the ratchet assertion runs on %s / %s = %v, want %v: it is the ubuntu gate leg's", c.event, c.leg, got, c.want)
-		}
-	}
-	for _, c := range []struct {
-		enforce, outcome string
-		fails            bool
-	}{
-		{"ratchet", "pass", false},
-		{"ratchet", "fail", false}, // the gate step already failed the job; not this step's business
-		{"ratchet", "skip", true},
-		{"ratchet", "", true}, // a missing judgment is not a pass
-		{"hard", "", false},
-		{"advisory", "", false},
-	} {
-		cmd := exec.Command("bash", "-c", steps[i].Run)
-		cmd.Dir = reportWith(t, c.enforce, c.outcome)
-		out, err := cmd.CombinedOutput()
-		if (err != nil) != c.fails {
-			t.Errorf("enforce %s, ratchet %q: failed = %v, want %v\n%s", c.enforce, c.outcome, err != nil, c.fails, out)
-		}
-		if c.fails && !strings.Contains(string(out), "::error::") {
-			t.Errorf("enforce %s, ratchet %q: no error annotation\n%s", c.enforce, c.outcome, out)
-		}
 	}
 }

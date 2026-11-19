@@ -4,19 +4,25 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
+
+	"go.yaml.in/yaml/v3"
 )
 
 // The adoption path of GO_TOPS.md §6.7 ("First adoption of a legacy repo"),
 // end to end with the real binary: init into a legacy module that has functions
 // over the CRAP cap, baseline --init, commit, check, and the ratchet judges the
-// first ledger. Then a change that raises a function fails, and one that lowers
-// it passes and a refresh drops its entry.
+// first ledger. Then a change that raises a function fails, --accept-regression
+// records it and the gate passes, and a change that lowers a function passes and a
+// refresh drops its entry. It runs twice: a module at the root of the repository
+// and a module in a subdirectory of it. The drop-in's own judging step is run
+// against each report.
 //
 // It needs the network (init tidies tools/go.mod, the hygiene layer reads the
 // vulnerability database) and the pinned golangci-lint on PATH, so it carries
@@ -124,6 +130,17 @@ func adLayer(t *testing.T, rep map[string]any, id string) string {
 	return ""
 }
 
+// adLayerObject is a layer of the report as a whole, for a failure message.
+func adLayerObject(t *testing.T, rep map[string]any, id string) map[string]any {
+	t.Helper()
+	for _, l := range array(t, rep["layers"]) {
+		if m := object(t, l); m["id"] == id {
+			return m
+		}
+	}
+	return nil
+}
+
 // adAssertPasses is ruling C9: ratchet pass, hygiene, tests, coverage and CRAP
 // pass, and nothing fails but the required laws, none of them evaluated; a class
 // with no required laws exits 0.
@@ -134,7 +151,7 @@ func adAssertPasses(t *testing.T, code int, rep map[string]any, when string) {
 	}
 	for _, l := range []string{"hygiene", "tests", "coverage", "crap"} {
 		if got := adLayer(t, rep, l); got != "pass" {
-			t.Errorf("%s: layer %s is %s, want pass", when, l, got)
+			t.Errorf("%s: layer %s is %s, want pass: %v", when, l, got, adLayerObject(t, rep, l))
 		}
 	}
 	lw := object(t, rep["laws"])
@@ -176,19 +193,79 @@ func hasKeySuffix(m map[string]any, suffix string) bool {
 	return false
 }
 
+// adJudge runs the drop-in's judging step (the one the rendered workflow carries)
+// against the report the gate just wrote, as the runner would on one leg, with the
+// gate's exit code. It returns the step's error, or nil when it passes. Without jq
+// the check is skipped: the runners have it.
+func adJudge(t *testing.T, dir, leg string, code int) error {
+	t.Helper()
+	if _, err := exec.LookPath("jq"); err != nil {
+		t.Log("jq is not installed: the drop-in's judging step is not run")
+		return nil
+	}
+	var wf struct {
+		Jobs map[string]struct {
+			Steps []struct {
+				Name string `yaml:"name"`
+				Run  string `yaml:"run"`
+			} `yaml:"steps"`
+		} `yaml:"jobs"`
+	}
+	if err := yaml.Unmarshal([]byte(readFile(t, dir, ".github/workflows/go-tops.yml")), &wf); err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range wf.Jobs["gate"].Steps {
+		if !strings.Contains(s.Name, "judge the gate") {
+			continue
+		}
+		cmd := exec.CommandContext(t.Context(), "bash", "-e", "-c", s.Run)
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(), "GATE_EXIT="+strconv.Itoa(code), "LEG="+leg)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			return fmt.Errorf("%w: %s", err, out)
+		}
+		return nil
+	}
+	t.Fatal("the drop-in has no step that judges the gate")
+	return nil
+}
+
+// adAssertJudged is the C9 assertion made by the drop-in itself: its judging
+// step passes on both gate legs for the report just written.
+func adAssertJudged(t *testing.T, dir string, code int, when string) {
+	t.Helper()
+	for _, leg := range []string{"ubuntu", "macos"} {
+		if err := adJudge(t, dir, leg, code); err != nil {
+			t.Errorf("%s: the drop-in's judging step fails on the %s leg: %v", when, leg, err)
+		}
+	}
+}
+
 func TestAdoptionOfALegacyRepo(t *testing.T) {
 	if _, err := exec.LookPath("golangci-lint"); err != nil {
 		t.Skip("the pinned golangci-lint is not on PATH")
 	}
-	dir := t.TempDir()
+	for _, c := range []struct{ name, sub string }{{"module at the root", ""}, {"module in mod", "mod"}} {
+		t.Run(c.name, func(t *testing.T) { adoptLegacy(t, c.sub) })
+	}
+}
+
+// adoptLegacy is the adoption path for a repository whose module is at its root
+// (sub is "") or in a subdirectory of it. Git runs at the repository root and
+// gotops in the module.
+func adoptLegacy(t *testing.T, sub string) {
+	t.Helper()
+	repo := t.TempDir()
+	dir := filepath.Join(repo, sub)
 	for name, content := range legacy(heavyFunc("")) {
 		writeFile(t, dir, name, content)
 	}
-	adGit(t, dir, "init", "-q", "-b", "main")
-	adGit(t, dir, "add", "-A")
-	adGit(t, dir, "commit", "-q", "-m", "legacy")
-	adGit(t, dir, "update-ref", "refs/remotes/origin/main", "HEAD") // the diff base: no baseline yet
-	adGit(t, dir, "checkout", "-q", "-b", "adopt")
+	cgo := []string{"CGO_ENABLED=1"}
+	adGit(t, repo, "init", "-q", "-b", "main")
+	adGit(t, repo, "add", "-A")
+	adGit(t, repo, "commit", "-q", "-m", "legacy")
+	adGit(t, repo, "update-ref", "refs/remotes/origin/main", "HEAD") // the diff base: no baseline yet
+	adGit(t, repo, "checkout", "-q", "-b", "adopt")
 	writeFile(t, dir, ".gitignore", ".go-tops/bin/\n.go-tops/report.json\n.go-tops/cover.out\n.go-tops/lint-style.json\n")
 
 	// 1. init: CRAP on, the next step printed.
@@ -201,8 +278,10 @@ func TestAdoptionOfALegacyRepo(t *testing.T) {
 	}
 
 	// 2. baseline --init measures and judges nothing: the two legacy functions
-	// are in the ledger, the function under the cap is not.
-	if code, stdout, stderr := gotopsEnv(t, dir, []string{"CGO_ENABLED=1"}, "baseline", "--init"); code != 0 {
+	// are in the ledger, the function under the cap is not, and the command says
+	// to commit the file.
+	code, stdout, stderr = gotopsEnv(t, dir, cgo, "baseline", "--init")
+	if code != 0 || !strings.Contains(stdout, ".go-tops/baseline.json written") || !strings.Contains(stdout, "Commit it with go-tops.yaml") {
 		t.Fatalf("baseline --init: exit %d\n%s\n%s", code, stdout, stderr)
 	}
 	fns := adFunctions(t, dir)
@@ -211,31 +290,50 @@ func TestAdoptionOfALegacyRepo(t *testing.T) {
 	}
 
 	// 3. commit, check, and the first ledger passes the ratchet with no source edit.
-	adGit(t, dir, "add", "-A")
-	adGit(t, dir, "commit", "-q", "-m", "adopt Go-TOPS")
+	adGit(t, repo, "add", "-A")
+	adGit(t, repo, "commit", "-q", "-m", "adopt Go-TOPS")
 	if code, _, stderr := gotopsEnv(t, dir, nil, "check"); code != 0 {
 		t.Fatalf("check: exit %d\n%s", code, stderr)
 	}
 	code, rep := adGate(t, dir)
 	adAssertPasses(t, code, rep, "the first ledger, with no source edit")
+	adAssertJudged(t, dir, code, "the first ledger")
 
-	// 4. The adoption merges; a change that raises Heavy fails.
-	adGit(t, dir, "update-ref", "refs/remotes/origin/main", "HEAD")
-	adGit(t, dir, "checkout", "-q", "-b", "raise")
+	// 4. The adoption merges; a change that raises Heavy fails, and the drop-in's
+	// ledger leg fails on it.
+	adGit(t, repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+	adGit(t, repo, "checkout", "-q", "-b", "raise")
 	writeFile(t, dir, "legacy.go", legacy(heavyFunc("\tif a > 100 {\n\t\tn++\n\t}\n"))["legacy.go"])
-	adGit(t, dir, "commit", "-q", "-a", "-m", "raise Heavy")
-	if _, rep := adGate(t, dir); adRatchet(t, rep) != "fail" || !strings.Contains(strings.Join(failed(t, rep), ","), "ratchet") {
+	adGit(t, repo, "commit", "-q", "-a", "-m", "raise Heavy")
+	code, rep = adGate(t, dir)
+	if adRatchet(t, rep) != "fail" || !strings.Contains(strings.Join(failed(t, rep), ","), "ratchet") {
 		t.Fatalf("raising a function past its entry must fail the ratchet: %v", rep["summary"])
 	}
+	if err := adJudge(t, dir, "ubuntu", code); err == nil {
+		if _, lookErr := exec.LookPath("jq"); lookErr == nil {
+			t.Error("the drop-in's judging step passes on a raised function")
+		}
+	}
+
+	// 4b. --accept-regression records the raise, and the gate then passes.
+	code, stdout, stderr = gotopsEnv(t, dir, cgo, "baseline", "--accept-regression", "--reason", "Heavy gained a branch for a new limit", "--owner", "legacy-owners")
+	if code != 0 || !strings.Contains(stdout, "1 regression(s) recorded under owner legacy-owners") {
+		t.Fatalf("baseline --accept-regression: exit %d\n%s\n%s", code, stdout, stderr)
+	}
+	adGit(t, repo, "commit", "-q", "-a", "-m", "accept the raise of Heavy")
+	code, rep = adGate(t, dir)
+	adAssertPasses(t, code, rep, "after the raise is recorded")
+	adAssertJudged(t, dir, code, "after the raise is recorded")
 
 	// 5. A change that lowers Heavy passes, and a refresh drops its entry.
-	adGit(t, dir, "checkout", "-q", "main")
-	adGit(t, dir, "checkout", "-q", "-b", "lower", "adopt")
+	adGit(t, repo, "checkout", "-q", "main")
+	adGit(t, repo, "checkout", "-q", "-b", "lower", "adopt")
 	writeFile(t, dir, "legacy.go", legacy(loopedHeavy)["legacy.go"])
-	adGit(t, dir, "commit", "-q", "-a", "-m", "lower Heavy")
+	adGit(t, repo, "commit", "-q", "-a", "-m", "lower Heavy")
 	code, rep = adGate(t, dir)
 	adAssertPasses(t, code, rep, "after lowering Heavy")
-	if code, stdout, stderr := gotopsEnv(t, dir, []string{"CGO_ENABLED=1"}, "baseline"); code != 0 {
+	adAssertJudged(t, dir, code, "after lowering Heavy")
+	if code, stdout, stderr := gotopsEnv(t, dir, cgo, "baseline"); code != 0 {
 		t.Fatalf("baseline refresh: exit %d\n%s\n%s", code, stdout, stderr)
 	}
 	if fns := adFunctions(t, dir); hasKeySuffix(fns, ".Heavy") || !hasKeySuffix(fns, ".Mid") {
