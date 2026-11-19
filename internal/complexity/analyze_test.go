@@ -1,7 +1,9 @@
 package complexity_test
 
 import (
+	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/Hedronite/go-tops/internal/complexity"
@@ -229,5 +231,54 @@ func TestPositionsLineUp(t *testing.T) {
 	s := funcs[0].Span
 	if s.Start != (complexity.Pos{Line: 3, Col: 1}) || s.End != (complexity.Pos{Line: 4, Col: 2}) {
 		t.Errorf("span = %+v, want 3:1 to 4:2", s)
+	}
+}
+
+// A relative root reached through a symbolic link: the working directory is a
+// link to the module, as macOS temporary directories (/var is /private/var)
+// and any linked tree are, so the root is logical while go/packages reports
+// physical paths. File names must still come out module-relative.
+func TestRelativeRootThroughASymlinkedWorkingDirectory(t *testing.T) {
+	base := t.TempDir()
+	real := filepath.Join(base, "real")
+	writeFile(t, filepath.Join(real, "go.mod"), "module example.com/m\n\ngo 1.26\n")
+	writeFile(t, filepath.Join(real, "m.go"), "package m\n\nfunc F() {}\n")
+	writeFile(t, filepath.Join(real, "sub", "s.go"), "package sub\n\nfunc G() {}\n")
+	link := filepath.Join(base, "link")
+	if err := os.Symlink(real, link); err != nil {
+		t.Skipf("no symbolic links here: %v", err)
+	}
+	t.Chdir(link)
+	for _, root := range []string{".", "../link", "sub/.."} {
+		pkgs, err := complexity.Load(root, nil, "./...")
+		if err != nil {
+			t.Fatalf("root %q: %v", root, err)
+		}
+		funcs, err := complexity.Analyze(root, pkgs, complexity.Config{})
+		if err != nil {
+			t.Fatalf("root %q: %v", root, err)
+		}
+		var files []string
+		for _, f := range funcs {
+			files = append(files, f.File)
+		}
+		if want := []string{"m.go", "sub/s.go"}; !slices.Equal(files, want) {
+			t.Errorf("root %q: files %v, want %v", root, files, want)
+		}
+	}
+}
+
+// A file that is not under the root is an error, never a path with dots.
+func TestFileOutsideTheRootIsAnError(t *testing.T) {
+	dir := t.TempDir()
+	other := t.TempDir()
+	writeFile(t, filepath.Join(dir, "go.mod"), "module example.com/m\n\ngo 1.26\n")
+	writeFile(t, filepath.Join(dir, "m.go"), "package m\n\nfunc F() {}\n")
+	pkgs, err := complexity.Load(dir, nil, "./...")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := complexity.Analyze(other, pkgs, complexity.Config{}); err == nil {
+		t.Error("files outside the root were made relative to it")
 	}
 }

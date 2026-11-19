@@ -14,7 +14,6 @@
 package complexity
 
 import (
-	"errors"
 	"fmt"
 	"go/ast"
 	"go/token"
@@ -106,13 +105,14 @@ func Analyze(root string, pkgs []*packages.Package, cfg Config) ([]Func, error) 
 	for _, w := range cfg.WrapFunctions {
 		wrap[w] = true
 	}
+	rel := newRelativizer(root).rel
 	var out []Func
 	for _, p := range pkgs {
 		if cfg.Discount && p.TypesInfo == nil {
 			return nil, fmt.Errorf("package %s was loaded without type information", p.PkgPath)
 		}
 		for _, file := range p.Syntax {
-			fa := fileAnalyzer{pkg: p, root: root}
+			fa := fileAnalyzer{pkg: p, rel: rel}
 			if cfg.Discount {
 				fa.guards = findGuards(file, p.TypesInfo, wrap)
 			}
@@ -141,7 +141,7 @@ func compareLine(a, b Pos) int {
 
 type fileAnalyzer struct {
 	pkg    *packages.Package
-	root   string
+	rel    func(file string) (string, error)
 	guards map[*ast.IfStmt]*ast.BlockStmt // nil when the discount is off
 }
 
@@ -209,7 +209,7 @@ func outermostLiterals(e ast.Expr) []*ast.FuncLit {
 func (a *fileAnalyzer) score(node ast.Node, recv *ast.FieldList, name string) (Func, error) {
 	fset := a.pkg.Fset
 	start := fset.Position(node.Pos())
-	file, err := relativeTo(a.root, start.Filename)
+	file, err := a.rel(start.Filename)
 	if err != nil {
 		return Func{}, err
 	}
@@ -280,34 +280,55 @@ func receiverName(recv *ast.FieldList) string {
 	}
 }
 
-// relativeTo makes file relative to root, slash-separated. A file that lies
-// outside root after both are resolved through symbolic links is an error: it
-// is not a file of the module.
-func relativeTo(root, file string) (string, error) {
-	if rel, ok := within(root, file); ok {
-		return rel, nil
-	}
-	r, err1 := filepath.EvalSymlinks(root)
-	f, err2 := filepath.EvalSymlinks(file)
-	if err := errors.Join(err1, err2); err != nil {
-		return "", fmt.Errorf("resolve %s against %s: %w", file, root, err)
-	}
-	if rel, ok := within(r, f); ok {
-		return rel, nil
-	}
-	return "", fmt.Errorf("%s is outside %s", file, root)
+// relativizer makes file names relative to the module root, slash-separated.
+// The root and each file's directory are made absolute and resolved through
+// symbolic links before they are compared: go/packages reports physical
+// paths, while a root given relative to a working directory reached through a
+// link (macOS temporary directories, any linked tree) is logical, and the two
+// only meet once both are physical. A file outside the root is an error: it is
+// not a file of the module.
+type relativizer struct {
+	root    string
+	rootErr error
+	dirs    map[string]string // directory as given to its physical form
 }
 
-func within(root, file string) (string, bool) {
-	abs, err := filepath.Abs(root)
-	if err != nil {
-		return "", false
+func newRelativizer(root string) *relativizer {
+	r, err := physical(root)
+	return &relativizer{root: r, rootErr: err, dirs: map[string]string{}}
+}
+
+func (z *relativizer) rel(file string) (string, error) {
+	if z.rootErr != nil {
+		return "", z.rootErr
 	}
-	rel, err := filepath.Rel(abs, file)
+	dir := filepath.Dir(file)
+	phys, ok := z.dirs[dir]
+	if !ok {
+		var err error
+		if phys, err = physical(dir); err != nil {
+			return "", err
+		}
+		z.dirs[dir] = phys
+	}
+	rel, err := filepath.Rel(z.root, filepath.Join(phys, filepath.Base(file)))
 	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return "", false
+		return "", fmt.Errorf("%s is outside %s", file, z.root)
 	}
-	return filepath.ToSlash(rel), true
+	return filepath.ToSlash(rel), nil
+}
+
+// physical is p made absolute, with every symbolic link resolved.
+func physical(p string) (string, error) {
+	abs, err := filepath.Abs(p)
+	if err != nil {
+		return "", fmt.Errorf("resolve %s: %w", p, err)
+	}
+	real, err := filepath.EvalSymlinks(abs)
+	if err != nil {
+		return "", fmt.Errorf("resolve %s: %w", p, err)
+	}
+	return real, nil
 }
 
 var errorType = types.Universe.Lookup("error").Type()
