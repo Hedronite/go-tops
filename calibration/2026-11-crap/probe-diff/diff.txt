@@ -1,0 +1,71 @@
+functions: native 765, probe 761
+only native (4):
+  cubit internal/serve/bind.go resolver  comp 2  CRAP 6.00
+  cubit internal/textfile/textfile.go fsyncFile  comp 1  CRAP 1.00
+  scry internal/cli/run.go newObserver  comp 1  CRAP 1.00
+  scry internal/outfile/outfile.go syncDir  comp 2  CRAP 2.15
+only probe (0):
+
+complexity differs (native comp, probe discounted cc, raw cc, guards the probe discounted):
+  augur   internal/cli/evaluate.go loadAlerts: 6 vs 4 (raw 6, 2 guards)
+  augur   internal/cli/evaluate.go readCapped: 4 vs 2 (raw 4, 2 guards)
+  augur   internal/decode/decode.go DecodeAM: 7 vs 6 (raw 8, 2 guards)
+  augur   internal/decode/decode.go decodeAlert: 16 vs 11 (raw 16, 5 guards)
+  augur   internal/decode/decode.go decodeState: 11 vs 10 (raw 11, 1 guards)
+  augur   internal/policy/policy.go checkYAMLFeatures: 15 vs 12 (raw 15, 3 guards)
+  augur   internal/policy/policy.go strictParse: 10 vs 9 (raw 10, 1 guards)
+  simplex cmd/simplex/check.go runCheck: 9 vs 6 (raw 10, 4 guards)
+  simplex cmd/simplex/serve.go runServe: 27 vs 26 (raw 27, 1 guards)
+  simplex cmd/simplex/validate.go runValidate: 18 vs 15 (raw 19, 4 guards)
+  simplex internal/check/check.go loadOverlay: 3 vs 2 (raw 3, 1 guards)
+  simplex internal/check/check.go prepare: 6 vs 5 (raw 7, 2 guards)
+  simplex internal/probe/http.go Options.probeHTTP: 10 vs 8 (raw 10, 2 guards)
+  simplex internal/probe/ssh.go Options.probeSSH: 7 vs 6 (raw 7, 1 guards)
+  simplex internal/tailscale/client.go Client.get: 9 vs 8 (raw 9, 1 guards)
+  vigil   cmd/vigil/wire.go loadDocuments: 6 vs 3 (raw 6, 3 guards)
+  vigil   internal/config/config.go Load: 3 vs 1 (raw 4, 3 guards)
+  vigil   internal/config/config.go LoadOverlay: 3 vs 1 (raw 4, 3 guards)
+  vigil   internal/config/config.go checkAddress: 11 vs 10 (raw 11, 1 guards)
+  vigil   internal/httpx/httpx.go Client.Get: 14 vs 13 (raw 14, 1 guards)
+  vigil   internal/promclient/promclient.go Query: 23 vs 21 (raw 26, 5 guards)
+  vigil   internal/promclient/promclient.go Targets: 8 vs 6 (raw 10, 4 guards)
+  cubit   cmd/cubit/cli.go serveCmd: 8 vs 7 (raw 10, 3 guards)
+  cubit   internal/config/config.go noAliases: 5 vs 4 (raw 5, 1 guards)
+  scry    internal/cli/run.go emit: 7 vs 6 (raw 7, 1 guards)
+  scry    internal/cli/commands.go newVersion: 3 vs 2 (raw 3, 1 guards)
+  scry    internal/cli/run.go runStatus: 6 vs 4 (raw 8, 4 guards)
+  scry    internal/cli/run.go runWait: 6 vs 4 (raw 7, 3 guards)
+  scry    internal/config/config.go Load: 3 vs 1 (raw 3, 2 guards)
+  scry    internal/kube/observe.go Client.nodes: 11 vs 10 (raw 11, 1 guards)
+  scry    internal/kube/config.go New: 9 vs 7 (raw 10, 3 guards)
+  31 functions; 0 with a native complexity outside [probe discounted, raw]
+  by repo: {'augur': 7, 'simplex': 8, 'vigil': 7, 'cubit': 2, 'scry': 7}
+
+cap 6: over the cap on one side only: 5; complexity alone above it on one side only: 5
+  over   augur   internal/cli/evaluate.go loadAlerts: native comp 6 CRAP 6.02, probe cc 4 CRAP 4.01
+  over   simplex cmd/simplex/check.go runCheck: native comp 9 CRAP 9.11, probe cc 6 CRAP 6.00
+  over   scry    internal/cli/run.go emit: native comp 7 CRAP 7.03, probe cc 6 CRAP 6.00
+  over   scry    internal/cli/run.go runStatus: native comp 6 CRAP 6.03, probe cc 4 CRAP 4.02
+  over   scry    internal/cli/run.go runWait: native comp 6 CRAP 6.01, probe cc 4 CRAP 4.00
+  alone  augur   internal/decode/decode.go DecodeAM: native comp 7, probe cc 6
+  alone  simplex cmd/simplex/check.go runCheck: native comp 9, probe cc 6
+  alone  simplex internal/probe/ssh.go Options.probeSSH: native comp 7, probe cc 6
+  alone  vigil   internal/promclient/promclient.go Targets: native comp 8, probe cc 6
+  alone  scry    internal/cli/run.go emit: native comp 7, probe cc 6
+
+cap 8: over the cap on one side only: 4; complexity alone above it on one side only: 4
+  over   simplex cmd/simplex/check.go runCheck: native comp 9 CRAP 9.11, probe cc 6 CRAP 6.00
+  over   vigil   internal/promclient/promclient.go Targets: native comp 8 CRAP 8.11, probe cc 6 CRAP 6.02
+  over   cubit   cmd/cubit/cli.go serveCmd: native comp 8 CRAP 8.51, probe cc 7 CRAP 7.43
+  over   scry    internal/kube/config.go New: native comp 9 CRAP 9.16, probe cc 7 CRAP 7.01
+  alone  simplex cmd/simplex/check.go runCheck: native comp 9, probe cc 6
+  alone  simplex internal/probe/http.go Options.probeHTTP: native comp 10, probe cc 8
+  alone  simplex internal/tailscale/client.go Client.get: native comp 9, probe cc 8
+  alone  scry    internal/kube/config.go New: native comp 9, probe cc 7
+
+cap 10: over the cap on one side only: 2; complexity alone above it on one side only: 3
+  over   augur   internal/policy/policy.go strictParse: native comp 10 CRAP 10.01, probe cc 9 CRAP 9.01
+  over   simplex internal/probe/http.go Options.probeHTTP: native comp 10 CRAP 11.35, probe cc 8 CRAP 8.60
+  alone  augur   internal/decode/decode.go decodeState: native comp 11, probe cc 10
+  alone  vigil   internal/config/config.go checkAddress: native comp 11, probe cc 10
+  alone  scry    internal/kube/observe.go Client.nodes: native comp 11, probe cc 10
