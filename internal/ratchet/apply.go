@@ -2,6 +2,9 @@ package ratchet
 
 import (
 	"fmt"
+	"maps"
+	"reflect"
+	"slices"
 	"strings"
 
 	"github.com/Hedronite/go-tops/internal/report"
@@ -13,21 +16,50 @@ import (
 // not a failure. On the ledger leg their outcome is the ratchet's; on any other
 // leg it is the ratchet's skip, and only a function the ledger leg does not
 // compile can fail the CRAP layer. A layer that failed for another reason (no
-// profile, a profile with no block) stays failed. It returns a copy.
+// profile, a profile with no block) stays failed.
+//
+// It returns a copy of the layers as they ran, with only the verdict fields it
+// changes: the outcome and the reason of the three layers it judges, and the details
+// key it judges (the CRAP rows, the lint check). It reads a normalized copy, so no
+// other value in a report is rewritten, and a number keeps the digits it had.
 func Apply(layers []report.Layer, j Judgment, l *Ledger) []report.Layer {
-	out := make([]report.Layer, len(layers))
-	copy(out, layers)
-	for i := range out {
-		switch out[i].ID {
+	out := slices.Clone(layers)
+	for i, read := range plain(layers) {
+		switch read.ID {
 		case "crap":
-			out[i] = applyCrap(out[i], j, l)
+			out[i] = merge(layers[i], read, applyCrap(read, j, l), "violations")
 		case "coverage":
-			out[i] = applyCoverage(out[i], j)
+			out[i] = merge(layers[i], read, applyCoverage(read, j))
 		case "hygiene":
-			out[i] = applyHygiene(out[i], j)
+			out[i] = merge(layers[i], read, applyHygiene(read, j), "lint")
 		}
 	}
 	return out
+}
+
+// merge is the layer as it ran with the outcome and reason of the judged layer and,
+// for each named key whose value the judgment changed, that value. A key it left as
+// it found keeps the layer's own value, in the type the layer gave it.
+func merge(ran, read, judged report.Layer, keys ...string) report.Layer {
+	ran.Outcome, ran.Reason = judged.Outcome, judged.Reason
+	var changed []string
+	for _, k := range keys {
+		if !reflect.DeepEqual(read.Details[k], judged.Details[k]) {
+			changed = append(changed, k)
+		}
+	}
+	if len(changed) == 0 {
+		return ran
+	}
+	details := make(map[string]any, len(ran.Details))
+	for k, v := range ran.Details {
+		details[k] = v
+	}
+	for _, k := range changed {
+		details[k] = judged.Details[k]
+	}
+	ran.Details = details
+	return ran
 }
 
 // applyHygiene replaces only the lint-finding verdict (§6.7, findings kind): the
@@ -37,6 +69,25 @@ func Apply(layers []report.Layer, j Judgment, l *Ledger) []report.Layer {
 // depguard) keeps its own verdict, and a lint run that failed for another reason
 // (no result, a non-zero exit with no finding) stays failed.
 func applyHygiene(l report.Layer, j Judgment) report.Layer {
+	return withHeldCounts(judgeLint(l, j), j)
+}
+
+// withHeldCounts books to the hygiene layer what a leg that is not the ledger leg
+// finds in files the ledger build does not compile: the suppressions and law counts
+// past the ledger's entry (ruling C3d). Hygiene is where suppressions and findings
+// belong; the CRAP layer fails for functions only.
+func withHeldCounts(l report.Layer, j Judgment) report.Layer {
+	held := filterKinds(j.HeldToCap, "suppressions.nolint", "suppressions.ack", "laws")
+	if ledgerLeg(j) || len(held) == 0 || (l.Outcome != "pass" && l.Outcome != "fail") {
+		return l
+	}
+	l.Outcome = "fail"
+	l.Reason = joinNote(l.Reason, fmt.Sprintf("%d suppression or law count(s) over the ledger in files the ledger build does not compile: %s", len(held), summary(held)))
+	return l
+}
+
+// judgeLint replaces the lint-finding verdict of a layer that failed on findings.
+func judgeLint(l report.Layer, j Judgment) report.Layer {
 	if l.Outcome != "fail" {
 		return l
 	}
@@ -44,7 +95,7 @@ func applyHygiene(l report.Layer, j Judgment) report.Layer {
 	if !ok || lint["outcome"] != "fail" {
 		return l
 	}
-	if n, ok := lint["findings"].(int); !ok || n == 0 {
+	if number(lint["findings"]) == 0 {
 		return l
 	}
 	verdict := lintVerdict(j)
@@ -71,10 +122,10 @@ func applyHygiene(l report.Layer, j Judgment) report.Layer {
 // lint findings are within the ledger. A leg that is not the ledger leg does not
 // judge them.
 func lintVerdict(j Judgment) string {
-	if !ledgerLeg(j) {
-		return ""
-	}
 	failures := filterKinds(j.Failures, "findings")
+	if !ledgerLeg(j) {
+		failures = filterKinds(j.HeldToCap, "findings")
+	}
 	if len(failures) == 0 {
 		return ""
 	}
@@ -114,15 +165,6 @@ const ProblemKind = "exemption entry"
 
 func ledgerLeg(j Judgment) bool { return j.Outcome != Skip }
 
-// text is v as a string, or "" when it is not one.
-func text(v any) string {
-	s, ok := v.(string)
-	if !ok {
-		return ""
-	}
-	return s
-}
-
 func hasKey(m map[string]any, key string) bool { _, ok := m[key]; return ok }
 
 func applyCrap(l report.Layer, j Judgment, ledger *Ledger) report.Layer {
@@ -135,9 +177,10 @@ func applyCrap(l report.Layer, j Judgment, ledger *Ledger) report.Layer {
 	}
 	details["violations"] = withEntries(l.Details["violations"], j, ledger)
 	l.Details = details
-	failures := j.HeldToCap
+	kinds := []string{"functions", "not measured", ProblemKind}
+	failures := filterKinds(j.HeldToCap, kinds...)
 	if ledgerLeg(j) {
-		failures = filterKinds(j.Failures, "functions", "not measured", ProblemKind)
+		failures = filterKinds(j.Failures, kinds...)
 	}
 	note := notMeasuredNote(l.Details)
 	if len(failures) > 0 {
@@ -157,11 +200,15 @@ func applyCoverage(l report.Layer, j Judgment) report.Layer {
 	if (l.Outcome != "fail" && l.Outcome != "pass") || hasKey(l.Details, "error") || !hasKey(l.Details, "statements_pct") {
 		return l
 	}
+	failures := filterKinds(j.Failures, "packages")
 	if !ledgerLeg(j) {
-		l.Outcome, l.Reason = "pass", "the ratchet is skipped on this leg: the ledger leg judges the packages under the floor"
-		return l
+		failures = filterKinds(j.HeldToCap, "packages")
+		if len(failures) == 0 {
+			l.Outcome, l.Reason = "pass", "the ratchet is skipped on this leg: the ledger leg judges the packages it compiles"
+			return l
+		}
 	}
-	if failures := filterKinds(j.Failures, "packages"); len(failures) > 0 {
+	if len(failures) > 0 {
 		l.Outcome, l.Reason = "fail", fmt.Sprintf("%d package(s) fail the ratchet: %s", len(failures), summary(failures))
 		return l
 	}
@@ -198,15 +245,18 @@ func withEntries(rows any, j Judgment, ledger *Ledger) any {
 }
 
 func notMeasuredNote(details map[string]any) string {
-	if n, ok := details["not_measured"].(int); ok && n > 0 {
+	if n := number(details["not_measured"]); n > 0 {
 		return fmt.Sprintf("%d production function(s) not measured on this build", n)
 	}
 	return ""
 }
 
 func joinNote(reason, note string) string {
-	if note == "" {
+	switch {
+	case note == "":
 		return reason
+	case reason == "":
+		return note
 	}
 	return reason + "; " + note
 }
@@ -248,4 +298,153 @@ func Notes(j Judgment) []string {
 		out = append(out, fmt.Sprintf("ratchet: %s%s: %s\n", f.Kind, key, f.Why))
 	}
 	return out
+}
+
+// notJudged is the reason of a layer whose ledger-replaced threshold a partial run
+// did not judge.
+const notJudged = "not judged: partial run under ratchet"
+
+// Partial is what a partial run under ratchet is judged from (ruling C3e).
+type Partial struct {
+	// Problems are the exemptions that match nothing.
+	Problems []Failure
+	// Ledger is the baseline in the working tree; nil when there is none, so that
+	// nothing has an entry.
+	Ledger *Ledger
+	// Cap is the CRAP cap.
+	Cap float64
+	// Packages are the packages under the floor, and Findings the lint findings per
+	// linter and file, as the run measured them; nil when the layer that measures them
+	// is not in the range or its output cannot be read.
+	Packages map[string]Package
+	Findings Counts
+}
+
+// ApplyPartial gives the layers of a partial run under ratchet (ruling C3e). The
+// range holds fewer layers than the ledger is measured from, and no diff base is
+// judged, so an item that has an entry in the working-tree ledger is not judged: the
+// layers report it as not judged. An item with no entry is judged at hard, absent
+// meaning held to the cap, the floor or 0, so a partial run never hides new debt. What
+// the ledger does not replace stands: a function that is not measured and over the cap,
+// an exemption that matches nothing, and every other hygiene check. It returns a copy as
+// Apply does, with only the verdict fields changed.
+func ApplyPartial(layers []report.Layer, p Partial) []report.Layer {
+	out := slices.Clone(layers)
+	for i, read := range plain(layers) {
+		switch read.ID {
+		case "crap":
+			out[i] = merge(layers[i], read, partialCrap(read, p))
+		case "coverage":
+			out[i] = merge(layers[i], read, partialCoverage(read, p))
+		case "hygiene":
+			out[i] = merge(layers[i], read, partialHygiene(read, p), "lint")
+		}
+	}
+	return out
+}
+
+func partialCrap(l report.Layer, p Partial) report.Layer {
+	if l.Outcome != "fail" || hasKey(l.Details, "error") || !hasKey(l.Details, "violations") {
+		return l
+	}
+	standing := slices.Clone(p.Problems)
+	for _, row := range listOf(l.Details["violations"]) {
+		if f, ok := standingRow(row, p); ok {
+			standing = append(standing, f)
+		}
+	}
+	note := notMeasuredNote(l.Details)
+	if len(standing) > 0 {
+		l.Outcome, l.Reason = "fail", joinNote(fmt.Sprintf("%d verdict(s) not replaced by a ledger entry: %s", len(standing), summary(standing)), note)
+		return l
+	}
+	l.Outcome, l.Reason = "pass", joinNote(notJudged, note)
+	return l
+}
+
+// standingRow is the failure a row of the CRAP layer's violations stands for in a
+// partial run: a function that is not measured and over the cap always, and a scored
+// function over the cap that has no entry in the ledger.
+func standingRow(row map[string]any, p Partial) (Failure, bool) {
+	key := text(row["func"])
+	if key == "" {
+		return Failure{}, false
+	}
+	if row["crap"] == nil {
+		return Failure{
+			Kind: "not measured", Key: key,
+			Why: fmt.Sprintf("not measured on this run, and its complexity %d is over the cap", number(row["cc"])),
+		}, true
+	}
+	score, ok := asFloat(row["crap"])
+	if _, held := ledgerFunction(p.Ledger, key); held || !ok || score <= p.Cap {
+		return Failure{}, false
+	}
+	return Failure{
+		Kind: "functions", Key: key,
+		Why: fmt.Sprintf("scores %.2f, over the cap %g, and has no ledger entry", score, p.Cap),
+	}, true
+}
+
+func ledgerFunction(l *Ledger, key string) (float64, bool) {
+	if l == nil {
+		return 0, false
+	}
+	v, ok := l.Functions[key]
+	return v, ok
+}
+
+func partialCoverage(l report.Layer, p Partial) report.Layer {
+	if hasKey(l.Details, "error") || !hasKey(l.Details, "statements_pct") {
+		return l
+	}
+	var standing []Failure
+	for _, path := range slices.Sorted(maps.Keys(p.Packages)) {
+		if p.Ledger != nil {
+			if _, held := p.Ledger.Packages[path]; held {
+				continue
+			}
+		}
+		pk := p.Packages[path]
+		standing = append(standing, Failure{
+			Kind: "packages", Key: path,
+			Why: fmt.Sprintf("covers %.1f%%, under the floor, and has no ledger entry", pk.StatementsPct),
+		})
+	}
+	switch {
+	case len(standing) > 0:
+		l.Outcome, l.Reason = "fail", fmt.Sprintf("%d package(s) not replaced by a ledger entry: %s", len(standing), summary(standing))
+	case l.Outcome == "fail" || l.Reason == floorReplaced:
+		l.Outcome, l.Reason = "pass", notJudged
+	}
+	return l
+}
+
+func partialHygiene(l report.Layer, p Partial) report.Layer {
+	var standing []Failure
+	for _, name := range slices.Sorted(maps.Keys(p.Findings)) {
+		for _, file := range slices.Sorted(maps.Keys(p.Findings[name])) {
+			if !p.Ledger.holdsFinding(name, file) {
+				standing = append(standing, Failure{
+					Kind: "findings", Key: name + " " + file,
+					Why: fmt.Sprintf("counts %d, and the ledger has no entry", p.Findings[name][file]),
+				})
+			}
+		}
+	}
+	judged := judgeLint(l, Judgment{Outcome: Pass, Failures: standing})
+	if judged.Outcome == "pass" && l.Outcome == "fail" {
+		judged.Reason = notJudged
+	}
+	return judged
+}
+
+// holdsFinding reports whether the ledger has an entry for the findings of a linter
+// in a file; a missing ledger has none.
+func (l *Ledger) holdsFinding(name, file string) bool {
+	if l == nil {
+		return false
+	}
+	_, ok := l.Findings[name][file]
+	return ok
 }

@@ -249,6 +249,17 @@ type Existence struct {
 	// Packages holds the import path of every package that has a production
 	// .go file, sorted.
 	Packages []string
+	// Funcs lists every production function of any .go file with what the
+	// exemption matcher reads: its key, file, receiver, name and whether it has
+	// the table shape of §6.8. It is read from the source alone, so it is the
+	// list the CRAP layer matches exemptions against, without a profile.
+	Funcs []Declared
+}
+
+// Declared is one production function as the source declares it.
+type Declared struct {
+	Key, File, Recv, Name string
+	Table                 bool
 }
 
 // Exist lists the identities and the packages of the module in dir by reading
@@ -264,12 +275,21 @@ func Exist(dir string) (Existence, error) {
 	if err != nil {
 		return Existence{}, err
 	}
-	keys := identities(src.funcs)
+	ids := identities(src.funcs)
+	keys := slices.Clone(ids)
 	slices.Sort(keys)
 	pkgs := make([]string, 0, len(src.packages))
 	for p := range src.packages {
 		pkgs = append(pkgs, p)
 	}
 	slices.Sort(pkgs)
-	return Existence{Keys: keys, Packages: pkgs}, nil
+	return Existence{Keys: keys, Packages: pkgs, Funcs: declared(src.funcs, ids)}, nil
+}
+
+func declared(funcs []*fn, keys []string) []Declared {
+	out := make([]Declared, len(funcs))
+	for i, f := range funcs {
+		out[i] = Declared{Key: keys[f.id], File: f.File, Recv: f.Recv, Name: f.Name, Table: complexity.TableShape(f.Decl)}
+	}
+	return out
 }

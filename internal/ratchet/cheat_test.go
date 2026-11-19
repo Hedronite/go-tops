@@ -237,7 +237,7 @@ func TestNotMeasuredAboveTheCapFails(t *testing.T) {
 	if len(j.Failures) != 1 {
 		t.Errorf("failures %v: comp 10 is at the cap and is not judged", j.Failures)
 	}
-	m.Exempt = map[string]bool{"example.com/m/p.Win": true}
+	m.NotMeasured = nil // the layer leaves a function an exemption covers out of its rows
 	wantOutcome(t, ratchet.Judge(input(m, l, based(l))), ratchet.Pass)
 }
 
@@ -264,7 +264,7 @@ func TestExemptionThatMatchesNothingFailsTheRatchet(t *testing.T) {
 	wantOutcome(t, j, ratchet.Fail)
 	wantFailure(t, j, ratchet.ProblemKind, "p/gone.go")
 	// On another leg the ratchet skips and the entry still fails the run.
-	jo := ratchet.Judge(ratchet.Input{Ledger: l, Base: based(l), Run: darwin, M: m, LedgerCompiled: compiledAll(m)})
+	jo := ratchet.Judge(otherLegInput(l, based(l), m, compiledAll(m)))
 	wantOutcome(t, jo, ratchet.Skip)
 	if !jo.Failed() || len(jo.HeldToCap) != 1 || jo.HeldToCap[0].Kind != ratchet.ProblemKind {
 		t.Errorf("held %v: an unmatched exemption fails every leg", jo.HeldToCap)
@@ -321,7 +321,7 @@ func TestBuildChangedAgainstTheBaseIsATextLineOnly(t *testing.T) {
 		t.Errorf("notes %q for a first ledger, which has no copy to differ from", ratchet.Notes(first))
 	}
 	// Another leg says it too, and still skips.
-	other := ratchet.Judge(ratchet.Input{Ledger: cur, Base: based(old), Run: darwin, M: m, LedgerCompiled: compiledAll(m)})
+	other := ratchet.Judge(otherLegInput(cur, based(old), m, compiledAll(m)))
 	wantOutcome(t, other, ratchet.Skip)
 	if len(ratchet.Notes(other)) != 1 {
 		t.Errorf("another leg: notes %q", ratchet.Notes(other))

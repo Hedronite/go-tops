@@ -36,6 +36,11 @@ func project(t *testing.T, ledger *ratchet.Ledger) *gate.Env {
 
 func writeLedger(t *testing.T, dir string, l *ratchet.Ledger) {
 	t.Helper()
+	writeLedgerAt(t, dir, ratchet.LedgerPath, l)
+}
+
+func writeLedgerAt(t *testing.T, dir, rel string, l *ratchet.Ledger) {
+	t.Helper()
 	doc := map[string]any{
 		"build":  map[string]any{"goos": l.Build.GOOS, "goarch": l.Build.GOARCH, "tags": nonNil(l.Build.Tags), "cgo_enabled": l.Build.CGOEnabled},
 		"ledger": map[string]any{"functions": l.Functions}, "judged_laws": l.JudgedLaws,
@@ -44,7 +49,7 @@ func writeLedger(t *testing.T, dir string, l *ratchet.Ledger) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	p := filepath.Join(dir, filepath.FromSlash(ratchet.LedgerPath))
+	p := filepath.Join(dir, filepath.FromSlash(rel))
 	if err := os.MkdirAll(filepath.Dir(p), 0o750); err != nil {
 		t.Fatal(err)
 	}
@@ -69,30 +74,41 @@ func resolved(t *testing.T, dir string) gobuild.Build {
 	return b
 }
 
+// measurerWithPaths adapts a fixed measure to NewJudge on the default paths.
+func measurerWithPaths(m ratchet.Measure, err error) (ratchet.Measurer, func(string) (ratchet.Paths, error)) {
+	return measurer(m, err), defaultPaths
+}
+
 func measurer(m ratchet.Measure, err error) ratchet.Measurer {
-	return func(context.Context, *gate.Env, gobuild.Build, []report.Layer) (ratchet.Measure, error) {
+	return func(context.Context, *gate.Env, ratchet.Inputs) (ratchet.Measure, error) {
 		return m, err
 	}
 }
 
 func emptyMeasure() ratchet.Measure { return ratchet.Measure{Cap: 10, Floor: 90} }
 
+// layersIn is a whole range: the four layers the ledger is measured from.
 func layersIn() []report.Layer {
-	return []report.Layer{{ID: "crap", Tier: 1, Outcome: "pass", Details: map[string]any{"cap": 10.0, "violations": []any{}, "not_measured": 0}}}
+	return []report.Layer{
+		{ID: "hygiene", Tier: 1, Outcome: "pass", Details: map[string]any{"golangci_lint": "v2.15.0", "findings": 0}},
+		{ID: "tests", Tier: 1, Outcome: "pass", Details: map[string]any{"packages": 3, "tests": 12, "race": true, "skipped": 0, "shuffle_seed": 7}},
+		{ID: "coverage", Tier: 1, Outcome: "pass", Details: map[string]any{"statements_pct": 95.0, "floor": 90.0, "profile_bytes": 100}},
+		{ID: "crap", Tier: 1, Outcome: "pass", Details: map[string]any{"cap": 10.0, "violations": []any{}, "not_measured": 0}},
+	}
 }
 
 func TestJudgeHookOnTheLedgerLegWithAFirstLedgerPasses(t *testing.T) {
 	env := project(t, nil)
 	build := resolved(t, env.Dir)
 	writeLedger(t, env.Dir, &ratchet.Ledger{Build: build})
-	v, err := ratchet.NewJudge(measurer(emptyMeasure(), nil))(context.Background(), env, layersIn())
+	v, err := ratchet.NewJudge(measurerWithPaths(emptyMeasure(), nil))(context.Background(), env, layersIn())
 	if err != nil {
 		t.Fatal(err)
 	}
 	if v.Failed || v.Report.Outcome != "pass" || v.Report.LedgerBuild.GOOS != build.GOOS || v.Report.RunBuild.GOOS != build.GOOS {
 		t.Errorf("verdict %+v notes %v", v, v.Notes)
 	}
-	if len(v.Layers) != 1 {
+	if len(v.Layers) != 4 {
 		t.Errorf("layers %v, want the run's layers back", v.Layers)
 	}
 }
@@ -108,7 +124,7 @@ func TestJudgeHookOnAnotherLegSkips(t *testing.T) {
 		other.GOOS = "linux"
 	}
 	writeLedger(t, env.Dir, &ratchet.Ledger{Build: other})
-	v, err := ratchet.NewJudge(measurer(emptyMeasure(), nil))(context.Background(), env, layersIn())
+	v, err := ratchet.NewJudge(measurerWithPaths(emptyMeasure(), nil))(context.Background(), env, layersIn())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -135,7 +151,7 @@ func TestJudgeHookHoldsFunctionsTheLedgerBuildDoesNotCompile(t *testing.T) {
 	writeLedger(t, env.Dir, &ratchet.Ledger{Build: other})
 	m := emptyMeasure()
 	m.Functions = []crap.Function{{Key: "example.com/m.Here", File: "only_here.go", Comp: 12, Cov: 1, CRAP: 12}}
-	v, err := ratchet.NewJudge(measurer(m, nil))(context.Background(), env, layersIn())
+	v, err := ratchet.NewJudge(measurerWithPaths(m, nil))(context.Background(), env, layersIn())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -146,7 +162,7 @@ func TestJudgeHookHoldsFunctionsTheLedgerBuildDoesNotCompile(t *testing.T) {
 
 func TestJudgeHookFailsWithoutALedger(t *testing.T) {
 	env := project(t, nil)
-	v, err := ratchet.NewJudge(measurer(emptyMeasure(), nil))(context.Background(), env, layersIn())
+	v, err := ratchet.NewJudge(measurerWithPaths(emptyMeasure(), nil))(context.Background(), env, layersIn())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -164,7 +180,7 @@ func TestJudgeHookFailsOnAnUnreadableLedger(t *testing.T) {
 	if err := os.WriteFile(p, []byte("{not json"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	v, err := ratchet.NewJudge(measurer(emptyMeasure(), nil))(context.Background(), env, layersIn())
+	v, err := ratchet.NewJudge(measurerWithPaths(emptyMeasure(), nil))(context.Background(), env, layersIn())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -177,7 +193,7 @@ func TestJudgeHookFailsOnAShallowCloneOrNoMergeBase(t *testing.T) {
 	env := project(t, nil)
 	writeLedger(t, env.Dir, &ratchet.Ledger{Build: resolved(t, env.Dir)})
 	env.Base = "origin/main" // no such ref
-	v, err := ratchet.NewJudge(measurer(emptyMeasure(), nil))(context.Background(), env, layersIn())
+	v, err := ratchet.NewJudge(measurerWithPaths(emptyMeasure(), nil))(context.Background(), env, layersIn())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -192,7 +208,7 @@ func TestJudgeHookRefusesARunItCouldNotMeasure(t *testing.T) {
 	env := project(t, nil)
 	writeLedger(t, env.Dir, &ratchet.Ledger{Build: resolved(t, env.Dir)})
 	in := layersIn()
-	v, err := ratchet.NewJudge(measurer(ratchet.Measure{}, errors.New("no profile")))(context.Background(), env, in)
+	v, err := ratchet.NewJudge(measurerWithPaths(ratchet.Measure{}, errors.New("no profile")))(context.Background(), env, in)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -201,5 +217,184 @@ func TestJudgeHookRefusesARunItCouldNotMeasure(t *testing.T) {
 	}
 	if len(v.Layers) != len(in) || v.Layers[0].Outcome != in[0].Outcome {
 		t.Errorf("layers %v, want the run's layers unchanged", v.Layers)
+	}
+}
+
+// The ledger is read at the path the configuration names, never at a built-in one:
+// `check` and `baseline` read the same key.
+func TestJudgeHookReadsTheConfiguredBaselinePath(t *testing.T) {
+	env := project(t, nil)
+	build := resolved(t, env.Dir)
+	const custom = "ledgers/main.json"
+	writeLedgerAt(t, env.Dir, custom, &ratchet.Ledger{Build: build})
+	// A file at the default path that would fail the judge if it were read.
+	if err := os.MkdirAll(filepath.Join(env.Dir, ".go-tops"), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(env.Dir, filepath.FromSlash(ratchet.LedgerPath)), []byte("{not json"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	paths := func(string) (ratchet.Paths, error) { return ratchet.Paths{Ledger: custom}, nil }
+	v, err := ratchet.NewJudge(measurer(emptyMeasure(), nil), paths)(context.Background(), env, layersIn())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v.Failed || v.Report.Outcome != "pass" {
+		t.Errorf("verdict %+v notes %v, want a pass from the ledger at %s", v.Report, v.Notes, custom)
+	}
+	// And a missing ledger at the configured path is a failure, whatever sits at the default.
+	missing := func(string) (ratchet.Paths, error) { return ratchet.Paths{Ledger: "ledgers/absent.json"}, nil }
+	v, err = ratchet.NewJudge(measurer(emptyMeasure(), nil), missing)(context.Background(), env, layersIn())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !v.Failed || !strings.Contains(strings.Join(v.Notes, ""), "no baseline file") {
+		t.Errorf("verdict %+v notes %v, want a failure for the missing ledger", v.Report, v.Notes)
+	}
+}
+
+// A configuration that cannot be read fails the ratchet and says so.
+func TestJudgeHookRefusesWhenTheConfigurationCannotBeRead(t *testing.T) {
+	env := project(t, nil)
+	bad := func(string) (ratchet.Paths, error) { return ratchet.Paths{}, errors.New("go-tops.yaml is invalid") }
+	v, err := ratchet.NewJudge(measurer(emptyMeasure(), nil), bad)(context.Background(), env, layersIn())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !v.Failed || !strings.Contains(strings.Join(v.Notes, ""), "go-tops.yaml is invalid") {
+		t.Errorf("verdict %+v notes %v", v.Report, v.Notes)
+	}
+}
+
+// The base copy is read at the configured path as well: a ledger committed there
+// with an entry, and unchanged in the tree, is no first ledger. Read at the default
+// path the base would hold nothing, the entry would have no function to equal, and
+// the first-ledger rule would fail it.
+func TestJudgeHookReadsTheBaseCopyAtTheConfiguredPath(t *testing.T) {
+	env := project(t, nil)
+	build := resolved(t, env.Dir)
+	const custom = "ledgers/main.json"
+	writeLedgerAt(t, env.Dir, custom, &ratchet.Ledger{Build: build, Functions: map[string]float64{"example.com/m.F": 12}})
+	if err := os.WriteFile(filepath.Join(env.Dir, "go-tops.yaml"), []byte("baseline: "+custom+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	git(t, env.Dir, "add", "-A")
+	git(t, env.Dir, "commit", "-q", "-m", "adopt the ledger")
+	paths := func(string) (ratchet.Paths, error) { return ratchet.Paths{Ledger: custom}, nil }
+	v, err := ratchet.NewJudge(measurer(emptyMeasure(), nil), paths)(context.Background(), env, layersIn())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v.Failed || v.Report.Outcome != "pass" {
+		t.Errorf("verdict %+v notes %v, want a pass: the ledger is unchanged against its committed copy", v.Report, v.Notes)
+	}
+}
+
+// The hook returns the layers as they ran: the tests layer's shuffle seed, an int64
+// of 19 digits, comes out byte-identical, so a failing run can be replayed with
+// -test.shuffle from the report.
+func TestJudgeHookKeepsTheShuffleSeedByteIdentical(t *testing.T) {
+	env := project(t, nil)
+	writeLedger(t, env.Dir, &ratchet.Ledger{Build: resolved(t, env.Dir)})
+	layers := layersIn()
+	layers[1].Details = map[string]any{"packages": 3, "tests": 12, "race": true, "skipped": 0, "shuffle_seed": int64(1768300000000000123)}
+	v, err := ratchet.NewJudge(measurer(emptyMeasure(), nil), defaultPaths)(context.Background(), env, layers)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := json.Marshal(v.Layers)
+	if err != nil || !strings.Contains(string(raw), `"shuffle_seed":1768300000000000123`) {
+		t.Errorf("seed after the hook: %s (%v)", raw, err)
+	}
+	// And a refused judgment returns the layers as they ran too.
+	bad, err := ratchet.NewJudge(measurer(ratchet.Measure{}, errors.New("no profile")), defaultPaths)(context.Background(), env, layers)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err = json.Marshal(bad.Layers)
+	if err != nil || !strings.Contains(string(raw), `"shuffle_seed":1768300000000000123`) {
+		t.Errorf("seed after a refused judgment: %s (%v)", raw, err)
+	}
+}
+
+// The relocation cheat: a branch sets `baseline:` to a new path, deletes the old
+// ledger and writes a new one as --init would, with a function worsened. At the new
+// path there is nothing at the base, so read there it would be a first ledger and
+// pass. The base copy is read where the base kept it, so the worsened entry needs a
+// record and the line says the baseline moved.
+func TestRelocatingTheLedgerDoesNotResetTheRatchet(t *testing.T) {
+	env := project(t, nil)
+	build := resolved(t, env.Dir)
+	writeLedger(t, env.Dir, &ratchet.Ledger{Build: build, Functions: map[string]float64{"example.com/m.F": 11}})
+	git(t, env.Dir, "add", "-A")
+	git(t, env.Dir, "commit", "-q", "-m", "adopt the ratchet")
+	git(t, env.Dir, "checkout", "-q", "-b", "feature")
+
+	const custom = "ledger/debt.json"
+	if err := os.Remove(filepath.Join(env.Dir, filepath.FromSlash(ratchet.LedgerPath))); err != nil {
+		t.Fatal(err)
+	}
+	writeLedgerAt(t, env.Dir, custom, &ratchet.Ledger{Build: build, Functions: map[string]float64{"example.com/m.F": 17.3}})
+	if err := os.WriteFile(filepath.Join(env.Dir, "go-tops.yaml"), []byte("baseline: "+custom+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	git(t, env.Dir, "add", "-A")
+	git(t, env.Dir, "commit", "-q", "-m", "move the baseline and worsen a function")
+
+	worse := ratchet.Measure{Cap: 10, Floor: 90, Functions: []crap.Function{{Key: "example.com/m.F", CRAP: 17.3}}}
+	paths := func(string) (ratchet.Paths, error) { return ratchet.Paths{Ledger: custom}, nil }
+	v, err := ratchet.NewJudge(measurer(worse, nil), paths)(context.Background(), env, layersIn())
+	if err != nil {
+		t.Fatal(err)
+	}
+	notes := strings.Join(v.Notes, "")
+	if !v.Failed || v.Report.Outcome != "fail" || !strings.Contains(notes, "functions raised from 11 to 17.3 with no regressions record") {
+		t.Errorf("verdict %+v notes %q: the relocated ledger passed as a first ledger", v.Report, notes)
+	}
+	if !strings.Contains(notes, "the baseline moved from "+ratchet.LedgerPath+" at the diff base to "+custom) {
+		t.Errorf("notes %q do not name both paths", notes)
+	}
+}
+
+// Through the hook, with the module in a subdirectory: a hand-raised entry equal to what
+// the run measures fails for want of a record, and a base configuration that does not
+// parse fails the judgment.
+func TestJudgeHookForAModuleInASubdirectory(t *testing.T) {
+	root := repo(t)
+	commit(t, root, "adopt", map[string]string{"mod/go.mod": "module example.com/m\n\ngo 1.26\n", "mod/m.go": "package m\n\nfunc F() int { return 1 }\n"})
+	env := &gate.Env{Dir: filepath.Join(root, "mod"), Base: "main", Config: gate.Config{Module: "example.com/m", Enforce: "ratchet"}}
+	build := resolved(t, env.Dir)
+	writeLedger(t, env.Dir, &ratchet.Ledger{Build: build, Functions: map[string]float64{"example.com/m.F": 12}})
+	git(t, root, "add", "-A")
+	git(t, root, "commit", "-q", "-m", "adopt the ratchet")
+	git(t, root, "checkout", "-q", "-b", "feature")
+	writeLedger(t, env.Dir, &ratchet.Ledger{Build: build, Functions: map[string]float64{"example.com/m.F": 17}})
+	git(t, root, "add", "-A")
+	git(t, root, "commit", "-q", "-m", "raise by hand")
+
+	worse := ratchet.Measure{Cap: 10, Floor: 90, Functions: []crap.Function{{Key: "example.com/m.F", CRAP: 17}}}
+	v, err := ratchet.NewJudge(measurerWithPaths(worse, nil))(context.Background(), env, layersIn())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !v.Failed || !strings.Contains(strings.Join(v.Notes, ""), "functions raised from 12 to 17 with no regressions record") {
+		t.Errorf("verdict %+v notes %v: the hand-raised entry passed as a first ledger", v.Report, v.Notes)
+	}
+
+	// And a base go-tops.yaml that does not parse.
+	git(t, root, "checkout", "-q", "main")
+	if err := os.WriteFile(filepath.Join(env.Dir, "go-tops.yaml"), []byte("baseline: [unclosed\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	git(t, root, "add", "-A")
+	git(t, root, "commit", "-q", "-m", "a broken configuration")
+	git(t, root, "checkout", "-q", "-b", "other")
+	git(t, root, "commit", "-q", "--allow-empty", "-m", "work")
+	bad, err := ratchet.NewJudge(measurerWithPaths(worse, nil))(context.Background(), env, layersIn())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bad.Failed || !strings.Contains(strings.Join(bad.Notes, ""), "go-tops.yaml at the diff base") {
+		t.Errorf("verdict %+v notes %v, want a failure naming the base go-tops.yaml", bad.Report, bad.Notes)
 	}
 }

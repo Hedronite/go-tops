@@ -93,7 +93,7 @@ func TestRatchetSkipNamesBothBuilds(t *testing.T) {
 	if r.Report.Ratchet.Outcome != "skip" || r.ExitCode != 0 && len(r.Report.Summary.Failed) == 1 && r.Report.Summary.Failed[0] != "laws" {
 		t.Errorf("ratchet %+v exit %d failed %v", r.Report.Ratchet, r.ExitCode, r.Report.Summary.Failed)
 	}
-	want := "ratchet      skip  (ledger build linux/amd64 cgo, this run darwin/arm64 cgo)"
+	want := "ratchet      skip  (ledger build linux/amd64 cgo on, this run darwin/arm64 cgo on)"
 	if !strings.Contains(r.Text, want) {
 		t.Errorf("the text does not name the builds: want %q in\n%s", want, r.Text)
 	}
@@ -208,5 +208,30 @@ func TestRatchetWithNoHookReportsNothing(t *testing.T) {
 	r := mustRun(t, ratchetConfig("ratchet"), opts(), deps(gateLayers(nil, nil)))
 	if r.Report.Ratchet != nil {
 		t.Errorf("ratchet object %+v with no judge", r.Report.Ratchet)
+	}
+}
+
+// A partial run holds fewer layers than the ledger is measured from. The runner asks
+// the judge as for any run under ratchet, and a verdict with no ratchet object leaves
+// the report without one: the run ends partial as it would without a ledger.
+func TestRatchetVerdictWithNoObjectLeavesTheReportWithoutOne(t *testing.T) {
+	for _, o := range []Options{
+		{MaxTier: 1, Only: "crap"},
+		{MaxTier: 1, Only: "coverage"},
+		{MaxTier: 1, Only: "hygiene"},
+	} {
+		s := &spy{}
+		d := deps(gateLayers(nil, nil))
+		d.Ratchet = func(ctx context.Context, env *Env, layers []report.Layer) (*RatchetVerdict, error) {
+			s.verdict = &RatchetVerdict{Layers: layers}
+			return s.judge(ctx, env, layers)
+		}
+		r := mustRun(t, ratchetConfig("ratchet"), o, d)
+		if !s.called {
+			t.Errorf("--only %s: the judge was not asked", o.Only)
+		}
+		if r.Report.Ratchet != nil || contains(r.Report.Summary.Failed, "ratchet") {
+			t.Errorf("--only %s: ratchet %v failed %v, want no object and no ratchet failure", o.Only, r.Report.Ratchet, r.Report.Summary.Failed)
+		}
 	}
 }

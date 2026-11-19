@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -71,7 +73,15 @@ func legacyProject(t *testing.T) *ratchetProject {
 	return &ratchetProject{dir: dir}
 }
 
-type ratchetProject struct{ dir string }
+type ratchetProject struct {
+	dir string
+	// ledgerBuild, when set, is the build the ledger records instead of this run's.
+	ledgerBuild *gobuild.Build
+	// findings are the lint findings the ledger records, and noPackage leaves the
+	// package under its floor out of it.
+	findings  ratchet.Counts
+	noPackage bool
+}
 
 func itoa(n int) string {
 	return strings.TrimSpace(strings.Repeat(" ", 0) + string(rune('0'+n/10)) + string(rune('0'+n%10)))
@@ -91,6 +101,9 @@ func (p *ratchetProject) writeLedgerFor(t *testing.T, functions map[string]float
 	if err != nil {
 		t.Fatal(err)
 	}
+	if p.ledgerBuild != nil {
+		build = *p.ledgerBuild
+	}
 	pkg := cover.Package{Path: "example.com/m/low", Statements: 140, Covered: 40}
 	ledger := map[string]any{
 		"functions": functions,
@@ -98,6 +111,12 @@ func (p *ratchetProject) writeLedgerFor(t *testing.T, functions map[string]float
 	}
 	if exemptions > 0 {
 		ledger["exemptions"] = exemptions
+	}
+	if len(p.findings) > 0 {
+		ledger["findings"] = p.findings
+	}
+	if p.noPackage {
+		delete(ledger, "packages")
 	}
 	doc := map[string]any{
 		"build":       map[string]any{"goos": build.GOOS, "goarch": build.GOARCH, "tags": []string{}, "cgo_enabled": build.CGOEnabled},
@@ -135,6 +154,23 @@ func layers(t *testing.T) []gate.Layer {
 
 func runGate(t *testing.T, p *ratchetProject, enforce string, exemptions ...report.Exemption) *gate.Run {
 	t.Helper()
+	return runGateWith(t, p, enforce, layers(t), exemptions...)
+}
+
+func runGateWith(t *testing.T, p *ratchetProject, enforce string, ls []gate.Layer, exemptions ...report.Exemption) *gate.Run {
+	t.Helper()
+	return execute(t, p, gateConfig(enforce, exemptions), ls)
+}
+
+// runGateRequired runs the gate with the given laws required.
+func runGateRequired(t *testing.T, p *ratchetProject, enforce string, required []string) *gate.Run {
+	t.Helper()
+	cfg := gateConfig(enforce, nil)
+	cfg.RequiredLaws = required
+	return execute(t, p, cfg, layers(t))
+}
+
+func gateConfig(enforce string, exemptions []report.Exemption) gate.Config {
 	cfg := gate.Config{
 		Module: "example.com/m", Class: "binary-cli", Enforce: enforce,
 		Crap:     gate.CrapConfig{Cap: 10, ErrGuardDiscount: true},
@@ -143,8 +179,18 @@ func runGate(t *testing.T, p *ratchetProject, enforce string, exemptions ...repo
 	if enforce == "advisory" {
 		cfg.AdvisoryExpires = "2027-03-31"
 	}
-	d := gate.Deps{Dir: p.dir, Layers: layers(t), ToolVersion: "test", Ratchet: ratchet.NewJudge(ratchet.CollectMeasure(func(string) (string, error) { return "", nil }))}
-	run, err := gate.Execute(context.Background(), cfg, gate.Options{MaxTier: 1, Base: "main"}, d)
+	return cfg
+}
+
+func execute(t *testing.T, p *ratchetProject, cfg gate.Config, ls []gate.Layer) *gate.Run {
+	t.Helper()
+	return executeWith(t, p, cfg, ls, gate.Options{MaxTier: 1, Base: "main"})
+}
+
+func executeWith(t *testing.T, p *ratchetProject, cfg gate.Config, ls []gate.Layer, opts gate.Options) *gate.Run {
+	t.Helper()
+	d := gate.Deps{Dir: p.dir, Layers: ls, ToolVersion: "test", Ratchet: ratchet.NewJudge(ratchet.CollectMeasure(), defaultPaths)}
+	run, err := gate.Execute(context.Background(), cfg, opts, d)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
@@ -325,5 +371,394 @@ func TestRatchetFailsANotMeasuredFunctionOverTheCap(t *testing.T) {
 	}
 	if !strings.Contains(run.Text, "example.com/m/low.OnWindows") || !strings.Contains(run.Text, "not measured") {
 		t.Errorf("the text does not name the not-measured function:\n%s", run.Text)
+	}
+}
+
+// fixedLayer is a layer that returns a result chosen by the test.
+type fixedLayer struct {
+	id  string
+	res gate.Result
+}
+
+func (f fixedLayer) ID() string                                 { return f.id }
+func (f fixedLayer) Tier() int                                  { return 1 }
+func (f fixedLayer) Needs() []string                            { return nil }
+func (f fixedLayer) Run(context.Context, *gate.Env) gate.Result { return f.res }
+
+// lintFailure is a hygiene layer that failed on five lint findings and nothing
+// else, with the saved lint output that matches.
+func lintFailure(t *testing.T, dir string) gate.Layer {
+	t.Helper()
+	return lintFailureIn(t, dir, "revive", "low/low.go")
+}
+
+// lintFailureIn is the same layer with its five findings in the given file.
+func lintFailureIn(t *testing.T, dir, linter, file string) gate.Layer {
+	t.Helper()
+	issue := `{"FromLinter":"` + linter + `","Text":"x","Pos":{"Filename":"` + file + `","Line":1}}`
+	doc := `{"Issues":[` + strings.Repeat(issue+",", 4) + issue + `]}`
+	if err := os.WriteFile(filepath.Join(dir, filepath.FromSlash(hygiene.LintJSON)), []byte(doc), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	pass := func() map[string]any { return map[string]any{"outcome": "pass"} }
+	return fixedLayer{id: "hygiene", res: gate.Result{Outcome: gate.Fail, Reason: "1 of 8 checks failed: lint: 5 finding(s)", Details: map[string]any{
+		"golangci_lint": "v2.15.0", "findings": 5,
+		"tidy": pass(), "verify": pass(), "toolchain": pass(), "format": pass(),
+		"lint":            map[string]any{"outcome": "fail", "message": "5 finding(s)", "findings": 5, "by_linter": map[string]any{linter: 5}},
+		"vulnerabilities": pass(), "licenses": pass(),
+	}}}
+}
+
+// otherLegProject is the legacy repo with a ledger recorded under another build:
+// this run is not the ledger leg.
+func otherLegProject(t *testing.T) *ratchetProject {
+	t.Helper()
+	p := legacyProject(t)
+	run, err := gobuild.Resolve(p.dir, tests.Build)
+	if err != nil {
+		t.Fatal(err)
+	}
+	other := gobuild.Build{GOOS: "plan9", GOARCH: "amd64", Tags: []string{}}
+	if run.GOOS == "plan9" {
+		other.GOOS = "openbsd"
+	}
+	p.ledgerBuild = &other
+	p.writeFirstLedger(t)
+	return p
+}
+
+func otherLegLayers(t *testing.T, p *ratchetProject) []gate.Layer {
+	t.Helper()
+	ls := layers(t)
+	ls[0] = lintFailure(t, p.dir) // hygiene
+	return ls
+}
+
+// Ruling C3c: on a leg that is not the ledger leg, what the ledger holds is reported
+// and never fails the leg: the package under its floor, the lint findings and the
+// legacy function over the cap. The ratchet is a skip that names both builds.
+func TestOtherLegReportsLedgerHeldDebtAndFailsNothing(t *testing.T) {
+	p := otherLegProject(t)
+	run := runGateWith(t, p, "ratchet", otherLegLayers(t, p))
+	o := outcomes(run)
+	if o["coverage"] != "pass" || o["crap"] != "pass" || o["hygiene"] != "pass" || run.ExitCode != 0 {
+		t.Fatalf("layers %v exit %d, want every layer pass and exit 0\n%s", o, run.ExitCode, run.Text)
+	}
+	r := run.Report.Ratchet
+	if r == nil || r.Outcome != "skip" || r.LedgerBuild.GOOS == r.RunBuild.GOOS {
+		t.Fatalf("ratchet %+v, want skip naming two different builds", r)
+	}
+	// Reported: the figures are still in the layers' details.
+	for _, l := range run.Report.Layers {
+		switch l.ID {
+		case "coverage":
+			if l.Details["statements_pct"] == nil {
+				t.Errorf("coverage no longer reports its figures: %v", l.Details)
+			}
+		case "hygiene":
+			if lint, ok := l.Details["lint"].(map[string]any); !ok || num(lint["findings"]) != 5 {
+				t.Errorf("hygiene no longer reports its findings: %v", l.Details["lint"])
+			}
+		case "crap":
+			if rows, ok := l.Details["violations"].([]any); !ok || len(rows) != 1 {
+				t.Errorf("crap no longer lists the legacy function: %v", l.Details["violations"])
+			}
+		}
+	}
+}
+
+// A function over the cap that only this leg compiles has no entry anywhere and
+// fails the leg, as does an exemption that matches nothing.
+func TestOtherLegFailsOnlyWhatC3cNames(t *testing.T) {
+	p := otherLegProject(t)
+	run, err := gobuild.Resolve(p.dir, tests.Build)
+	if err != nil {
+		t.Fatal(err)
+	}
+	big := "//go:build " + run.GOOS + "\n\npackage low\n\nfunc OnlyHere(a bool) int {\n" + strings.Repeat("\tif a {\n\t\treturn 1\n\t}\n", 11) + "\treturn 0\n}\n"
+	if err := os.WriteFile(filepath.Join(p.dir, "low", "only_here.go"), []byte(big), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	res := runGateWith(t, p, "ratchet", otherLegLayers(t, p))
+	if o := outcomes(res); o["crap"] != "fail" || res.ExitCode != 1 || !strings.Contains(res.Text, "example.com/m/low.OnlyHere") {
+		t.Errorf("layers %v exit %d, want crap fail naming the function the ledger build does not compile\n%s", o, res.ExitCode, res.Text)
+	}
+	if res.Report.Ratchet == nil || res.Report.Ratchet.Outcome != "skip" {
+		t.Errorf("ratchet %+v, want skip: the judgment is still the ledger leg's", res.Report.Ratchet)
+	}
+
+	q := otherLegProject(t)
+	bad := runGateWith(t, q, "ratchet", otherLegLayers(t, q), exemptionFor("low/vanished.go"))
+	if o := outcomes(bad); o["crap"] != "fail" || bad.ExitCode != 1 {
+		t.Errorf("layers %v exit %d, want crap fail for an exemption that matches nothing", o, bad.ExitCode)
+	}
+}
+
+// onlyHere is a file this host compiles and the ledger build (another platform) does
+// not, with a function under the cap.
+func (p *ratchetProject) writeOnlyHere(t *testing.T, dir, body string) {
+	t.Helper()
+	run, err := gobuild.Resolve(p.dir, tests.Build)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(p.dir, filepath.FromSlash(dir), "only_here.go")
+	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	pkg := filepath.Base(dir)
+	src := "//go:build " + run.GOOS + "\n\npackage " + pkg + "\n\nfunc Here() {}\n" + body
+	if err := os.WriteFile(path, []byte(src), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Ruling C3d, through the runner: a lint finding in a file the ledger build does not
+// compile fails the leg at hard; the same finding in a file it compiles is reported.
+func TestOtherLegFailsALintFindingOutsideTheLedgerBuild(t *testing.T) {
+	p := otherLegProject(t)
+	p.writeOnlyHere(t, "low", "")
+	ls := layers(t)
+	ls[0] = lintFailureIn(t, p.dir, "errcheck", "low/only_here.go")
+	run := runGateWith(t, p, "ratchet", ls)
+	if o := outcomes(run); o["hygiene"] != "fail" || run.ExitCode != 1 || !strings.Contains(run.Text, "errcheck low/only_here.go") {
+		t.Errorf("layers %v exit %d, want hygiene fail naming the file\n%s", o, run.ExitCode, run.Text)
+	}
+	q := otherLegProject(t)
+	ok := runGateWith(t, q, "ratchet", otherLegLayers(t, q))
+	if o := outcomes(ok); o["hygiene"] != "pass" || ok.ExitCode != 0 {
+		t.Errorf("the same findings in low/low.go, which the ledger build compiles: layers %v exit %d\n%s", o, ok.ExitCode, ok.Text)
+	}
+}
+
+// A new //nolint in a file the ledger build does not compile fails the leg: the ledger
+// has no entry for it, and the leg that compiles the file is the one that judges it.
+func TestOtherLegFailsANolintOutsideTheLedgerBuild(t *testing.T) {
+	p := otherLegProject(t)
+	p.writeOnlyHere(t, "low", "\nfunc skipped() { //nolint:errcheck // a reason for the suppression\n}\n")
+	run := runGateWith(t, p, "ratchet", layers(t))
+	if run.ExitCode != 1 || run.Report.Ratchet == nil || run.Report.Ratchet.Outcome != "skip" || !strings.Contains(run.Text, "errcheck low/only_here.go") {
+		t.Errorf("ratchet %+v exit %d, want a skip that still fails the leg for the //nolint\n%s", run.Report.Ratchet, run.ExitCode, run.Text)
+	}
+}
+
+// A package the ledger build does not compile, under the coverage floor, is held to
+// the floor on the leg that compiles it.
+func TestOtherLegFailsAPackageUnderTheFloorOutsideTheLedgerBuild(t *testing.T) {
+	p := otherLegProject(t)
+	p.writeOnlyHere(t, "onlyhere", "")
+	prof := filepath.Join(p.dir, filepath.FromSlash(tests.ProfilePath))
+	f, err := os.OpenFile(prof, os.O_APPEND|os.O_WRONLY, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.WriteString("example.com/m/onlyhere/only_here.go:3.1,9.2 20 1\nexample.com/m/onlyhere/only_here.go:10.1,19.2 80 0\n"); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	run := runGateWith(t, p, "ratchet", layers(t))
+	if o := outcomes(run); o["coverage"] != "fail" || run.ExitCode != 1 || !strings.Contains(run.Text, "example.com/m/onlyhere") {
+		t.Errorf("layers %v exit %d, want coverage fail naming the package\n%s", o, run.ExitCode, run.Text)
+	}
+}
+
+// Ruling C9, what "the gate passes under ratchet" means at M2: the report has
+// ratchet.outcome pass and every tier 0-1 layer pass, and the only failing item is
+// the class's required laws, reported as required and not evaluated until M5. With
+// no required laws the gate exits 0. This is the 6.7 walk-through's step 5 read from
+// the report, the way the kit assertion step reads it.
+func TestWalkThroughStep5ThroughTheReport(t *testing.T) {
+	for _, required := range [][]string{nil, {"G-02", "G-07"}} {
+		p := legacyProject(t)
+		p.writeFirstLedger(t)
+		run := runGateRequired(t, p, "ratchet", required)
+		rep := run.Report
+		if rep.Ratchet == nil || rep.Ratchet.Outcome != "pass" {
+			t.Fatalf("required %v: ratchet %+v, want pass\n%s", required, rep.Ratchet, run.Text)
+		}
+		for _, id := range []string{"hygiene", "tests", "coverage", "crap"} {
+			if got := outcomes(run)[id]; got != "pass" {
+				t.Errorf("required %v: layer %s %s, want pass", required, id, got)
+			}
+		}
+		if len(required) == 0 {
+			if run.ExitCode != 0 || len(rep.Summary.Failed) != 0 {
+				t.Errorf("no required laws: exit %d failed %v, want 0 and nothing failed", run.ExitCode, rep.Summary.Failed)
+			}
+			continue
+		}
+		if run.ExitCode != 1 || !slices.Equal(rep.Summary.Failed, []string{"laws"}) {
+			t.Errorf("required %v: exit %d failed %v, want only laws", required, run.ExitCode, rep.Summary.Failed)
+		}
+		if rep.Laws.Required != len(required) || rep.Laws.RequiredNotEvaluated != len(required) {
+			t.Errorf("laws %+v, want %d required and not evaluated until M5", rep.Laws, len(required))
+		}
+	}
+}
+
+// Through the runner, in report.json: the tests layer's shuffle seed is byte-identical
+// under ratchet, whatever the ratchet rewrites in the layers it judges.
+func TestRatchetKeepsTheSeedByteIdenticalInTheReport(t *testing.T) {
+	p := legacyProject(t)
+	p.writeFirstLedger(t)
+	ls := layers(t)
+	ls[1] = fixedLayer{id: "tests", res: gate.Result{Outcome: gate.Pass, Details: map[string]any{
+		"packages": 3, "tests": 12, "race": true, "skipped": 0, "shuffle_seed": int64(1768300000000000123),
+	}}}
+	run := runGateWith(t, p, "ratchet", ls)
+	if run.Report.Ratchet == nil || run.Report.Ratchet.Outcome != "pass" {
+		t.Fatalf("ratchet %+v\n%s", run.Report.Ratchet, run.Text)
+	}
+	raw, err := report.Marshal(run.Report)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !regexp.MustCompile(`"shuffle_seed":\s*1768300000000000123\b`).Match(raw) {
+		t.Errorf("report.json does not carry the seed byte-identical:\n%s", raw)
+	}
+}
+
+// Ruling C3e: in a partial run under ratchet the thresholds the ledger replaces are
+// not judged at all. The ledger here holds Big at 5 and no finding: against it Big at
+// 11 and five findings fail a full run, and a partial run reports them as not judged.
+func TestPartialRunUnderRatchetJudgesNothingTheLedgerReplaces(t *testing.T) {
+	p := legacyProject(t)
+	p.findings = ratchet.Counts{"revive": {"low/low.go": 1}}
+	p.writeLedgerFor(t, map[string]float64{"example.com/m/low.Big": 5}, 0)
+
+	full := runGateWith(t, p, "ratchet", layers(t))
+	if full.ExitCode != 1 {
+		t.Fatalf("the full range exits %d, want 1: Big is over its entry\n%s", full.ExitCode, full.Text)
+	}
+	for _, only := range []string{"crap", "coverage", "hygiene"} {
+		ls := layers(t)
+		ls[0] = lintFailure(t, p.dir)
+		cfg := gateConfig("ratchet", nil)
+		run := executeWith(t, p, cfg, ls, gate.Options{MaxTier: 1, Base: "main", Only: only})
+		if run.ExitCode != 0 || run.Report.Ratchet != nil || contains(run.Report.Summary.Failed, "ratchet") {
+			t.Errorf("--only %s: exit %d ratchet %v failed %v, want a run with no ratchet object that fails nothing\n%s", only, run.ExitCode, run.Report.Ratchet, run.Report.Summary.Failed, run.Text)
+		}
+		for _, l := range run.Report.Layers {
+			if l.ID == only && (l.Outcome != "pass" || !strings.Contains(l.Reason, "not judged: partial run under ratchet")) {
+				t.Errorf("--only %s: layer %s %s %q, want a pass booked as not judged", only, l.ID, l.Outcome, l.Reason)
+			}
+		}
+	}
+}
+
+func contains(list []string, want string) bool { return slices.Contains(list, want) }
+
+// What the ledger does not replace stands in a partial run.
+func TestPartialRunKeepsAnUnmatchedExemptionAndANotMeasuredFunction(t *testing.T) {
+	p := legacyProject(t)
+	p.writeFirstLedger(t)
+	cfg := gateConfig("ratchet", []report.Exemption{exemptionFor("low/vanished.go")})
+	run := executeWith(t, p, cfg, layers(t), gate.Options{MaxTier: 1, Base: "main", Only: "crap"})
+	if o := outcomes(run); o["crap"] != "fail" || run.ExitCode != 1 {
+		t.Errorf("an unmatched exemption: layers %v exit %d, want crap fail\n%s", o, run.ExitCode, run.Text)
+	}
+	q := legacyProject(t)
+	q.writeFirstLedger(t)
+	big := "package low\n\nfunc OnWindows(a bool) int {\n" + strings.Repeat("\tif a {\n\t\treturn 1\n\t}\n", 11) + "\treturn 0\n}\n"
+	if err := os.WriteFile(filepath.Join(q.dir, "low", "big_windows.go"), []byte(big), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	run = executeWith(t, q, gateConfig("ratchet", nil), layers(t), gate.Options{MaxTier: 1, Base: "main", Only: "crap"})
+	if o := outcomes(run); o["crap"] != "fail" || !strings.Contains(run.Text, "example.com/m/low.OnWindows") {
+		t.Errorf("a not-measured function over the cap: layers %v\n%s", o, run.Text)
+	}
+}
+
+// Held verdicts are booked to the layer that owns them: a finding or a suppression
+// to hygiene and a package to coverage, never to the CRAP layer, which fails for
+// functions only. summary.failed names the layer that failed.
+func TestOtherLegBooksHeldVerdictsToTheirOwnLayers(t *testing.T) {
+	p := otherLegProject(t)
+	p.writeOnlyHere(t, "low", "\nfunc skipped() { //nolint:errcheck // a reason for the suppression\n}\n")
+	ls := layers(t)
+	ls[0] = lintFailureIn(t, p.dir, "errcheck", "low/only_here.go")
+	run := runGateWith(t, p, "ratchet", ls)
+	o := outcomes(run)
+	if o["hygiene"] != "fail" || o["crap"] != "pass" || o["coverage"] != "pass" || !slices.Equal(run.Report.Summary.Failed, []string{"hygiene"}) {
+		t.Errorf("layers %v failed %v, want only hygiene\n%s", o, run.Report.Summary.Failed, run.Text)
+	}
+	q := otherLegProject(t)
+	q.writeOnlyHere(t, "onlyhere", "")
+	prof := filepath.Join(q.dir, filepath.FromSlash(tests.ProfilePath))
+	f, err := os.OpenFile(prof, os.O_APPEND|os.O_WRONLY, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.WriteString("example.com/m/onlyhere/only_here.go:3.1,9.2 20 1\nexample.com/m/onlyhere/only_here.go:10.1,19.2 80 0\n"); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	pk := runGateWith(t, q, "ratchet", layers(t))
+	if o := outcomes(pk); o["coverage"] != "fail" || o["crap"] != "pass" || !slices.Equal(pk.Report.Summary.Failed, []string{"coverage"}) {
+		t.Errorf("layers %v failed %v, want only coverage\n%s", o, pk.Report.Summary.Failed, pk.Text)
+	}
+}
+
+// Ruling C3e, refined: a partial run does not judge an item that has an entry in the
+// working-tree ledger, and judges one with no entry at hard. A partial run never hides
+// new debt. The same repo and the same run, with and without the entry.
+
+func partialRun(t *testing.T, p *ratchetProject, only string, ls []gate.Layer) *gate.Run {
+	t.Helper()
+	return executeWith(t, p, gateConfig("ratchet", nil), ls, gate.Options{MaxTier: 1, Base: "main", Only: only})
+}
+
+func TestPartialRunJudgesAFunctionWithNoEntryAtTheCap(t *testing.T) {
+	p := legacyProject(t)
+	p.writeLedgerFor(t, map[string]float64{}, 0)
+	run := partialRun(t, p, "crap", layers(t))
+	if o := outcomes(run); o["crap"] != "fail" || run.ExitCode != 1 || !strings.Contains(run.Text, "example.com/m/low.Big") {
+		t.Errorf("layers %v exit %d, want crap fail naming the function with no entry\n%s", o, run.ExitCode, run.Text)
+	}
+	q := legacyProject(t)
+	q.writeFirstLedger(t) // Big has an entry
+	held := partialRun(t, q, "crap", layers(t))
+	if o := outcomes(held); o["crap"] != "pass" || held.ExitCode != 0 {
+		t.Errorf("with an entry: layers %v exit %d, want a pass not judged\n%s", o, held.ExitCode, held.Text)
+	}
+}
+
+func TestPartialRunJudgesAPackageWithNoEntryAtTheFloor(t *testing.T) {
+	p := legacyProject(t)
+	p.noPackage = true
+	p.writeLedgerFor(t, map[string]float64{"example.com/m/low.Big": 11}, 0)
+	run := partialRun(t, p, "coverage", layers(t))
+	if o := outcomes(run); o["coverage"] != "fail" || run.ExitCode != 1 || !strings.Contains(run.Text, "example.com/m/low") {
+		t.Errorf("layers %v exit %d, want coverage fail naming the package with no entry\n%s", o, run.ExitCode, run.Text)
+	}
+	q := legacyProject(t)
+	q.writeFirstLedger(t) // the package has an entry
+	held := partialRun(t, q, "coverage", layers(t))
+	if o := outcomes(held); o["coverage"] != "pass" || held.ExitCode != 0 {
+		t.Errorf("with an entry: layers %v exit %d, want a pass not judged\n%s", o, held.ExitCode, held.Text)
+	}
+}
+
+func TestPartialRunJudgesALintFindingWithNoEntryAtZero(t *testing.T) {
+	p := legacyProject(t)
+	p.writeFirstLedger(t)
+	ls := layers(t)
+	ls[0] = lintFailure(t, p.dir) // five revive findings in low/low.go, the ledger records none
+	run := partialRun(t, p, "hygiene", ls)
+	if o := outcomes(run); o["hygiene"] != "fail" || run.ExitCode != 1 || !strings.Contains(run.Text, "revive low/low.go") {
+		t.Errorf("layers %v exit %d, want hygiene fail naming the finding with no entry\n%s", o, run.ExitCode, run.Text)
+	}
+	q := legacyProject(t)
+	q.findings = ratchet.Counts{"revive": {"low/low.go": 1}}
+	q.writeFirstLedger(t)
+	lq := layers(t)
+	lq[0] = lintFailure(t, q.dir)
+	held := partialRun(t, q, "hygiene", lq)
+	if o := outcomes(held); o["hygiene"] != "pass" || held.ExitCode != 0 {
+		t.Errorf("with an entry: layers %v exit %d, want a pass not judged\n%s", o, held.ExitCode, held.Text)
 	}
 }

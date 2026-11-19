@@ -453,3 +453,37 @@ func TestPlatformLoadsAreCountedPerPlatformThatCompilesAFile(t *testing.T) {
 		t.Errorf("a file no platform compiles: %d loads, want 0", n)
 	}
 }
+
+// Exist lists every production function with what the exemption matcher reads,
+// from the source alone: key, file, receiver, name and the table shape.
+func TestExistListsEveryFunctionForTheExemptionMatcher(t *testing.T) {
+	dir := fixtureModule(t, map[string]string{
+		"a.go":         "package m\n\nfunc Table(n int) int {\n\tswitch n {\n\tcase 1:\n\t\treturn 1\n\tdefault:\n\t\treturn 0\n\t}\n}\n\nfunc Plain() { println() }\n\ntype T struct{}\n\nfunc (*T) Run() {}\n",
+		"b_windows.go": "package m\n\nfunc Win() {}\n",
+	})
+	ex, err := crap.Exist(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]crap.Declared{}
+	for _, f := range ex.Funcs {
+		got[f.Key] = f
+	}
+	want := map[string]crap.Declared{
+		module + ".Table": {Key: module + ".Table", File: "a.go", Name: "Table", Table: true},
+		module + ".Plain": {Key: module + ".Plain", File: "a.go", Name: "Plain"},
+		module + ".T.Run": {Key: module + ".T.Run", File: "a.go", Recv: "T", Name: "Run"},
+		module + ".Win":   {Key: module + ".Win", File: "b_windows.go", Name: "Win"},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("functions %v, want %v", got, want)
+	}
+	for k, w := range want {
+		if got[k] != w {
+			t.Errorf("%s: %+v, want %+v", k, got[k], w)
+		}
+	}
+	if !slices.Equal(ex.Keys, []string{module + ".Plain", module + ".T.Run", module + ".Table", module + ".Win"}) {
+		t.Errorf("keys %v are not sorted and complete", ex.Keys)
+	}
+}

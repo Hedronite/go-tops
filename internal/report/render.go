@@ -162,12 +162,12 @@ func renderRatchet(b *strings.Builder, r *Ratchet) {
 	fmt.Fprintf(b, "  %-12s %s  (ledger build %s, this run %s)\n", "ratchet", r.Outcome, describeBuild(r.LedgerBuild), describeBuild(r.RunBuild))
 }
 
-// describeBuild names a build in the text: the platform, with cgo and the tags
-// when they are set.
+// describeBuild names a build in the text: the platform, whether cgo is on or off,
+// and the tags when there are any.
 func describeBuild(b Build) string {
-	s := b.GOOS + "/" + b.GOARCH
+	s := b.GOOS + "/" + b.GOARCH + " cgo off"
 	if b.CgoEnabled {
-		s += " cgo"
+		s = b.GOOS + "/" + b.GOARCH + " cgo on"
 	}
 	if len(b.Tags) > 0 {
 		s += " tags=" + strings.Join(b.Tags, ",")

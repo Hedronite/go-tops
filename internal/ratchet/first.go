@@ -16,8 +16,6 @@ func (j *Judgment) firstFunctions(in Input) {
 		switch {
 		case !ok:
 			j.fail("first ledger", key, "has an entry, and no function with this key is measured on the ledger leg")
-		case in.M.Exempt[key]:
-			j.fail("first ledger", key, "has an entry, and an exemption covers the function")
 		case score <= in.M.Cap:
 			j.fail("first ledger", key, "has an entry, and the function scores %.2f, within the cap %g", score, in.M.Cap)
 		case !near(entry, score, Noise):

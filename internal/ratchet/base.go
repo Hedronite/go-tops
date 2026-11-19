@@ -7,18 +7,22 @@ import (
 	"io/fs"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"strings"
+
+	"go.yaml.in/yaml/v3"
 )
 
-// LedgerPath is where the baseline lives, relative to the module root.
+// LedgerPath is where the baseline lives unless go-tops.yaml names another path,
+// relative to the module root.
 const LedgerPath = ".go-tops/baseline.json"
 
-// ReadBase reads the baseline at the merge base of HEAD and base through git, not
+// ReadBase reads the baseline at rel at the merge base of HEAD and base through git, not
 // the file in the working tree (§6.7). A base with no copy is a first ledger
 // (Ledger nil). No merge base, a shallow clone, an unknown ref and a copy that
 // does not parse are errors: the judgment fails and makes no guess.
-func ReadBase(dir, base string) Base {
+func ReadBase(dir, base, rel string) Base {
 	if err := notShallow(dir); err != nil {
 		return Base{Err: err}
 	}
@@ -26,7 +30,49 @@ func ReadBase(dir, base string) Base {
 	if err != nil {
 		return Base{Err: err}
 	}
-	return ledgerAt(dir, mb)
+	baseRel, err := baselinePathAt(dir, mb)
+	if err != nil {
+		return Base{Err: err}
+	}
+	b := ledgerAt(dir, mb, baseRel)
+	if path.Clean(baseRel) != path.Clean(rel) {
+		b.Moved = &Moved{From: baseRel, To: rel}
+	}
+	return b
+}
+
+// atRev names a file of a commit by a path relative to the working directory. A bare
+// `rev:path` is read from the root of the repository, not from where git runs, so for
+// a module in a subdirectory it names another file or none: the base copy would be
+// "not found" and the ledger would be judged as a first ledger. `rev:./path` is
+// resolved against the working directory (git -C dir), which is the module root.
+func atRev(rev, rel string) string {
+	return rev + ":./" + path.Clean(rel)
+}
+
+// baselinePathAt is the path the go-tops.yaml of commit rev names for the baseline,
+// or LedgerPath when the commit has no go-tops.yaml or names none. The copy at the
+// diff base is read where the base itself kept it, never where this run's
+// configuration says: a branch that moves the baseline must not turn the base's
+// ledger into a first ledger.
+func baselinePathAt(dir, rev string) (string, error) {
+	out, code, err := git(dir, "show", atRev(rev, "go-tops.yaml"))
+	if err != nil {
+		return "", err
+	}
+	if code != 0 {
+		return LedgerPath, nil
+	}
+	var doc struct {
+		Baseline string `yaml:"baseline"`
+	}
+	if err := yaml.Unmarshal([]byte(out), &doc); err != nil {
+		return "", fmt.Errorf("go-tops.yaml at the diff base: %w", err)
+	}
+	if doc.Baseline == "" {
+		return LedgerPath, nil
+	}
+	return doc.Baseline, nil
 }
 
 // notShallow fails for a shallow clone: its history may hide the merge base.
@@ -57,8 +103,8 @@ func mergeBase(dir, base string) (string, error) {
 }
 
 // ledgerAt reads the baseline in commit rev: no ledger when the commit has none.
-func ledgerAt(dir, rev string) Base {
-	spec := rev + ":" + LedgerPath
+func ledgerAt(dir, rev, rel string) Base {
+	spec := atRev(rev, rel)
 	if _, code, err := git(dir, "cat-file", "-e", spec); err != nil {
 		return Base{Err: err}
 	} else if code != 0 {
@@ -100,10 +146,11 @@ func failure(err error, out string) string {
 	return strings.TrimSpace(out)
 }
 
-// readLedgerFile reads the baseline file in the working tree: nil when there is
-// none, an error when it exists and does not parse.
-func readLedgerFile(dir string) (*Ledger, error) {
-	raw, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(LedgerPath)))
+// readLedgerFile reads the baseline file in the working tree at rel, the path the
+// configuration names: nil when there is none, an error when it exists and does not
+// parse.
+func readLedgerFile(dir, rel string) (*Ledger, error) {
+	raw, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(rel)))
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, nil
 	}

@@ -6,14 +6,18 @@ import (
 )
 
 // Wiring the ratchet judge into the runner, which does not import it. The judge
-// measures with the baseline package's measurer, and reads the acks file the
-// configuration names, as `baseline` does.
+// measures with the baseline package's measurer, and reads the baseline and the acks
+// file at the paths the configuration names, as `check` and `baseline` do.
 func init() {
-	gate.DefaultRatchet = ratchet.NewJudge(ratchet.CollectMeasure(acksOf))
+	gate.DefaultRatchet = ratchet.NewJudge(ratchet.CollectMeasure(), pathsOf)
 }
 
-// acksOf is the module-relative path of the acks file of the configuration in dir.
-func acksOf(dir string) (string, error) {
-	_, acks, _, err := loadBaselineConfig(dir)
-	return acks, err
+// pathsOf is the module-relative path of the baseline and of the acks file named by
+// the configuration in dir.
+func pathsOf(dir string) (ratchet.Paths, error) {
+	_, acks, rel, err := loadBaselineConfig(dir)
+	if err != nil {
+		return ratchet.Paths{}, err
+	}
+	return ratchet.Paths{Ledger: rel, Acks: acks}, nil
 }

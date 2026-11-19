@@ -36,8 +36,9 @@ var DefaultRatchet RatchetJudge
 // ratchetStage asks the judge about a run that reached its layers, under enforce:
 // ratchet, and returns the verdict with the layers the run reports. It returns
 // the layers unchanged and no verdict under any other mode, with no judge, and
-// when the run stopped before its layers ran. A judge that cannot judge fails the
-// run: nothing is guessed, and the layers still report.
+// when the run stopped before its layers ran. A partial run is the judge's to
+// handle: it holds fewer layers than the ledger is measured from. A judge that
+// cannot judge fails the run: nothing is guessed, and the layers still report.
 func (d Deps) ratchetStage(ctx context.Context, cfg Config, env *Env, layers []report.Layer, stopped bool) (*RatchetVerdict, []report.Layer) {
 	judge := d.Ratchet
 	if judge == nil {

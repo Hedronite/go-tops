@@ -5,6 +5,7 @@ import (
 	"maps"
 	"math"
 	"slices"
+	"strings"
 
 	"github.com/Hedronite/go-tops/internal/crap"
 	"github.com/Hedronite/go-tops/internal/gobuild"
@@ -36,10 +37,12 @@ type Measure struct {
 	Cap   float64 // the CRAP cap
 	Floor float64 // the coverage floor, in percent
 
-	Functions   []crap.Function    // measured on this run
-	NotMeasured []crap.NotMeasured // not measured on this run
-	// Exempt holds the key of every function a crap exemption covers (§6.8).
-	Exempt map[string]bool
+	// Functions are the measured functions over the cap, and NotMeasured the
+	// functions the run does not measure. A function a crap exemption covers is in
+	// neither: the CRAP layer leaves it out of the violations it lists, so it has no
+	// ledger entry and is not judged (§6.8).
+	Functions   []crap.Function
+	NotMeasured []crap.NotMeasured
 	// Problems are the in-force crap exemptions that match no production file or
 	// no function (§6.8): an exemption leaves the file with the code it covered,
 	// so one that no longer matches fails the run, whatever the ledger holds.
@@ -67,7 +70,15 @@ type Base struct {
 	// Ledger is the copy at the merge base; nil means there is none, so the file in
 	// the tree is a first ledger.
 	Ledger *Ledger
+	// Moved is set when the baseline path of this run's configuration is not the
+	// one the base commit's go-tops.yaml names; Ledger is then the copy at the
+	// base's own path.
+	Moved *Moved
 }
+
+// Moved is a baseline that this run's configuration keeps at another path than the
+// diff base did.
+type Moved struct{ From, To string }
 
 // Input is everything a judgment reads.
 type Input struct {
@@ -81,6 +92,11 @@ type Input struct {
 	// found by loading with the recorded build (crap.Compiled). A leg that is not
 	// the ledger leg needs it; the ledger leg does not.
 	LedgerCompiled map[string]bool
+	// LedgerFiles and LedgerPackages are what the ledger build selects from the
+	// source tree (crap.Select): the files, and the packages with a compiled
+	// non-test file. A leg that is not the ledger leg needs them (ruling C3d).
+	LedgerFiles    map[string]bool
+	LedgerPackages map[string]bool
 }
 
 // Failure is one thing that fails the ratchet.
@@ -99,9 +115,10 @@ type Judgment struct {
 	Failures []Failure
 	// Advice are lines for the text output that change no verdict.
 	Advice []string
-	// HeldToCap are the functions a leg that is not the ledger leg holds to the
-	// cap: the ones the ledger leg does not compile (ruling C3). They fail the run
-	// while the ratchet judgment itself stays skip.
+	// HeldToCap is what a leg that is not the ledger leg judges at hard: the
+	// functions the ledger build does not compile (ruling C3), and the findings,
+	// suppressions, laws and packages in files or packages it does not compile
+	// (ruling C3d). They fail the run while the ratchet judgment itself stays skip.
 	HeldToCap []Failure
 }
 
@@ -128,7 +145,7 @@ func (j *Judgment) fail(kind, key, format string, args ...any) {
 // comparison with the ledger; any other leg skips it, naming the ledger build.
 func Judge(in Input) Judgment {
 	j := Judgment{RunBuild: in.Run, LedgerBuild: in.Run}
-	j.noteBuildChange(in)
+	j.advise(in)
 	switch {
 	case in.Ledger == nil:
 		j.fail("baseline", "", "no baseline file: under ratchet a missing baseline fails, and deleting the file is not a reset")
@@ -145,6 +162,14 @@ func Judge(in Input) Judgment {
 		j.Outcome = Fail
 	}
 	return j
+}
+
+// advise adds the lines that change no verdict.
+func (j *Judgment) advise(in Input) {
+	j.noteBuildChange(in)
+	if m := in.Base.Moved; m != nil {
+		j.Advice = append(j.Advice, fmt.Sprintf("ratchet: the baseline moved from %s at the diff base to %s here; judged against the base copy, never as a first ledger\n", m.From, m.To))
+	}
 }
 
 // noteBuildChange says, without judging it, that the ledger's build is not the
@@ -177,13 +202,24 @@ func (j *Judgment) ledgerLeg(in Input) {
 // to the cap.
 func (j *Judgment) otherLeg(in Input) {
 	j.Outcome = Skip
-	if in.LedgerCompiled == nil {
+	if in.LedgerCompiled == nil || in.LedgerFiles == nil || in.LedgerPackages == nil {
 		j.Outcome = Fail
-		j.fail("compiled set", "", "this run is not the ledger leg (ledger build %s), and it was not given the functions that build compiles", describe(in.Ledger.Build))
+		j.fail("compiled set", "", "this run is not the ledger leg (ledger build %s), and it was not given the functions, files and packages that build compiles", describe(in.Ledger.Build))
 		return
 	}
+	j.heldFunctions(in)
+	j.heldSources(in)
+	// An exemption that matches nothing fails on every leg: it names files, which
+	// exist whatever the build.
+	j.HeldToCap = append(j.HeldToCap, in.M.Problems...)
+}
+
+// heldFunctions holds to the cap what the ledger build does not compile: a function
+// has no entry there, and a leg that compiles it judges it as a new function. A
+// function the ledger build compiles is the ledger leg's, entry or not.
+func (j *Judgment) heldFunctions(in Input) {
 	for _, f := range in.M.Functions {
-		if !in.M.Exempt[f.Key] && !in.LedgerCompiled[f.Key] && f.CRAP > in.M.Cap {
+		if !in.LedgerCompiled[f.Key] && f.CRAP > in.M.Cap {
 			j.HeldToCap = append(j.HeldToCap, Failure{
 				Kind: "functions", Key: f.Key,
 				Why: fmt.Sprintf("scores %.2f, over the cap %g; the ledger build does not compile it, so it has no entry", f.CRAP, in.M.Cap),
@@ -191,13 +227,49 @@ func (j *Judgment) otherLeg(in Input) {
 		}
 	}
 	for _, f := range in.M.NotMeasured {
-		if !in.M.Exempt[f.Key] && !in.LedgerCompiled[f.Key] && float64(f.Comp) > in.M.Cap {
+		if !in.LedgerCompiled[f.Key] && float64(f.Comp) > in.M.Cap {
 			j.HeldToCap = append(j.HeldToCap, notMeasuredFailure(f, in.M.Cap))
 		}
 	}
-	// An exemption that matches nothing fails on every leg: it names files, which
-	// exist whatever the build.
-	j.HeldToCap = append(j.HeldToCap, in.M.Problems...)
+}
+
+// heldSources judges at hard what sits in a file or a package the ledger build does
+// not compile (ruling C3d): the ledger leg never sees it, so no ledger entry can
+// cover it and nothing else would ever judge it. A finding, a suppression or a law
+// count there fails past its ledger entry, absent meaning 0, and a package there is
+// held to the coverage floor. What sits in the ledger build's files stays the
+// ledger leg's, reported here and never failing this leg (ruling C3c).
+func (j *Judgment) heldSources(in Input) {
+	l, files := in.Ledger, in.LedgerFiles
+	j.heldCounts("findings", in.M.Findings, l.Findings, files)
+	j.heldCounts("laws", in.M.Laws, l.Laws, files)
+	j.heldCounts("suppressions.nolint", in.M.Nolint, l.Nolint, files)
+	j.heldCounts("suppressions.ack", in.M.Ack, l.Ack, files)
+	for _, path := range slices.Sorted(maps.Keys(in.M.Packages)) {
+		if in.LedgerPackages[path] {
+			continue
+		}
+		p := in.M.Packages[path]
+		j.HeldToCap = append(j.HeldToCap, Failure{
+			Kind: "packages", Key: path,
+			Why: fmt.Sprintf("covers %.1f%%, under the floor %g%%, and the ledger build does not compile this package, so it has no entry", p.StatementsPct, in.M.Floor),
+		})
+	}
+}
+
+// heldCounts fails each count in a file the ledger build does not compile that is
+// over the ledger's entry for it, absent meaning 0.
+func (j *Judgment) heldCounts(kind string, run, ledger Counts, ledgerFiles map[string]bool) {
+	for _, name := range slices.Sorted(maps.Keys(run)) {
+		for _, file := range slices.Sorted(maps.Keys(run[name])) {
+			if n, entry := run[name][file], ledger[name][file]; !ledgerFiles[file] && n > entry {
+				j.HeldToCap = append(j.HeldToCap, Failure{
+					Kind: kind, Key: name + " " + file,
+					Why: fmt.Sprintf("counts %d in a file the ledger build does not compile, over its ledger entry %d", n, entry),
+				})
+			}
+		}
+	}
 }
 
 func notMeasuredFailure(f crap.NotMeasured, limit float64) Failure {
@@ -208,16 +280,21 @@ func notMeasuredFailure(f crap.NotMeasured, limit float64) Failure {
 }
 
 func describe(b gobuild.Build) string {
-	return fmt.Sprintf("%s/%s cgo=%t tags=%v", b.GOOS, b.GOARCH, b.CGOEnabled, b.Tags)
+	cgo := "cgo off"
+	if b.CGOEnabled {
+		cgo = "cgo on"
+	}
+	text := fmt.Sprintf("%s/%s %s", b.GOOS, b.GOARCH, cgo)
+	if len(b.Tags) > 0 {
+		text += " tags=" + strings.Join(b.Tags, ",")
+	}
+	return text
 }
 
 // functions holds each measured function to its entry plus the noise, or to the
 // cap when it has none (§6.7). An exempt function is not judged.
 func (j *Judgment) functions(in Input) {
 	for _, f := range in.M.Functions {
-		if in.M.Exempt[f.Key] {
-			continue
-		}
 		if entry, ok := in.Ledger.Functions[f.Key]; ok {
 			if f.CRAP > entry+Noise+tolerance {
 				j.fail("functions", f.Key, "scores %.2f, over its ledger entry %.2f plus %g", f.CRAP, entry, Noise)
@@ -234,7 +311,7 @@ func (j *Judgment) functions(in Input) {
 // complexity is above the cap: CRAP is at least comp at every coverage (§6.2).
 func (j *Judgment) notMeasured(in Input) {
 	for _, f := range in.M.NotMeasured {
-		if !in.M.Exempt[f.Key] && float64(f.Comp) > in.M.Cap {
+		if float64(f.Comp) > in.M.Cap {
 			ff := notMeasuredFailure(f, in.M.Cap)
 			j.fail(ff.Kind, ff.Key, "%s", ff.Why)
 		}

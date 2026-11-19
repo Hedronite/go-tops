@@ -24,16 +24,22 @@ func (j *Judgment) diffBase(in Input) {
 func (j *Judgment) regressions(in Input) {
 	for _, c := range baseline.Raised(in.Base.Ledger.File(), in.Ledger.File()) {
 		if !slices.ContainsFunc(in.Ledger.Regressions, func(r Regression) bool { return recorded(c, r) }) {
-			j.fail("regressions", c.Key, "%s raised from %s to %g with no regressions record (baseline --accept-regression)", c.Kind, formatFrom(c.From), c.To)
+			j.fail("regressions", c.Key, "%s", unrecorded(c))
 		}
 	}
 }
 
-func formatFrom(from *float64) string {
-	if from == nil {
-		return "absent"
+// unrecorded says what a change that needs a record did: a judged_laws that fell,
+// an entry that was added, or one that was raised.
+func unrecorded(c baseline.Change) string {
+	const need = "with no regressions record (baseline --accept-regression)"
+	switch {
+	case c.Kind == "judged_laws" && c.From != nil:
+		return fmt.Sprintf("judged_laws fell from %g to %g %s", *c.From, c.To, need)
+	case c.From == nil:
+		return fmt.Sprintf("%s added at %g %s", c.Kind, c.To, need)
 	}
-	return fmt.Sprintf("%g", *from)
+	return fmt.Sprintf("%s raised from %g to %g %s", c.Kind, *c.From, c.To, need)
 }
 
 // firstLedger holds a ledger with no base copy to what this run measured: every

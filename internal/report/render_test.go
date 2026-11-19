@@ -222,9 +222,9 @@ func TestRenderTextRatchetLine(t *testing.T) {
 		r    *Ratchet
 		want string
 	}{
-		{"pass", &Ratchet{Outcome: "pass", LedgerBuild: linux, RunBuild: linux}, "  ratchet      pass  (ledger build linux/amd64 cgo, this run linux/amd64 cgo)\n"},
-		{"fail", &Ratchet{Outcome: "fail", LedgerBuild: linux, RunBuild: linux}, "  ratchet      fail  (ledger build linux/amd64 cgo, this run linux/amd64 cgo)\n"},
-		{"skip", &Ratchet{Outcome: "skip", LedgerBuild: linux, RunBuild: mac}, "  ratchet      skip  (ledger build linux/amd64 cgo, this run darwin/arm64 tags=integration,x)\n"},
+		{"pass", &Ratchet{Outcome: "pass", LedgerBuild: linux, RunBuild: linux}, "  ratchet      pass  (ledger build linux/amd64 cgo on, this run linux/amd64 cgo on)\n"},
+		{"fail", &Ratchet{Outcome: "fail", LedgerBuild: linux, RunBuild: linux}, "  ratchet      fail  (ledger build linux/amd64 cgo on, this run linux/amd64 cgo on)\n"},
+		{"skip", &Ratchet{Outcome: "skip", LedgerBuild: linux, RunBuild: mac}, "  ratchet      skip  (ledger build linux/amd64 cgo on, this run darwin/arm64 cgo off tags=integration,x)\n"},
 	}
 	for _, tc := range tests {
 		got := RenderText(Report{Ratchet: tc.r})

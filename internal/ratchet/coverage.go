@@ -7,6 +7,10 @@ import (
 	"github.com/Hedronite/go-tops/internal/layers/tests"
 )
 
+// floorReplaced is the reason of a coverage layer whose floor verdict the ratchet
+// replaced.
+const floorReplaced = "under enforce ratchet the packages judgment replaces the floor verdict"
+
 func init() { gate.Register(WrapCoverage(tests.Coverage{})) }
 
 // WrapCoverage makes the coverage layer ratchet-aware (§6.7). The CRAP layer
@@ -28,7 +32,7 @@ func (c ratchetCoverage) Run(ctx context.Context, env *gate.Env) gate.Result {
 		return res
 	}
 	res.Outcome = gate.Pass
-	res.Reason = "under enforce ratchet the packages judgment replaces the floor verdict"
+	res.Reason = floorReplaced
 	return res
 }
 
