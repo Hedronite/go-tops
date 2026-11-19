@@ -181,3 +181,33 @@ func TestRenderTextPrintsTheErrorOnlyWhenItDiffersFromTheReason(t *testing.T) {
 		t.Errorf("a different error is shown beside the reason:\n%s", text)
 	}
 }
+
+// §6.8: the gate prints every exemption in force, with its expiry, on every
+// run; a run with none prints no such line.
+func TestRenderTextPrintsEveryExemptionInForceWithItsExpiry(t *testing.T) {
+	r := exampleReport(t)
+	if len(r.Exemptions) == 0 {
+		t.Fatal("the example no longer carries an exemption")
+	}
+	text := RenderText(r)
+	for _, want := range []string{"exemption in force", "crap", "internal/wire/dispatch.go", "Server.handleOp", "table-switch", "2027-03-01", "platform"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("the text lacks %q:\n%s", want, text)
+		}
+	}
+	r.Exemptions = nil
+	if text := RenderText(r); strings.Contains(text, "exemption in force") {
+		t.Errorf("a run with no exemption printed one:\n%s", text)
+	}
+}
+
+func TestExemptionLineIsOneLineWithItsExpiry(t *testing.T) {
+	e := Exemption{Path: "a/**", Layer: "mutation", Reason: "frozen\nvendor   port", Owner: "protocol", Expires: "2027-01-31"}
+	line := e.Line()
+	if strings.Contains(line, "\n") || !strings.Contains(line, "2027-01-31") || !strings.Contains(line, "frozen vendor port") {
+		t.Errorf("line = %q", line)
+	}
+	if strings.Contains(line, "symbol") || strings.Contains(line, "shape") {
+		t.Errorf("an entry with no symbol or shape printed them: %q", line)
+	}
+}
