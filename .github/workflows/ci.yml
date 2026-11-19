@@ -27,9 +27,12 @@ on:
 permissions:
   contents: read
 
+# A push or a pull request supersedes an older run of its own kind. A scheduled
+# or dispatched run has a group of its own, and is never cancelled: it would
+# otherwise share the group of a push to main and be cancelled by it.
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.workflow }}-${{ github.event_name == 'schedule' && 'schedule' || github.event_name == 'workflow_dispatch' && 'dispatch' || github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'push' }}
 
 env:
   # The exact release go-tops.lock pins: the gate compares `go env GOVERSION` with
@@ -220,11 +223,20 @@ jobs:
   # subdirectory. It reads the network (init tidies tools/go.mod, the hygiene layer
   # reads the vulnerability database), so it runs weekly and on demand, never on a
   # push. A failure here is a regression in what an adopter does first.
+  #
+  # Owner: maintainer. GitHub turns a scheduled workflow off after 60 days with no
+  # activity in the repository; a quiet repo must run this job by hand
+  # (workflow_dispatch), or push, to switch the schedule back on. It fails closed:
+  # it needs the log to show both layouts passing, so a skipped test (no linter on
+  # PATH) or a run that found no test is a failure, never a pass.
   adoption:
     name: adoption
     if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    concurrency:
+      group: adoption-${{ github.workflow }}
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -250,7 +262,21 @@ jobs:
           mkdir -p "${RUNNER_TEMP}/golangci-lint"
           tar -xzf "${archive}" --strip-components=1 -C "${RUNNER_TEMP}/golangci-lint"
           echo "${RUNNER_TEMP}/golangci-lint" >> "${GITHUB_PATH}"
+      # The drop-in's judging step, which the test runs on each real report, reads
+      # it with jq.
+      - name: jq version
+        run: jq --version
       - name: adoption end to end
         env:
           CGO_ENABLED: "1"
-        run: go test -tags adoption -run TestAdoption -timeout 20m -count=1 ./cmd/gotops
+        shell: bash
+        run: |
+          set -euo pipefail
+          log="${RUNNER_TEMP}/adoption.log"
+          go test -v -tags adoption -run TestAdoption -timeout 20m -count=1 ./cmd/gotops 2>&1 | tee "${log}"
+          for layout in module_at_the_root module_in_mod; do
+            if ! grep -q -- "--- PASS: TestAdoptionOfALegacyRepo/${layout}" "${log}"; then
+              echo "::error::no '--- PASS' line for TestAdoptionOfALegacyRepo/${layout}: the test did not run, or it was skipped"
+              exit 1
+            fi
+          done
