@@ -1,0 +1,273 @@
+{
+  "scores": [
+    {
+      "package": "gazecheck",
+      "function": "Parse",
+      "file": "check.go",
+      "line": 20,
+      "complexity": 4,
+      "line_coverage": 66.66666666666667,
+      "crap": 4.592592592592593,
+      "contract_coverage": 50,
+      "gaze_crap": 6,
+      "quadrant": "Q1_Safe"
+    },
+    {
+      "package": "gazecheck",
+      "function": "Wrapv",
+      "file": "check.go",
+      "line": 37,
+      "complexity": 2,
+      "line_coverage": 75,
+      "crap": 2.0625,
+      "contract_coverage": 100,
+      "gaze_crap": 2,
+      "quadrant": "Q1_Safe"
+    },
+    {
+      "package": "gazecheck",
+      "function": "Classify",
+      "file": "check.go",
+      "line": 47,
+      "complexity": 3,
+      "line_coverage": 40,
+      "crap": 4.944,
+      "contract_coverage": 100,
+      "gaze_crap": 3,
+      "quadrant": "Q1_Safe"
+    },
+    {
+      "package": "gazecheck",
+      "function": "Dispatch",
+      "file": "check.go",
+      "line": 58,
+      "complexity": 5,
+      "line_coverage": 50,
+      "crap": 8.125,
+      "contract_coverage": 100,
+      "gaze_crap": 5,
+      "quadrant": "Q1_Safe"
+    },
+    {
+      "package": "gazecheck",
+      "function": "Sum",
+      "file": "check.go",
+      "line": 74,
+      "complexity": 4,
+      "line_coverage": 87.5,
+      "crap": 4.03125,
+      "contract_coverage": 100,
+      "gaze_crap": 4,
+      "quadrant": "Q1_Safe"
+    },
+    {
+      "package": "gazecheck",
+      "function": "Double",
+      "file": "check.go",
+      "line": 89,
+      "complexity": 2,
+      "line_coverage": 0,
+      "crap": 6
+    },
+    {
+      "package": "gazecheck",
+      "function": "Max",
+      "file": "check.go",
+      "line": 97,
+      "complexity": 2,
+      "line_coverage": 66.66666666666667,
+      "crap": 2.148148148148148
+    },
+    {
+      "package": "gazecheck",
+      "function": "(*Stack).Push",
+      "file": "check.go",
+      "line": 108,
+      "complexity": 1,
+      "line_coverage": 100,
+      "crap": 1
+    },
+    {
+      "package": "gazecheck",
+      "function": "(*Stack).Pop",
+      "file": "check.go",
+      "line": 111,
+      "complexity": 2,
+      "line_coverage": 83.33333333333333,
+      "crap": 2.0185185185185186
+    },
+    {
+      "package": "gazecheck",
+      "function": "Noop",
+      "file": "check.go",
+      "line": 122,
+      "complexity": 1,
+      "line_coverage": 0,
+      "crap": 2,
+      "contract_coverage": 0,
+      "gaze_crap": 2,
+      "quadrant": "Q1_Safe",
+      "contract_coverage_reason": "no_effects_detected"
+    },
+    {
+      "package": "gazecheck",
+      "function": "Untested",
+      "file": "check.go",
+      "line": 125,
+      "complexity": 2,
+      "line_coverage": 0,
+      "crap": 6
+    },
+    {
+      "package": "gazecheck",
+      "function": "init",
+      "file": "check.go",
+      "line": 134,
+      "complexity": 1,
+      "line_coverage": 100,
+      "crap": 1
+    },
+    {
+      "package": "gazecheck",
+      "function": "init",
+      "file": "check.go",
+      "line": 138,
+      "complexity": 2,
+      "line_coverage": 66.66666666666667,
+      "crap": 2.148148148148148
+    }
+  ],
+  "summary": {
+    "total_functions": 13,
+    "avg_complexity": 2.3846153846153846,
+    "avg_line_coverage": 56.6025641025641,
+    "avg_crap": 3.5438582621082615,
+    "crapload": 0,
+    "crap_threshold": 10,
+    "gaze_crapload": 0,
+    "gaze_crap_threshold": 15,
+    "avg_gaze_crap": 3.6666666666666665,
+    "avg_contract_coverage": 75,
+    "quadrant_counts": {
+      "Q1_Safe": 6
+    },
+    "worst_crap": [
+      {
+        "package": "gazecheck",
+        "function": "Dispatch",
+        "file": "check.go",
+        "line": 58,
+        "complexity": 5,
+        "line_coverage": 50,
+        "crap": 8.125,
+        "contract_coverage": 100,
+        "gaze_crap": 5,
+        "quadrant": "Q1_Safe"
+      },
+      {
+        "package": "gazecheck",
+        "function": "Untested",
+        "file": "check.go",
+        "line": 125,
+        "complexity": 2,
+        "line_coverage": 0,
+        "crap": 6
+      },
+      {
+        "package": "gazecheck",
+        "function": "Double",
+        "file": "check.go",
+        "line": 89,
+        "complexity": 2,
+        "line_coverage": 0,
+        "crap": 6
+      },
+      {
+        "package": "gazecheck",
+        "function": "Classify",
+        "file": "check.go",
+        "line": 47,
+        "complexity": 3,
+        "line_coverage": 40,
+        "crap": 4.944,
+        "contract_coverage": 100,
+        "gaze_crap": 3,
+        "quadrant": "Q1_Safe"
+      },
+      {
+        "package": "gazecheck",
+        "function": "Parse",
+        "file": "check.go",
+        "line": 20,
+        "complexity": 4,
+        "line_coverage": 66.66666666666667,
+        "crap": 4.592592592592593,
+        "contract_coverage": 50,
+        "gaze_crap": 6,
+        "quadrant": "Q1_Safe"
+      }
+    ],
+    "worst_gaze_crap": [
+      {
+        "package": "gazecheck",
+        "function": "Parse",
+        "file": "check.go",
+        "line": 20,
+        "complexity": 4,
+        "line_coverage": 66.66666666666667,
+        "crap": 4.592592592592593,
+        "contract_coverage": 50,
+        "gaze_crap": 6,
+        "quadrant": "Q1_Safe"
+      },
+      {
+        "package": "gazecheck",
+        "function": "Dispatch",
+        "file": "check.go",
+        "line": 58,
+        "complexity": 5,
+        "line_coverage": 50,
+        "crap": 8.125,
+        "contract_coverage": 100,
+        "gaze_crap": 5,
+        "quadrant": "Q1_Safe"
+      },
+      {
+        "package": "gazecheck",
+        "function": "Sum",
+        "file": "check.go",
+        "line": 74,
+        "complexity": 4,
+        "line_coverage": 87.5,
+        "crap": 4.03125,
+        "contract_coverage": 100,
+        "gaze_crap": 4,
+        "quadrant": "Q1_Safe"
+      },
+      {
+        "package": "gazecheck",
+        "function": "Classify",
+        "file": "check.go",
+        "line": 47,
+        "complexity": 3,
+        "line_coverage": 40,
+        "crap": 4.944,
+        "contract_coverage": 100,
+        "gaze_crap": 3,
+        "quadrant": "Q1_Safe"
+      },
+      {
+        "package": "gazecheck",
+        "function": "Wrapv",
+        "file": "check.go",
+        "line": 37,
+        "complexity": 2,
+        "line_coverage": 75,
+        "crap": 2.0625,
+        "contract_coverage": 100,
+        "gaze_crap": 2,
+        "quadrant": "Q1_Safe"
+      }
+    ]
+  }
+}
