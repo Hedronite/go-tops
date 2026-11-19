@@ -2,6 +2,7 @@ package ratchet
 
 import (
 	"fmt"
+	"maps"
 	"reflect"
 	"slices"
 	"strings"
@@ -303,65 +304,147 @@ func Notes(j Judgment) []string {
 // did not judge.
 const notJudged = "not judged: partial run under ratchet"
 
-// ApplyPartial gives the layers of a partial run under ratchet (ruling C3e): the
-// range holds fewer layers than the ledger is measured from, so the thresholds the
-// ledger replaces are not judged at all. The CRAP layer's functions over the cap, the
-// coverage layer's floor and the lint findings are reported and booked as not judged.
-// What the ledger does not replace stands: a function that is not measured and over
-// the cap, an exemption that matches nothing (problems), and every other hygiene
-// check. It returns a copy as Apply does, with only the verdict fields changed.
-func ApplyPartial(layers []report.Layer, problems []Failure) []report.Layer {
+// Partial is what a partial run under ratchet is judged from (ruling C3e).
+type Partial struct {
+	// Problems are the exemptions that match nothing.
+	Problems []Failure
+	// Ledger is the baseline in the working tree; nil when there is none, so that
+	// nothing has an entry.
+	Ledger *Ledger
+	// Cap is the CRAP cap.
+	Cap float64
+	// Packages are the packages under the floor, and Findings the lint findings per
+	// linter and file, as the run measured them; nil when the layer that measures them
+	// is not in the range or its output cannot be read.
+	Packages map[string]Package
+	Findings Counts
+}
+
+// ApplyPartial gives the layers of a partial run under ratchet (ruling C3e). The
+// range holds fewer layers than the ledger is measured from, and no diff base is
+// judged, so an item that has an entry in the working-tree ledger is not judged: the
+// layers report it as not judged. An item with no entry is judged at hard, absent
+// meaning held to the cap, the floor or 0, so a partial run never hides new debt. What
+// the ledger does not replace stands: a function that is not measured and over the cap,
+// an exemption that matches nothing, and every other hygiene check. It returns a copy as
+// Apply does, with only the verdict fields changed.
+func ApplyPartial(layers []report.Layer, p Partial) []report.Layer {
 	out := slices.Clone(layers)
 	for i, read := range plain(layers) {
 		switch read.ID {
 		case "crap":
-			out[i] = merge(layers[i], read, partialCrap(read, problems))
+			out[i] = merge(layers[i], read, partialCrap(read, p))
 		case "coverage":
-			out[i] = merge(layers[i], read, partialCoverage(read))
+			out[i] = merge(layers[i], read, partialCoverage(read, p))
 		case "hygiene":
-			out[i] = merge(layers[i], read, partialHygiene(read), "lint")
+			out[i] = merge(layers[i], read, partialHygiene(read, p), "lint")
 		}
 	}
 	return out
 }
 
-func partialCrap(l report.Layer, problems []Failure) report.Layer {
+func partialCrap(l report.Layer, p Partial) report.Layer {
 	if l.Outcome != "fail" || hasKey(l.Details, "error") || !hasKey(l.Details, "violations") {
 		return l
 	}
-	var standing []Failure
+	standing := slices.Clone(p.Problems)
 	for _, row := range listOf(l.Details["violations"]) {
-		if row["crap"] == nil && text(row["func"]) != "" {
-			standing = append(standing, Failure{
-				Kind: "not measured", Key: text(row["func"]),
-				Why: fmt.Sprintf("not measured on this run, and its complexity %d is over the cap", number(row["cc"])),
-			})
+		if f, ok := standingRow(row, p); ok {
+			standing = append(standing, f)
 		}
 	}
-	standing = append(standing, problems...)
 	note := notMeasuredNote(l.Details)
 	if len(standing) > 0 {
-		l.Outcome, l.Reason = "fail", joinNote(fmt.Sprintf("%d verdict(s) the ledger does not replace: %s", len(standing), summary(standing)), note)
+		l.Outcome, l.Reason = "fail", joinNote(fmt.Sprintf("%d verdict(s) not replaced by a ledger entry: %s", len(standing), summary(standing)), note)
 		return l
 	}
 	l.Outcome, l.Reason = "pass", joinNote(notJudged, note)
 	return l
 }
 
-func partialCoverage(l report.Layer) report.Layer {
+// standingRow is the failure a row of the CRAP layer's violations stands for in a
+// partial run: a function that is not measured and over the cap always, and a scored
+// function over the cap that has no entry in the ledger.
+func standingRow(row map[string]any, p Partial) (Failure, bool) {
+	key := text(row["func"])
+	if key == "" {
+		return Failure{}, false
+	}
+	if row["crap"] == nil {
+		return Failure{
+			Kind: "not measured", Key: key,
+			Why: fmt.Sprintf("not measured on this run, and its complexity %d is over the cap", number(row["cc"])),
+		}, true
+	}
+	score, ok := asFloat(row["crap"])
+	if _, held := ledgerFunction(p.Ledger, key); held || !ok || score <= p.Cap {
+		return Failure{}, false
+	}
+	return Failure{
+		Kind: "functions", Key: key,
+		Why: fmt.Sprintf("scores %.2f, over the cap %g, and has no ledger entry", score, p.Cap),
+	}, true
+}
+
+func ledgerFunction(l *Ledger, key string) (float64, bool) {
+	if l == nil {
+		return 0, false
+	}
+	v, ok := l.Functions[key]
+	return v, ok
+}
+
+func partialCoverage(l report.Layer, p Partial) report.Layer {
 	if hasKey(l.Details, "error") || !hasKey(l.Details, "statements_pct") {
 		return l
 	}
-	if l.Outcome == "fail" || l.Reason == floorReplaced {
+	var standing []Failure
+	for _, path := range slices.Sorted(maps.Keys(p.Packages)) {
+		if p.Ledger != nil {
+			if _, held := p.Ledger.Packages[path]; held {
+				continue
+			}
+		}
+		pk := p.Packages[path]
+		standing = append(standing, Failure{
+			Kind: "packages", Key: path,
+			Why: fmt.Sprintf("covers %.1f%%, under the floor, and has no ledger entry", pk.StatementsPct),
+		})
+	}
+	switch {
+	case len(standing) > 0:
+		l.Outcome, l.Reason = "fail", fmt.Sprintf("%d package(s) not replaced by a ledger entry: %s", len(standing), summary(standing))
+	case l.Outcome == "fail" || l.Reason == floorReplaced:
 		l.Outcome, l.Reason = "pass", notJudged
 	}
 	return l
 }
 
-func partialHygiene(l report.Layer) report.Layer {
-	judged := judgeLint(l, Judgment{Outcome: Pass})
+func partialHygiene(l report.Layer, p Partial) report.Layer {
+	var standing []Failure
+	for _, name := range slices.Sorted(maps.Keys(p.Findings)) {
+		for _, file := range slices.Sorted(maps.Keys(p.Findings[name])) {
+			if !p.Ledger.holdsFinding(name, file) {
+				standing = append(standing, Failure{
+					Kind: "findings", Key: name + " " + file,
+					Why: fmt.Sprintf("counts %d, and the ledger has no entry", p.Findings[name][file]),
+				})
+			}
+		}
+	}
+	judged := judgeLint(l, Judgment{Outcome: Pass, Failures: standing})
 	if judged.Outcome == "pass" && l.Outcome == "fail" {
 		judged.Reason = notJudged
 	}
 	return judged
+}
+
+// holdsFinding reports whether the ledger has an entry for the findings of a linter
+// in a file; a missing ledger has none.
+func (l *Ledger) holdsFinding(name, file string) bool {
+	if l == nil {
+		return false
+	}
+	_, ok := l.Findings[name][file]
+	return ok
 }

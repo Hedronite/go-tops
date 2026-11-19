@@ -92,3 +92,17 @@ func listOf(v any) []map[string]any {
 	}
 	return out
 }
+
+// asFloat is v as a float64, and whether it is a number.
+func asFloat(v any) (float64, bool) {
+	switch n := v.(type) {
+	case json.Number:
+		f, err := n.Float64()
+		return f, err == nil
+	case float64:
+		return n, true
+	case int:
+		return float64(n), true
+	}
+	return 0, false
+}

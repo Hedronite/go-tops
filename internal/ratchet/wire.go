@@ -1,17 +1,24 @@
 package ratchet
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"os"
+	"path"
+	"path/filepath"
 	"slices"
 	"strings"
 	"time"
 
 	"github.com/Hedronite/go-tops/internal/baseline"
+	"github.com/Hedronite/go-tops/internal/cover"
 	"github.com/Hedronite/go-tops/internal/crap"
 	"github.com/Hedronite/go-tops/internal/exempt"
 	"github.com/Hedronite/go-tops/internal/gate"
 	"github.com/Hedronite/go-tops/internal/gobuild"
+	"github.com/Hedronite/go-tops/internal/layers/hygiene"
 	"github.com/Hedronite/go-tops/internal/layers/tests"
 	"github.com/Hedronite/go-tops/internal/report"
 )
@@ -43,7 +50,7 @@ type Measurer func(ctx context.Context, env *gate.Env, in Inputs) (Measure, erro
 func NewJudge(measure Measurer, paths func(dir string) (Paths, error)) gate.RatchetJudge {
 	return func(ctx context.Context, env *gate.Env, layers []report.Layer) (*gate.RatchetVerdict, error) {
 		if !holdsFeeds(layers) {
-			return partialVerdict(env, layers)
+			return partialVerdict(env, layers, paths)
 		}
 		run, err := gobuild.Resolve(env.Dir, tests.Build)
 		if err != nil {
@@ -85,16 +92,99 @@ func holdsFeeds(layers []report.Layer) bool {
 
 // partialVerdict is the verdict of a partial run (ruling C3e): no ratchet object, and
 // the layers as ApplyPartial gives them. The run ends partial as it would without a
-// ledger.
-func partialVerdict(env *gate.Env, layers []report.Layer) (*gate.RatchetVerdict, error) {
-	var problems []Failure
+// ledger. A configuration or a ledger that cannot be read leaves nothing with an entry,
+// so everything is judged at hard.
+func partialVerdict(env *gate.Env, layers []report.Layer, paths func(dir string) (Paths, error)) (*gate.RatchetVerdict, error) {
+	p := Partial{Cap: env.Config.Crap.Cap}
+	if ps, err := paths(env.Dir); err == nil {
+		if ledger, err := readLedgerFile(env.Dir, ps.Ledger); err == nil {
+			p.Ledger = ledger
+		}
+	}
 	if len(env.Config.Exemptions) > 0 {
 		var err error
-		if problems, err = exemptionProblems(env, time.Now()); err != nil {
+		if p.Problems, err = exemptionProblems(env, time.Now()); err != nil {
 			return nil, err
 		}
 	}
-	return &gate.RatchetVerdict{Layers: ApplyPartial(layers, problems)}, nil
+	p.Packages = packagesUnderFloor(env, layers)
+	p.Findings = lintFindings(env, layers)
+	return &gate.RatchetVerdict{Layers: ApplyPartial(layers, p)}, nil
+}
+
+func inRange(layers []report.Layer, id string) bool {
+	return slices.ContainsFunc(layers, func(l report.Layer) bool { return l.ID == id })
+}
+
+// packagesUnderFloor reads the coverage profile when the coverage layer is in the
+// range and lists the packages under the floor with their percentage and uncovered
+// statements, as the baseline records them. Nil when the layer is out of range or the
+// profile cannot be read: the layer then stands as it ran.
+func packagesUnderFloor(env *gate.Env, layers []report.Layer) map[string]Package {
+	if !inRange(layers, "coverage") {
+		return nil
+	}
+	raw, err := os.ReadFile(filepath.Join(env.Dir, filepath.FromSlash(tests.ProfilePath)))
+	if err != nil {
+		return nil
+	}
+	prof, err := cover.Parse(bytes.NewReader(raw))
+	if err != nil {
+		return nil
+	}
+	sum, err := prof.Summarize(cover.Options{Module: env.Config.Module, Dir: env.Dir, ExcludeGenerated: env.Config.Coverage.ExcludeGenerated})
+	if err != nil {
+		return nil
+	}
+	out := map[string]Package{}
+	for _, pk := range sum.Below(env.Config.Coverage.StatementsFloor) {
+		out[pk.Path] = Package{StatementsPct: pk.Pct(), Uncovered: pk.Uncovered()}
+	}
+	return out
+}
+
+// lintFindings reads the lint output the hygiene layer saved when that layer is in the
+// range, and counts the findings per linter and file as the baseline does. Nil when the
+// layer is out of range or its output cannot be read.
+func lintFindings(env *gate.Env, layers []report.Layer) Counts {
+	if !inRange(layers, "hygiene") {
+		return nil
+	}
+	raw, err := os.ReadFile(filepath.Join(env.Dir, filepath.FromSlash(hygiene.LintJSON)))
+	if err != nil {
+		return nil
+	}
+	var doc struct {
+		Issues []struct {
+			FromLinter string
+			Pos        struct{ Filename string }
+		}
+	}
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		return nil
+	}
+	out := Counts{}
+	for _, is := range doc.Issues {
+		if out[is.FromLinter] == nil {
+			out[is.FromLinter] = map[string]int{}
+		}
+		out[is.FromLinter][moduleFile(env.Dir, is.Pos.Filename)]++
+	}
+	return out
+}
+
+// moduleFile makes a file name from the linter a module-relative slash path, as the
+// baseline names a finding's file.
+func moduleFile(dir, name string) string {
+	if name == "" {
+		return "(no file)"
+	}
+	if filepath.IsAbs(name) {
+		if rel, err := filepath.Rel(dir, name); err == nil && !strings.HasPrefix(rel, "..") {
+			name = rel
+		}
+	}
+	return path.Clean(filepath.ToSlash(name))
 }
 
 // carrier is the layer that reports a held failure of a kind on a leg that is not

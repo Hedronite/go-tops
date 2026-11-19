@@ -355,3 +355,46 @@ func TestRelocatingTheLedgerDoesNotResetTheRatchet(t *testing.T) {
 		t.Errorf("notes %q do not name both paths", notes)
 	}
 }
+
+// Through the hook, with the module in a subdirectory: a hand-raised entry equal to what
+// the run measures fails for want of a record, and a base configuration that does not
+// parse fails the judgment.
+func TestJudgeHookForAModuleInASubdirectory(t *testing.T) {
+	root := repo(t)
+	commit(t, root, "adopt", map[string]string{"mod/go.mod": "module example.com/m\n\ngo 1.26\n", "mod/m.go": "package m\n\nfunc F() int { return 1 }\n"})
+	env := &gate.Env{Dir: filepath.Join(root, "mod"), Base: "main", Config: gate.Config{Module: "example.com/m", Enforce: "ratchet"}}
+	build := resolved(t, env.Dir)
+	writeLedger(t, env.Dir, &ratchet.Ledger{Build: build, Functions: map[string]float64{"example.com/m.F": 12}})
+	git(t, root, "add", "-A")
+	git(t, root, "commit", "-q", "-m", "adopt the ratchet")
+	git(t, root, "checkout", "-q", "-b", "feature")
+	writeLedger(t, env.Dir, &ratchet.Ledger{Build: build, Functions: map[string]float64{"example.com/m.F": 17}})
+	git(t, root, "add", "-A")
+	git(t, root, "commit", "-q", "-m", "raise by hand")
+
+	worse := ratchet.Measure{Cap: 10, Floor: 90, Functions: []crap.Function{{Key: "example.com/m.F", CRAP: 17}}}
+	v, err := ratchet.NewJudge(measurerWithPaths(worse, nil))(context.Background(), env, layersIn())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !v.Failed || !strings.Contains(strings.Join(v.Notes, ""), "functions raised from 12 to 17 with no regressions record") {
+		t.Errorf("verdict %+v notes %v: the hand-raised entry passed as a first ledger", v.Report, v.Notes)
+	}
+
+	// And a base go-tops.yaml that does not parse.
+	git(t, root, "checkout", "-q", "main")
+	if err := os.WriteFile(filepath.Join(env.Dir, "go-tops.yaml"), []byte("baseline: [unclosed\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	git(t, root, "add", "-A")
+	git(t, root, "commit", "-q", "-m", "a broken configuration")
+	git(t, root, "checkout", "-q", "-b", "other")
+	git(t, root, "commit", "-q", "--allow-empty", "-m", "work")
+	bad, err := ratchet.NewJudge(measurerWithPaths(worse, nil))(context.Background(), env, layersIn())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bad.Failed || !strings.Contains(strings.Join(bad.Notes, ""), "go-tops.yaml at the diff base") {
+		t.Errorf("verdict %+v notes %v, want a failure naming the base go-tops.yaml", bad.Report, bad.Notes)
+	}
+}

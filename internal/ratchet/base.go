@@ -41,13 +41,22 @@ func ReadBase(dir, base, rel string) Base {
 	return b
 }
 
+// atRev names a file of a commit by a path relative to the working directory. A bare
+// `rev:path` is read from the root of the repository, not from where git runs, so for
+// a module in a subdirectory it names another file or none: the base copy would be
+// "not found" and the ledger would be judged as a first ledger. `rev:./path` is
+// resolved against the working directory (git -C dir), which is the module root.
+func atRev(rev, rel string) string {
+	return rev + ":./" + path.Clean(rel)
+}
+
 // baselinePathAt is the path the go-tops.yaml of commit rev names for the baseline,
 // or LedgerPath when the commit has no go-tops.yaml or names none. The copy at the
 // diff base is read where the base itself kept it, never where this run's
 // configuration says: a branch that moves the baseline must not turn the base's
 // ledger into a first ledger.
 func baselinePathAt(dir, rev string) (string, error) {
-	out, code, err := git(dir, "show", rev+":go-tops.yaml")
+	out, code, err := git(dir, "show", atRev(rev, "go-tops.yaml"))
 	if err != nil {
 		return "", err
 	}
@@ -95,7 +104,7 @@ func mergeBase(dir, base string) (string, error) {
 
 // ledgerAt reads the baseline in commit rev: no ledger when the commit has none.
 func ledgerAt(dir, rev, rel string) Base {
-	spec := rev + ":" + rel
+	spec := atRev(rev, rel)
 	if _, code, err := git(dir, "cat-file", "-e", spec); err != nil {
 		return Base{Err: err}
 	} else if code != 0 {

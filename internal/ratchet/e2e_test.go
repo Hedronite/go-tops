@@ -77,6 +77,10 @@ type ratchetProject struct {
 	dir string
 	// ledgerBuild, when set, is the build the ledger records instead of this run's.
 	ledgerBuild *gobuild.Build
+	// findings are the lint findings the ledger records, and noPackage leaves the
+	// package under its floor out of it.
+	findings  ratchet.Counts
+	noPackage bool
 }
 
 func itoa(n int) string {
@@ -107,6 +111,12 @@ func (p *ratchetProject) writeLedgerFor(t *testing.T, functions map[string]float
 	}
 	if exemptions > 0 {
 		ledger["exemptions"] = exemptions
+	}
+	if len(p.findings) > 0 {
+		ledger["findings"] = p.findings
+	}
+	if p.noPackage {
+		delete(ledger, "packages")
 	}
 	doc := map[string]any{
 		"build":       map[string]any{"goos": build.GOOS, "goarch": build.GOARCH, "tags": []string{}, "cgo_enabled": build.CGOEnabled},
@@ -615,6 +625,7 @@ func TestRatchetKeepsTheSeedByteIdenticalInTheReport(t *testing.T) {
 // 11 and five findings fail a full run, and a partial run reports them as not judged.
 func TestPartialRunUnderRatchetJudgesNothingTheLedgerReplaces(t *testing.T) {
 	p := legacyProject(t)
+	p.findings = ratchet.Counts{"revive": {"low/low.go": 1}}
 	p.writeLedgerFor(t, map[string]float64{"example.com/m/low.Big": 5}, 0)
 
 	full := runGateWith(t, p, "ratchet", layers(t))
@@ -689,5 +700,65 @@ func TestOtherLegBooksHeldVerdictsToTheirOwnLayers(t *testing.T) {
 	pk := runGateWith(t, q, "ratchet", layers(t))
 	if o := outcomes(pk); o["coverage"] != "fail" || o["crap"] != "pass" || !slices.Equal(pk.Report.Summary.Failed, []string{"coverage"}) {
 		t.Errorf("layers %v failed %v, want only coverage\n%s", o, pk.Report.Summary.Failed, pk.Text)
+	}
+}
+
+// Ruling C3e, refined: a partial run does not judge an item that has an entry in the
+// working-tree ledger, and judges one with no entry at hard. A partial run never hides
+// new debt. The same repo and the same run, with and without the entry.
+
+func partialRun(t *testing.T, p *ratchetProject, only string, ls []gate.Layer) *gate.Run {
+	t.Helper()
+	return executeWith(t, p, gateConfig("ratchet", nil), ls, gate.Options{MaxTier: 1, Base: "main", Only: only})
+}
+
+func TestPartialRunJudgesAFunctionWithNoEntryAtTheCap(t *testing.T) {
+	p := legacyProject(t)
+	p.writeLedgerFor(t, map[string]float64{}, 0)
+	run := partialRun(t, p, "crap", layers(t))
+	if o := outcomes(run); o["crap"] != "fail" || run.ExitCode != 1 || !strings.Contains(run.Text, "example.com/m/low.Big") {
+		t.Errorf("layers %v exit %d, want crap fail naming the function with no entry\n%s", o, run.ExitCode, run.Text)
+	}
+	q := legacyProject(t)
+	q.writeFirstLedger(t) // Big has an entry
+	held := partialRun(t, q, "crap", layers(t))
+	if o := outcomes(held); o["crap"] != "pass" || held.ExitCode != 0 {
+		t.Errorf("with an entry: layers %v exit %d, want a pass not judged\n%s", o, held.ExitCode, held.Text)
+	}
+}
+
+func TestPartialRunJudgesAPackageWithNoEntryAtTheFloor(t *testing.T) {
+	p := legacyProject(t)
+	p.noPackage = true
+	p.writeLedgerFor(t, map[string]float64{"example.com/m/low.Big": 11}, 0)
+	run := partialRun(t, p, "coverage", layers(t))
+	if o := outcomes(run); o["coverage"] != "fail" || run.ExitCode != 1 || !strings.Contains(run.Text, "example.com/m/low") {
+		t.Errorf("layers %v exit %d, want coverage fail naming the package with no entry\n%s", o, run.ExitCode, run.Text)
+	}
+	q := legacyProject(t)
+	q.writeFirstLedger(t) // the package has an entry
+	held := partialRun(t, q, "coverage", layers(t))
+	if o := outcomes(held); o["coverage"] != "pass" || held.ExitCode != 0 {
+		t.Errorf("with an entry: layers %v exit %d, want a pass not judged\n%s", o, held.ExitCode, held.Text)
+	}
+}
+
+func TestPartialRunJudgesALintFindingWithNoEntryAtZero(t *testing.T) {
+	p := legacyProject(t)
+	p.writeFirstLedger(t)
+	ls := layers(t)
+	ls[0] = lintFailure(t, p.dir) // five revive findings in low/low.go, the ledger records none
+	run := partialRun(t, p, "hygiene", ls)
+	if o := outcomes(run); o["hygiene"] != "fail" || run.ExitCode != 1 || !strings.Contains(run.Text, "revive low/low.go") {
+		t.Errorf("layers %v exit %d, want hygiene fail naming the finding with no entry\n%s", o, run.ExitCode, run.Text)
+	}
+	q := legacyProject(t)
+	q.findings = ratchet.Counts{"revive": {"low/low.go": 1}}
+	q.writeFirstLedger(t)
+	lq := layers(t)
+	lq[0] = lintFailure(t, q.dir)
+	held := partialRun(t, q, "hygiene", lq)
+	if o := outcomes(held); o["hygiene"] != "pass" || held.ExitCode != 0 {
+		t.Errorf("with an entry: layers %v exit %d, want a pass not judged\n%s", o, held.ExitCode, held.Text)
 	}
 }

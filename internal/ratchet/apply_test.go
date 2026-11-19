@@ -344,7 +344,7 @@ func TestApplyBooksHeldCountsToHygiene(t *testing.T) {
 // Ruling C3e, the layers of a partial run under ratchet: what the ledger replaces is
 // not judged, and what it does not replace stands.
 func TestApplyPartialDoesNotJudgeWhatTheLedgerReplaces(t *testing.T) {
-	out := ratchet.ApplyPartial([]report.Layer{crapLayer(), coverageLayer(), hygieneLayer(5, nil)}, nil)
+	out := ratchet.ApplyPartial([]report.Layer{crapLayer(), coverageLayer(), hygieneLayer(5, nil)}, heldPartial())
 	for _, id := range []string{"crap", "coverage", "hygiene"} {
 		got := find2(t, out, id)
 		if got.Outcome != "pass" || !strings.Contains(got.Reason, "not judged: partial run under ratchet") {
@@ -366,12 +366,12 @@ func TestApplyPartialKeepsWhatTheLedgerDoesNotReplace(t *testing.T) {
 	// nothing, still fail the CRAP layer.
 	rows := append(crapRows(), map[string]any{"func": "example.com/m.Win", "file": "w_windows.go", "cc": 12, "cov_pct": nil, "crap": nil, "baseline": nil})
 	layer := report.Layer{ID: "crap", Tier: 1, Outcome: "fail", Reason: "x", Details: map[string]any{"cap": 10.0, "violations": rows, "not_measured": 1}}
-	got := find2(t, ratchet.ApplyPartial([]report.Layer{layer}, nil), "crap")
+	got := find2(t, ratchet.ApplyPartial([]report.Layer{layer}, ratchet.Partial{Cap: 10, Ledger: initLedger(legacy(), linux)}), "crap")
 	if got.Outcome != "fail" || !strings.Contains(got.Reason, "example.com/m.Win") {
 		t.Errorf("crap %s: %s, want the not-measured function to stand", got.Outcome, got.Reason)
 	}
 	problem := []ratchet.Failure{{Kind: ratchet.ProblemKind, Key: "p/gone.go", Why: "matches no production file"}}
-	got = find2(t, ratchet.ApplyPartial([]report.Layer{crapLayer()}, problem), "crap")
+	got = find2(t, ratchet.ApplyPartial([]report.Layer{crapLayer()}, ratchet.Partial{Cap: 10, Ledger: initLedger(legacy(), linux), Problems: problem}), "crap")
 	if got.Outcome != "fail" || !strings.Contains(got.Reason, "p/gone.go") {
 		t.Errorf("crap %s: %s, want the unmatched exemption to stand", got.Outcome, got.Reason)
 	}
@@ -379,13 +379,13 @@ func TestApplyPartialKeepsWhatTheLedgerDoesNotReplace(t *testing.T) {
 	h := hygieneLayer(5, func(d map[string]any) {
 		d["format"] = map[string]any{"outcome": "fail", "message": "1 file(s) need formatting", "files": []any{"a.go"}}
 	})
-	hy := find2(t, ratchet.ApplyPartial([]report.Layer{h}, nil), "hygiene")
+	hy := find2(t, ratchet.ApplyPartial([]report.Layer{h}, ratchet.Partial{Cap: 10, Ledger: initLedger(legacy(), linux)}), "hygiene")
 	if hy.Outcome != "fail" || !strings.Contains(hy.Reason, "format: 1 file(s) need formatting") || strings.Contains(hy.Reason, "lint") {
 		t.Errorf("hygiene %s: %s", hy.Outcome, hy.Reason)
 	}
 	// A coverage layer that failed for another reason stays failed.
 	broken := report.Layer{ID: "coverage", Tier: 1, Outcome: "fail", Details: map[string]any{"error": "the coverage profile does not exist"}}
-	if cov := find2(t, ratchet.ApplyPartial([]report.Layer{broken}, nil), "coverage"); cov.Outcome != "fail" {
+	if cov := find2(t, ratchet.ApplyPartial([]report.Layer{broken}, ratchet.Partial{Cap: 10}), "coverage"); cov.Outcome != "fail" {
 		t.Errorf("coverage %s, want fail", cov.Outcome)
 	}
 }
@@ -433,5 +433,77 @@ func TestBuildTextSaysCgoOnOrOff(t *testing.T) {
 	notes := ratchet.Notes(ratchet.Judge(input(m, cur, based(old))))
 	if len(notes) != 1 || !strings.Contains(notes[0], "linux/amd64 cgo on") || !strings.Contains(notes[0], "darwin/arm64 cgo off tags=integration") {
 		t.Errorf("notes %q, want cgo on and off said, and the tags listed", notes)
+	}
+}
+
+// heldPartial is a partial run over the legacy repo with every item held by an entry:
+// the eight functions, the package under its floor and the five lint findings.
+func heldPartial() ratchet.Partial {
+	m := legacy()
+	m.Findings = ratchet.Counts{"revive": {"x.go": 5}}
+	return ratchet.Partial{
+		Cap: 10, Ledger: initLedger(m, linux),
+		Packages: map[string]ratchet.Package{"example.com/m/low": {StatementsPct: 80, Uncovered: 20}},
+		Findings: ratchet.Counts{"revive": {"x.go": 5}},
+	}
+}
+
+// Ruling C3e, refined: in a partial run only an item with an entry in the working-tree
+// ledger is not judged. One with no entry is judged at hard, absent meaning the cap, the
+// floor or 0, so a partial run never hides new debt. One test per kind.
+
+func TestApplyPartialJudgesAFunctionWithNoEntryAtTheCap(t *testing.T) {
+	p := heldPartial()
+	rows := append(crapRows(), map[string]any{"func": "example.com/m.Fresh", "file": "f.go", "cc": 11, "cov_pct": 100.0, "crap": 11.0, "baseline": nil})
+	layer := report.Layer{ID: "crap", Tier: 1, Outcome: "fail", Reason: "x", Details: map[string]any{"cap": 10.0, "violations": rows, "not_measured": 0}}
+	got := find2(t, ratchet.ApplyPartial([]report.Layer{layer}, p), "crap")
+	if got.Outcome != "fail" || !strings.Contains(got.Reason, "example.com/m.Fresh") || strings.Contains(got.Reason, key(0)) {
+		t.Errorf("crap %s: %s, want only the new function over the cap, with no entry, to fail", got.Outcome, got.Reason)
+	}
+	// With an entry it is held, whatever it scores: an entry is judged against the diff
+	// base on a full run, not in a partial one.
+	p.Ledger.Functions["example.com/m.Fresh"] = 11
+	if held := find2(t, ratchet.ApplyPartial([]report.Layer{layer}, p), "crap"); held.Outcome != "pass" || !strings.Contains(held.Reason, "not judged") {
+		t.Errorf("crap %s: %s, want a pass booked as not judged", held.Outcome, held.Reason)
+	}
+	// Without a ledger nothing has an entry: all eight legacy functions fail.
+	none := ratchet.Partial{Cap: 10}
+	if bare := find2(t, ratchet.ApplyPartial([]report.Layer{crapLayer()}, none), "crap"); bare.Outcome != "fail" || !strings.Contains(bare.Reason, "8 verdict(s)") {
+		t.Errorf("crap %s: %s, want the eight to fail with no ledger", bare.Outcome, bare.Reason)
+	}
+}
+
+func TestApplyPartialJudgesAPackageWithNoEntryAtTheFloor(t *testing.T) {
+	p := heldPartial()
+	p.Packages["example.com/m/fresh"] = ratchet.Package{StatementsPct: 40, Uncovered: 60}
+	got := find2(t, ratchet.ApplyPartial([]report.Layer{coverageLayer()}, p), "coverage")
+	if got.Outcome != "fail" || !strings.Contains(got.Reason, "example.com/m/fresh") || strings.Contains(got.Reason, "example.com/m/low") {
+		t.Errorf("coverage %s: %s, want only the package with no entry to fail", got.Outcome, got.Reason)
+	}
+	delete(p.Packages, "example.com/m/fresh")
+	if held := find2(t, ratchet.ApplyPartial([]report.Layer{coverageLayer()}, p), "coverage"); held.Outcome != "pass" || !strings.Contains(held.Reason, "not judged") {
+		t.Errorf("coverage %s: %s, want the held package not judged", held.Outcome, held.Reason)
+	}
+}
+
+func TestApplyPartialJudgesALintFindingWithNoEntryAtZero(t *testing.T) {
+	p := heldPartial()
+	p.Findings = ratchet.Counts{"revive": {"x.go": 50}, "errcheck": {"new.go": 1}} // x.go has an entry, new.go has none
+	got := find2(t, ratchet.ApplyPartial([]report.Layer{hygieneLayer(51, nil)}, p), "hygiene")
+	if got.Outcome != "fail" || !strings.Contains(got.Reason, "errcheck new.go") || strings.Contains(got.Reason, "revive x.go") {
+		t.Errorf("hygiene %s: %s, want only the finding with no entry to fail", got.Outcome, got.Reason)
+	}
+	p.Findings = ratchet.Counts{"revive": {"x.go": 50}}
+	if held := find2(t, ratchet.ApplyPartial([]report.Layer{hygieneLayer(50, nil)}, p), "hygiene"); held.Outcome != "pass" || !strings.Contains(held.Reason, "not judged") {
+		t.Errorf("hygiene %s: %s, want the held findings not judged", held.Outcome, held.Reason)
+	}
+}
+
+// A row at or under the cap needs no entry: only a function over the cap is debt.
+func TestApplyPartialDoesNotJudgeAFunctionUnderTheCap(t *testing.T) {
+	rows := []any{map[string]any{"func": "example.com/m.Fine", "file": "f.go", "cc": 6, "cov_pct": 100.0, "crap": 6.0, "baseline": nil}}
+	layer := report.Layer{ID: "crap", Tier: 1, Outcome: "fail", Reason: "x", Details: map[string]any{"cap": 10.0, "violations": rows, "not_measured": 0}}
+	if got := find2(t, ratchet.ApplyPartial([]report.Layer{layer}, ratchet.Partial{Cap: 10}), "crap"); got.Outcome != "pass" {
+		t.Errorf("crap %s: %s, want a pass: the function is under the cap", got.Outcome, got.Reason)
 	}
 }
