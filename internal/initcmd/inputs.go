@@ -158,13 +158,7 @@ func (in *inputs) checkFloor(minor int) error {
 	if version.Compare("go"+in.goFloor, toolchain) > 0 {
 		return refuse("the go line of go.mod says %s, above the pinned toolchain %s", in.goFloor, toolchain)
 	}
-	in.goCurrent = goCurrent()
-	if strings.Count(in.goFloor, ".") == 2 {
-		// A floor that names a release is compared with go_current in Go's order, in
-		// which the language version 1.27 sorts below the release 1.27.0: go_current
-		// then names the pinned release.
-		in.goCurrent = strings.TrimPrefix(toolchain, "go")
-	}
+	in.goCurrent = goCurrent(in.goFloor)
 	return nil
 }
 

@@ -1,6 +1,7 @@
 package initcmd
 
 import (
+	"io/fs"
 	"os/exec"
 	"strings"
 	"testing"
@@ -290,5 +291,46 @@ func TestNoGeneratedFileDocumentsALawsCommand(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// F11 at the source: no template the binary embeds documents a laws command.
+func TestNoEmbeddedTemplateNamesALawsCommand(t *testing.T) {
+	seen := 0
+	err := fs.WalkDir(templates, "templates", func(p string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		b, err := templates.ReadFile(p)
+		if err != nil {
+			return err
+		}
+		seen++
+		bad := []string{"gotops laws", "{{gotops}} laws"}
+		if p == "templates/justfile" {
+			bad = append(bad, "\nlaws:") // a recipe; go-tops.yaml has a laws key, which is config
+		}
+		for _, b2 := range bad {
+			if strings.Contains(string(b), b2) {
+				t.Errorf("%s names a laws command (%q), which exits 2 until the laws layer lands", p, b2)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if seen < 6 {
+		t.Errorf("only %d templates were read", seen)
+	}
+}
+
+// F7: go_current names the pinned release when the floor names a release, so the
+// pair passes check; the language version otherwise.
+func TestGoCurrentNamesThePinnedReleaseForAReleaseFloor(t *testing.T) {
+	for floor, want := range map[string]string{"1.26": "1.27", "1.27": "1.27", "1.26.4": "1.27.4", "1.27.0": "1.27.4"} {
+		if got := goCurrent(floor); got != want {
+			t.Errorf("goCurrent(%q) = %q, want %q", floor, got, want)
+		}
 	}
 }

@@ -55,9 +55,16 @@ var moduleTools = []moduleTool{
 
 const gotopsPackage, gotopsModule = "github.com/Hedronite/go-tops/cmd/gotops", "github.com/Hedronite/go-tops"
 
-// goCurrent is the language version of the pinned toolchain: go1.27.4 -> 1.27.
-func goCurrent() string {
+// goCurrent is go_current for a module whose go line names the floor: the
+// language version of the pinned toolchain (go1.27.4 -> 1.27), or the pinned
+// release itself (1.27.4) when the floor names a release. Go orders the release
+// 1.27.0 above the language version 1.27, so check (go_floor above go_current)
+// would refuse the pair if go_current stayed a language version.
+func goCurrent(floor string) string {
 	v := strings.TrimPrefix(toolchain, "go")
+	if strings.Count(floor, ".") == 2 {
+		return v
+	}
 	parts := strings.SplitN(v, ".", 3)
 	return parts[0] + "." + parts[1]
 }
