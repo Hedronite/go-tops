@@ -220,7 +220,7 @@ func TestReportAdvisoryRun(t *testing.T) {
 	if !strings.Contains(ex, enforcedSummary) || !strings.Contains(ex, `"enforce": "ratchet"`) {
 		t.Fatal("the example no longer has the summary and mode this test edits")
 	}
-	advisory := strings.Replace(ex, `"enforce": "ratchet"`, `"enforce": "advisory"`, 1)
+	advisory := strings.Replace(withoutRatchet(t, ex), `"enforce": "ratchet"`, `"enforce": "advisory"`, 1)
 	good := strings.Replace(advisory, enforcedSummary, advisorySummary, 1)
 	if err := validateReport(t, good); err != nil {
 		t.Fatalf("a failing run under advisory exits 0, keeps outcome fail and must validate: %v", err)
@@ -287,4 +287,68 @@ func TestReportCrapNotMeasured(t *testing.T) {
 			}
 		})
 	}
+}
+
+// 0.4.3: under enforce ratchet the report may carry the ratchet judgment: pass
+// or fail on the ledger leg, skip on any other, with both builds (section 6.7).
+func TestReportRatchetJudgment(t *testing.T) {
+	raw, err := os.ReadFile(reportExample)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ex := string(raw)
+	const (
+		outcome = `"ratchet": { "outcome": "pass",`
+		runB    = `"run_build":    { "goos": "linux", "goarch": "amd64", "tags": [], "cgo_enabled": true }`
+	)
+	if !strings.Contains(ex, outcome) || !strings.Contains(ex, runB) || !strings.Contains(ex, `"enforce": "ratchet"`) {
+		t.Fatal("the example no longer carries the ratchet object this test edits")
+	}
+	if err := validateReport(t, ex); err != nil {
+		t.Fatalf("the example must validate: %v", err)
+	}
+	// optional: a report from before the judgment exists still validates
+	if err := validateReport(t, withoutRatchet(t, ex)); err != nil {
+		t.Errorf("without the object it must validate: %v", err)
+	}
+	skip := strings.Replace(ex, outcome, `"ratchet": { "outcome": "skip",`, 1)
+	skip = strings.Replace(skip, runB, `"run_build":    { "goos": "darwin", "goarch": "arm64", "tags": [], "cgo_enabled": true }`, 1)
+	if err := validateReport(t, skip); err != nil {
+		t.Errorf("a skip on another build must validate: %v", err)
+	}
+	for _, c := range []struct{ name, from, to string }{
+		{"outcome-unknown", outcome, `"ratchet": { "outcome": "allow",`},
+		{"outcome-missing", outcome, `"ratchet": {`},
+		{"run-build-misnamed", `"run_build":    {`, `"run_buil":     {`},
+		{"run-build-no-cgo", runB, `"run_build":    { "goos": "linux", "goarch": "amd64", "tags": [] }`},
+		{"run-build-bad-tags", runB, `"run_build":    { "goos": "linux", "goarch": "amd64", "tags": ["a", "a"], "cgo_enabled": true }`},
+		{"extra-key", outcome, `"ratchet": { "judged": true, "outcome": "pass",`},
+		{"under-hard", `"enforce": "ratchet"`, `"enforce": "hard"`},
+		{"under-advisory", `"enforce": "ratchet"`, `"enforce": "advisory"`},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			doc := strings.Replace(ex, c.from, c.to, 1)
+			if doc == ex {
+				t.Fatal("the plant changed nothing")
+			}
+			if err := validateReport(t, doc); err == nil {
+				t.Fatal("the planted report validated")
+			}
+		})
+	}
+}
+
+// withoutRatchet cuts the ratchet object (0.4.3) from the example: only a run
+// under enforce ratchet carries it, so a test that changes the mode cuts it.
+func withoutRatchet(t *testing.T, ex string) string {
+	t.Helper()
+	start := strings.Index(ex, `  "ratchet": {`)
+	if start < 0 {
+		t.Fatal("the example no longer has the ratchet object")
+	}
+	end := strings.Index(ex[start:], "\n  \"exemptions\"")
+	if end < 0 {
+		t.Fatal("cannot find the end of the ratchet object")
+	}
+	return ex[:start] + ex[start+end+1:]
 }

@@ -13,7 +13,7 @@ import (
 // is a configuration failure (2); a repository that cannot be read is an
 // environment failure (3).
 
-const baselineJSON = `{"ledger":{},"judged_laws":0}` + "\n"
+const baselineJSON = `{"build":{"goos":"linux","goarch":"amd64","tags":[],"cgo_enabled":true},"ledger":{},"judged_laws":0}` + "\n"
 
 func ratchetDoc(t *testing.T) doc {
 	t.Helper()
@@ -76,7 +76,7 @@ func TestRatchetBaselineProblems(t *testing.T) {
 			name: "tracked then modified", files: map[string]string{".go-tops/baseline.json": baselineJSON}, wantText: "differs from HEAD",
 			pointer: "/enforce",
 			after: func(t *testing.T, dir string) {
-				writeFile(t, dir, ".go-tops/baseline.json", []byte(`{"ledger":{},"judged_laws":1}`+"\n"))
+				writeFile(t, dir, ".go-tops/baseline.json", []byte(`{"build":{"goos":"linux","goarch":"amd64","tags":[],"cgo_enabled":true},"ledger":{},"judged_laws":1}`+"\n"))
 			},
 		},
 		{
@@ -125,17 +125,27 @@ func TestRatchetBaselineContent(t *testing.T) {
 		want          want
 	}{
 		{"empty object", "{}", bw("schema", "")},
+		{"build missing", `{"ledger":{},"judged_laws":0}`, bw("schema", "")},
+		{"build without cgo_enabled", `{"build":{"goos":"linux","goarch":"amd64","tags":[]},"ledger":{},"judged_laws":0}`, bw("schema", "/build")},
+		{"build goos empty", `{"build":{"goos":"","goarch":"amd64","tags":[],"cgo_enabled":true},"ledger":{},"judged_laws":0}`, bw("schema", "/build/goos")},
+		{"build goos uppercase", `{"build":{"goos":"Linux","goarch":"amd64","tags":[],"cgo_enabled":true},"ledger":{},"judged_laws":0}`, bw("schema", "/build/goos")},
+		{"build goarch missing", `{"build":{"goos":"linux","tags":[],"cgo_enabled":true},"ledger":{},"judged_laws":0}`, bw("schema", "/build")},
+		{"build tags not an array", `{"build":{"goos":"linux","goarch":"amd64","tags":"a","cgo_enabled":true},"ledger":{},"judged_laws":0}`, bw("schema", "/build/tags")},
+		{"build tag with a space", `{"build":{"goos":"linux","goarch":"amd64","tags":["a b"],"cgo_enabled":true},"ledger":{},"judged_laws":0}`, bw("schema", "/build/tags/0")},
+		{"build tags repeated", `{"build":{"goos":"linux","goarch":"amd64","tags":["a","a"],"cgo_enabled":true},"ledger":{},"judged_laws":0}`, bw("schema", "/build/tags")},
+		{"build cgo not a boolean", `{"build":{"goos":"linux","goarch":"amd64","tags":[],"cgo_enabled":1},"ledger":{},"judged_laws":0}`, bw("schema", "/build/cgo_enabled")},
+		{"build unknown key", `{"build":{"goos":"linux","goarch":"amd64","tags":[],"cgo_enabled":true,"extra":1},"ledger":{},"judged_laws":0}`, bw("schema", "/build/extra")},
 		{"not JSON", "{", bw("json", "")},
 		{"empty file", "", bw("json", "")},
 		{"two values", baselineJSON + baselineJSON, bw("json", "")},
-		{"judged_laws negative", `{"ledger":{},"judged_laws":-1}`, bw("schema", "/judged_laws")},
-		{"judged_laws not an integer", `{"ledger":{},"judged_laws":"many"}`, bw("schema", "/judged_laws")},
-		{"unknown ledger kind", `{"ledger":{"bogus":1},"judged_laws":0}`, bw("schema", "/ledger/bogus")},
-		{"unknown top-level key", `{"ledger":{},"judged_laws":0,"extra":1}`, bw("schema", "/extra")},
-		{"function score negative", `{"ledger":{"functions":{"a.F":-1}},"judged_laws":0}`, bw("schema", "/ledger/functions/a.F")},
-		{"package percentage above 100", `{"ledger":{"packages":{"a":{"statements_pct":101,"uncovered":1}}},"judged_laws":0}`, bw("schema", "/ledger/packages/a/statements_pct")},
-		{"exemption count zero", `{"ledger":{"exemptions":0},"judged_laws":0}`, bw("schema", "/ledger/exemptions")},
-		{"regression without an owner", `{"ledger":{},"judged_laws":0,"regressions":[{"kind":"functions","key":"a.F","from":1,"to":2,"reason":"three words here"}]}`, bw("schema", "/regressions/0")},
+		{"judged_laws negative", `{"build":{"goos":"linux","goarch":"amd64","tags":[],"cgo_enabled":true},"ledger":{},"judged_laws":-1}`, bw("schema", "/judged_laws")},
+		{"judged_laws not an integer", `{"build":{"goos":"linux","goarch":"amd64","tags":[],"cgo_enabled":true},"ledger":{},"judged_laws":"many"}`, bw("schema", "/judged_laws")},
+		{"unknown ledger kind", `{"build":{"goos":"linux","goarch":"amd64","tags":[],"cgo_enabled":true},"ledger":{"bogus":1},"judged_laws":0}`, bw("schema", "/ledger/bogus")},
+		{"unknown top-level key", `{"build":{"goos":"linux","goarch":"amd64","tags":[],"cgo_enabled":true},"ledger":{},"judged_laws":0,"extra":1}`, bw("schema", "/extra")},
+		{"function score negative", `{"build":{"goos":"linux","goarch":"amd64","tags":[],"cgo_enabled":true},"ledger":{"functions":{"a.F":-1}},"judged_laws":0}`, bw("schema", "/ledger/functions/a.F")},
+		{"package percentage above 100", `{"build":{"goos":"linux","goarch":"amd64","tags":[],"cgo_enabled":true},"ledger":{"packages":{"a":{"statements_pct":101,"uncovered":1}}},"judged_laws":0}`, bw("schema", "/ledger/packages/a/statements_pct")},
+		{"exemption count zero", `{"build":{"goos":"linux","goarch":"amd64","tags":[],"cgo_enabled":true},"ledger":{"exemptions":0},"judged_laws":0}`, bw("schema", "/ledger/exemptions")},
+		{"regression without an owner", `{"build":{"goos":"linux","goarch":"amd64","tags":[],"cgo_enabled":true},"ledger":{},"judged_laws":0,"regressions":[{"kind":"functions","key":"a.F","from":1,"to":2,"reason":"three words here"}]}`, bw("schema", "/regressions/0")},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -160,11 +170,18 @@ func TestBaselineContentIsNotCheckedOutsideRatchet(t *testing.T) {
 }
 
 func TestARichBaselinePasses(t *testing.T) {
-	rich := `{"ledger":{"functions":{"internal/a.F":14.2},"packages":{"example.com/app/a":{"statements_pct":61.5,"uncovered":30}},` +
+	rich := `{"build":{"goos":"linux","goarch":"amd64","tags":[],"cgo_enabled":true},"ledger":{"functions":{"internal/a.F":14.2},"packages":{"example.com/app/a":{"statements_pct":61.5,"uncovered":30}},` +
 		`"findings":{"revive":{"a.go":2}},"laws":{"G-12":{"a.go":1}},"suppressions":{"nolint":{"errcheck":{"a.go":1}},"ack":{"G-12":{"a.go":1}}},` +
 		`"exemptions":2,"survivors":{"a.go":1}},"judged_laws":16,` +
 		`"regressions":[{"kind":"functions","key":"internal/a.F","from":null,"to":14.2,"reason":"accepted for the migration","owner":"x"}]}`
 	requirePass(t, ratchetRepo(t, ratchetDoc(t), map[string]string{".go-tops/baseline.json": rich}))
+}
+
+// §6.7: the baseline records the build it was measured under; tags and a
+// build without cgo are ordinary values.
+func TestABaselineRecordsAnyBuild(t *testing.T) {
+	b := `{"build":{"goos":"darwin","goarch":"arm64","tags":["integration","netgo"],"cgo_enabled":false},"ledger":{},"judged_laws":0}`
+	requirePass(t, ratchetRepo(t, ratchetDoc(t), map[string]string{".go-tops/baseline.json": b}))
 }
 
 func TestRatchetBaselineKeyPathIsContained(t *testing.T) {

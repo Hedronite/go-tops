@@ -517,8 +517,9 @@ CRAP(f) = comp(f)² × (1 − cov(f))³ + comp(f)          cov(f) ∈ [0,1]
     otherwise with the guard discount off, which can only raise `comp(f)`. Because
     `CRAP(f) ≥ comp(f)` at every coverage (see "What the cap means"), a function that is not
     measured and whose `comp(f)` is above the cap fails like any function over the cap, unless an
-    exemption (§6.8) or a carried ledger entry (§6.7) covers it. Its row in the report has `null`
-    for `cov_pct` and `crap`.
+    exemption (§6.8) covers it. Its row in the report has `null` for `cov_pct` and `crap`. On a
+    leg that compiles the function it is scored and judged against the cap like any function
+    (§6.7).
   - A function that is not measured and whose `comp(f)` is at or under the cap is counted and not
     judged on that run. That is not a pass: a run that measures it judges it.
 - **Enforcement** is set by `enforce` and stated once, in §6.7. This section defines the score,
@@ -740,9 +741,9 @@ under `advisory` reads the report, as the bootstrap rule above does.
 
 **CRAP.** A function at or under the cap may change up to the cap. A function over the cap
 may not exceed its baseline score plus 0.01 (a rise of 0.01 or less is noise). A function absent
-from the baseline is new and meets the cap. A function the run does not measure (§6.2) is neither:
-its score is not judged, its entry is carried, and its complexity is held as the ledger rules
-below say. So a function scoring 2 under a cap of 10 may rise to
+from the baseline is new and meets the cap. A function the ledger leg does not compile (below) has
+no entry: §6.2 judges it on the ledger leg, and on a leg that compiles it it is held to the cap,
+as a new function is. So a function scoring 2 under a cap of 10 may rise to
 10, and one scoring 14.2 under a cap of 10 may not pass 14.21. Under `ratchet` no function within
 the cap is held stricter than under `hard`.
 
@@ -755,7 +756,7 @@ must be clean against `HEAD`.
 
 | Ledger kind | Entry key | Entry value | The ratchet checks |
 |---|---|---|---|
-| `functions` | function identity (below) | CRAP score when written | score ≤ value + 0.01, for a function the run measures; a function it does not measure is carried (below). Only a function over the cap has an entry |
+| `functions` | function identity (below) | CRAP score when written | score ≤ value + 0.01. Only a function over the cap that the ledger leg measures, and that no exemption covers, has an entry |
 | `packages` | package import path | statement coverage % and uncovered-statement count | A package under the floor fails only when its percentage falls **and** its uncovered-statement count rises. Deleting tested code can lower the percentage without raising the uncovered count, so it does not fail. A package at or over the floor, or absent, is held to the floor |
 | `findings` | linter, file | count of that linter's findings that no law maps | count ≤ value |
 | `laws` | law ID, file | count of findings that make that law `refuse` | count ≤ value; `refuse` then means "no new instance" under `ratchet` and "none" under `hard` |
@@ -771,6 +772,25 @@ Beside the ledger the file holds `judged_laws`, the number of laws the run judge
 the class, verdict other than `not-evaluated`). It is a floor, not a debt: the count may not fall
 between baseline and run, so a configuration edit cannot quietly shrink what is judged.
 
+**The ledger leg.** A ledger measures one build: which functions, statements and lint findings
+exist depends on the files the build compiles, so exact equality cannot hold on two builds at
+once. The file therefore records `build`: the `goos`, `goarch`, sorted build `tags` and
+`cgo_enabled` of the run that wrote it. A run's build is the one its go commands use: the
+`GOOS`, `GOARCH` and `CGO_ENABLED` of its test run and the tags that run passes. The run whose
+build equals the recorded one is the **ledger leg**.
+
+- **Only the ledger leg judges the ratchet.** The comparison of the run with the ledger, the
+  first-ledger rule and the diff-base check below run on the ledger leg only. On any other leg
+  under `ratchet`, CRAP, coverage and lint still run and report, and the ratchet judgment is
+  `skip`, naming the ledger build. It is never reported as `pass`; the report says which in
+  `ratchet` (§12.3). A function the ledger leg does not compile is judged against the cap on a
+  leg that compiles it, as a new function would be.
+- **Only the ledger leg writes.** `baseline --init` records the build it ran under, which makes
+  that build the ledger leg. A later write (a refresh, `--accept-regression`, `--rename`) runs on
+  the ledger leg only; on any other leg `baseline` refuses with exit 1, naming the ledger build.
+- **Which files the ledger leg compiles** is found by loading with the recorded build, so any
+  leg knows the set without being the ledger leg.
+
 **Writing the baseline.** Only `gotops baseline` writes the file (§12.1).
 
 - `baseline --init` writes the first ledger. It runs the layers that feed the ledger (tests,
@@ -778,26 +798,22 @@ between baseline and run, so a configuration edit cannot quietly shrink what is 
   what was **measured**, not what **passed**. It writes when the tests are green and every
   feeding layer produced non-empty output (a non-empty coverage profile, a CRAP report with at
   least one production function, saved lint output). Red thresholds do not stop it; red tests or
-  an empty output do. It records what was measured, so a function the run does not measure (§6.2)
-  gets no entry from it. It refuses when a ledger exists and under `advisory`. A repo with nothing
+  an empty output do. It records what was measured and the build it measured under. It refuses when a ledger exists and under `advisory`. A repo with nothing
   over the line gets a valid file with an empty ledger.
 - A ledger kind fed only by tier 2 (`survivors`) is recorded the same way, from a tier 2 run:
   `baseline --init --kind survivors`. Until it is recorded, that kind is absent and holds at its
   `hard` form.
 - Every later write only lowers. It lowers a value, removes an entry that is no longer over
   the line, and raises `judged_laws`. It never adds an entry and never raises one.
-- **A function the run does not measure** (§6.2, a file outside the run's build) keeps its
-  `functions` entry unchanged: a write neither lowers it nor removes it, because the run has no
-  score to compare. A write removes a `functions` entry only when its function is measured on this
-  run and at or under the cap, or exists in no `.go` file of the directory, whatever its tags. A
-  carried entry covers its function only while `comp(f)` is at or under the entry's value plus
-  0.01, since `CRAP(f) ≥ comp(f)` at every coverage; a function whose complexity rises past that
-  fails like any function over the cap. There is no per-leg `baseline --init` and no other
-  mechanism. A legacy function that is over the cap on complexity and that `baseline --init` did
-  not measure gets its debt through one of two routes: on a run whose build compiles its file,
-  `baseline --accept-regression --reason <text> --owner <handle>` adds its entry at the measured
-  CRAP and writes a `regressions` record; where no leg compiles its file, it takes a `crap`
-  exemption (§6.8) with a reason, an owner and an expiry.
+- **A function the ledger leg does not compile** (§6.2) gets no `functions` entry, from `--init`
+  or from `--accept-regression`. On the ledger leg §6.2 judges it: one whose `comp(f)` is above
+  the cap fails. On a leg that compiles it, it is scored and judged against the cap, as a new
+  function would be. Its legacy debt takes a `crap` exemption (§6.8) with a reason, an owner and
+  an expiry.
+- **An exempt function has no `functions` entry.** `--init` writes none for it, and a refresh
+  removes one that exists. The exemption count carries it.
+- A write removes a `functions` entry when its function is at or under the cap, is exempt, or
+  exists in no `.go` file of the directory, whatever its tags.
 - Raising an entry, adding one, or lowering `judged_laws` needs
   `baseline --accept-regression --reason <text> --owner <handle>` and a PR that carries the
   `protocol-change` label. The flag records the change under `regressions` in the file. `gate`
@@ -809,9 +825,10 @@ between baseline and run, so a configuration edit cannot quietly shrink what is 
   records only if every entry equals what this run measures (a `functions` value within 0.01;
   counts, percentages and uncovered-statement counts exactly), no entry exists for anything the
   run measures within the line, and `judged_laws` equals the run's count. That is what
-  `baseline --init` writes on that commit, so it is the only first ledger that passes. An entry
-  for a function the run does not measure (§6.2) is carried, and the first-ledger check does not
-  apply to it on that run; it applies on a run that measures the function. Any entry
+  `baseline --init` writes on that commit, so it is the only first ledger that passes. The rule
+  runs on the ledger leg, and every entry is for a function, file or package that leg measures:
+  an entry for one it does not measure fails, so a first ledger carries no allowance for a
+  function the ledger leg cannot measure. Any entry
   above its measured value fails, so a hand-written ledger cannot carry extra allowance. A kind
   that the base copy lacks (the tier 2 `survivors` kind, recorded later) is a first ledger for
   that kind and is checked the same way against the run that recorded it.
@@ -1431,7 +1448,8 @@ CI rules (carried from Rust-TOPS's lessons):
   macOS leg and `_linux.go` code on the Ubuntu legs; a repo adds a leg, or a `deep` matrix entry,
   for any other build it wants measured. The kit ships no Windows leg, so a `_windows.go` function
   is not measured in any report: it is counted on every run and held only to the complexity
-  ceiling of §6.2.
+  ceiling of §6.2. Under `ratchet` one of the builds is the ledger leg (§6.7): the other legs run
+  and report, and their ratchet judgment is `skip`.
 - **No `law-diff` job in the adopter drop-in.** An adopter has no law files to diff. The risk on
   the adopter's side is an edit to the files that set the gate, so the drop-in ships a CODEOWNERS
   fragment covering `go-tops.yaml`, `.golangci.yml`, `.go-tops/`, `go-tops.lock`, `tools/` and
@@ -1458,8 +1476,8 @@ CI rules (carried from Rust-TOPS's lessons):
 |---|---|
 | `init --class <c>` | Writes `go-tops.yaml`, `go-tops.lock`, `tools/go.mod` with its pins, the adopter's `.golangci.yml` (style only), the workflow, the CODEOWNERS fragment, `justfile` and the adoption record `GO-TOPS.md`. It writes no laws config: the kit embeds it. Where `AGENTS.md` exists it writes only between `<!-- go-tops:begin -->` and `<!-- go-tops:end -->`, replacing the block on a re-run and appending the pair when absent; one marker without the other is a configuration error. Where `AGENTS.md` is absent it creates the file with the block. Refuses to overwrite any other existing file without `--force`. |
 | `check` | Validates `go-tops.yaml` against the **JSON Schema** (full validation, an improvement over Rust-TOPS's partial checks), plus semantic checks: protocol id, non-empty version, module name, language floor ≤ current, `gates.crap.cap` not above the class column of §5.2 and `gates.coverage.statements_floor` not below it (a class with no column takes the cap 8 and the floor 90% of §5.2), an `enabled: false` without a `reason`, a disabled `gates.crap` or `gates.mutation` without an `expires` that has not passed, an `enabled` key on `gates.hygiene`, `gates.tests` or `gates.coverage`, every `laws.required` ID in the catalog, applying to the class, with a reader and at tier 1 or below, every exemption well formed and unexpired (§6.8), every entry of `.go-tops/survivors.yaml` valid against `survivorEntry` and every entry of `.go-tops/acks.yaml` valid against `ackEntry` in `schema/core.schema.json` (§6.4, §3.3), `go-tops.lock` valid against `schema/lock.schema.json` (§10), `enforce: advisory` carrying the `advisory` key (reason, owner, an `expires` that has not passed), and under `ratchet` the baseline file exists and is clean against `HEAD`. |
-| `baseline` | Writes `.go-tops/baseline.json` (§6.7), the only command that does. `--init` measures and writes the first ledger when the tests are green and every feeding layer produced non-empty output (thresholds may be red); `--init --kind survivors` records the tier 2 survivor counts the same way. A plain `baseline` only lowers entries and removes paid ones. `--accept-regression --reason <text> --owner <handle>` is the one way to raise an entry or lower `judged_laws` (the PR carries the `protocol-change` label). `--rename <old-key> <new-key>` moves one key. Refused under `advisory`, and `--init` is refused when a ledger exists. |
-| `gate` | Runs every enabled layer at or below `--max-tier` (default 1), in order, each judged (§3.5), laws last. Options: `--max-tier N`, `--fail-fast`, `--dry-run` (refused in CI), `--base <ref>`, `--json`, `--only <layer>` (a range that leaves a required law out ends `partial` and is refused in CI). A mapped tool that is missing is `tool-missing` and exits 1. Exit codes: §12.2. |
+| `baseline` | Writes `.go-tops/baseline.json` (§6.7), the only command that does. `--init` measures and writes the first ledger, with the build it ran under, when the tests are green and every feeding layer produced non-empty output (thresholds may be red); `--init --kind survivors` records the tier 2 survivor counts the same way. A plain `baseline` only lowers entries and removes paid ones. `--accept-regression --reason <text> --owner <handle>` is the one way to raise an entry or lower `judged_laws` (the PR carries the `protocol-change` label). `--rename <old-key> <new-key>` moves one key. Refused under `advisory`, and `--init` is refused when a ledger exists. Every write after `--init` runs on the ledger leg, the run whose build equals the `build` the file records (§6.7); on any other leg it exits 1 and names the ledger build. |
+| `gate` | Runs every enabled layer at or below `--max-tier` (default 1), in order, each judged (§3.5), laws last. Options: `--max-tier N`, `--fail-fast`, `--dry-run` (refused in CI), `--base <ref>`, `--json`, `--only <layer>` (a range that leaves a required law out ends `partial` and is refused in CI). A mapped tool that is missing is `tool-missing` and exits 1. Under `ratchet` the judgment against the ledger is made on the ledger leg only and is `skip` elsewhere (§6.7). Exit codes: §12.2. |
 | `laws [list \| run \| explain G-NN]` | Lists the catalog with readers, runs the laws layer alone, explains a law. |
 | `report [--format text \| json \| junit \| sarif]` | Renders the last report. |
 | `lock [--verify \| --update]` | Verifies or updates tool pins (§10). `--verify` reads the lock, valid against `schema/lock.schema.json`, then reads each module tool's version with `go version -m`, compares each downloaded binary's SHA-256, and compares `go env GOVERSION` with the pinned toolchain. `--update` is a reviewed change, never run in CI. |
@@ -1508,6 +1526,9 @@ CI keeps the block identical to the file and validates the file against the sche
   "duration_ms": 184211,
   "vuln_db_timestamp": "2026-11-17T09:12:44Z",
   "layer_counts": { "enabled_in_range": 5, "ran": 5 },
+  "ratchet": { "outcome": "pass",
+    "ledger_build": { "goos": "linux", "goarch": "amd64", "tags": [], "cgo_enabled": true },
+    "run_build":    { "goos": "linux", "goarch": "amd64", "tags": [], "cgo_enabled": true } },
   "exemptions": [
     { "path": "internal/wire/dispatch.go", "symbol": "Server.handleOp", "layer": "crap", "shape": "table-switch",
       "reason": "opcode dispatch, every arm is one call; stays a table or answers to the cap",
@@ -1624,6 +1645,10 @@ Report rules:
   and the layer is `fail`, never `not-run` (§3.4, rule 5). The error form is valid only with
   outcome `fail`, and its text has a non-space character. `exemptions` lists every exemption in
   force on the day of the run, as the records of §6.8.
+- `ratchet` appears only under `enforce: ratchet`. It is the ratchet judgment of §6.7: `outcome`
+  is `pass` or `fail` on the ledger leg and `skip` on any other, `ledger_build` is the `build`
+  the baseline records and `run_build` is the build of this run. `skip` is exactly the case in
+  which the two differ, and it never counts as `pass`.
 - The summary's `exit_code` is 0 or 1: a run refused before any layer runs writes no report
   (§12.2). `outcome` is the outcome the run would have under `hard` and is never rewritten.
   `enforced` is `false` exactly when `enforce` is `advisory`: then `exit_code` is 0 whatever the
@@ -1769,7 +1794,8 @@ wrong; the config wins.
 32. **The lock pins the executable:** an entry with `extract` carries `executable_sha256` per platform, and the gate and `lock --verify` compare the installed executable with it, because the archive hash cannot verify an installed file. (§10) *New in 0.4.2.*
 33. **Strict YAML:** the files `check` reads are strict YAML, so one text has one meaning in every reader. (§9) *New in 0.4.2.*
 34. **Hygiene details are typed:** the hygiene layer reports `golangci_lint`, `findings` and one object per check of gate 1 (`tidy`, `verify`, `toolchain`, `format`, `lint`, `vulnerabilities`, `licenses`), each with its `outcome`, or `{error}` when it measured nothing. (§12.3) *New in 0.4.2.*
-35. **Files outside the run's build are not measured, never passed:** the CRAP layer scores the production functions in files the run compiles, counts the rest in the report (`not_measured`), still holds each to the complexity ceiling, and carries a ledger entry for one unchanged. Identity stays computed over every `.go` file. (§6.2, §6.7, §12.3) *New in 0.4.3.*
+35. **Files outside the run's build are not measured, never passed:** the CRAP layer scores the production functions in files the run compiles, counts the rest in the report (`not_measured`) and still holds each to the complexity ceiling. Identity stays computed over every `.go` file. (§6.2, §12.3) *New in 0.4.3.*
+36. **The ledger leg:** the baseline records its build, only the run with that build writes it or judges the ratchet, every entry of a first ledger is measured there, and the other legs report the ratchet judgment as `skip`, never `pass`. A function the ledger leg does not compile has no entry and takes a `crap` exemption. (§6.7, §12.1, §12.3) *New in 0.4.3.*
 
 ---
 

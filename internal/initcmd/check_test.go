@@ -16,7 +16,7 @@ import (
 // writes one (M2, SPEC-m1 B6). The first test therefore commits a minimal empty
 // ledger, a stand-in for baseline --init that init never writes itself.
 
-const emptyLedger = "{\"ledger\":{},\"judged_laws\":0}\n"
+const emptyLedger = "{\"build\":{\"goos\":\"linux\",\"goarch\":\"amd64\",\"tags\":[],\"cgo_enabled\":true},\"ledger\":{},\"judged_laws\":0}\n"
 
 func fixedNow() time.Time { return time.Date(2026, 11, 17, 15, 4, 5, 0, time.UTC) }
 

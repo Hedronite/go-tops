@@ -81,6 +81,31 @@
       ],
       "format": "date-time"
     },
+    "ratchet": {
+      "description": "The ratchet judgment of a run under enforce: ratchet (§6.7). pass or fail on the ledger leg, where run_build equals ledger_build; skip on any other leg, never pass. Absent under hard and advisory.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "outcome",
+        "ledger_build",
+        "run_build"
+      ],
+      "properties": {
+        "outcome": {
+          "enum": [
+            "pass",
+            "fail",
+            "skip"
+          ]
+        },
+        "ledger_build": {
+          "$ref": "core.schema.json#/$defs/build"
+        },
+        "run_build": {
+          "$ref": "core.schema.json#/$defs/build"
+        }
+      }
+    },
     "layer_counts": {
       "type": "object",
       "additionalProperties": false,
@@ -296,6 +321,25 @@
     }
   },
   "allOf": [
+    {
+      "if": {
+        "required": [
+          "enforce"
+        ],
+        "properties": {
+          "enforce": {
+            "const": "ratchet"
+          }
+        }
+      },
+      "else": {
+        "not": {
+          "required": [
+            "ratchet"
+          ]
+        }
+      }
+    },
     {
       "if": {
         "properties": {
