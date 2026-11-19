@@ -161,9 +161,11 @@ func judgeInput(env *gate.Env, run gobuild.Build, ps Paths) (Input, error) {
 // recorded build and reading the functions from the source: its functions, its files
 // and its packages. It compiles nothing, because the other build may need a C
 // toolchain this leg does not have. A leg that is not the ledger leg judges no
-// ledger entry, so when the source cannot be read the sets are empty, which holds
-// every function and finding to the cap and the hard rules on this leg rather than
-// carry any on a guess, and the reason is kept for the report.
+// ledger entry, so when the source cannot be read the sets are empty. That fails
+// closed: no function, finding or package is known to be the ledger build's, so this
+// leg holds each to the cap, the hard rules and the floor, and the layers that carry
+// them (crap, hygiene, coverage) fail on what the ledger would have held. The ratchet
+// itself stays a skip, and the reason is kept for the report.
 func ledgerSources(in *Input, dir string) {
 	sel, err := crap.Select(dir, in.Ledger.Build)
 	if err == nil {

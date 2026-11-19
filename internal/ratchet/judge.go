@@ -98,8 +98,9 @@ type Input struct {
 	LedgerFiles    map[string]bool
 	LedgerPackages map[string]bool
 	// LedgerUnread is why those three sets are empty when the source of the ledger
-	// build could not be read. The leg then holds everything to the cap and skips the
-	// ratchet, as any leg that is not the ledger leg does.
+	// build could not be read. The ratchet is still a skip, as on any leg that is not
+	// the ledger leg, but nothing is known to be the ledger build's, so the leg holds
+	// everything to the cap, the hard rules and the floor, and the layers fail on it.
 	LedgerUnread string
 }
 

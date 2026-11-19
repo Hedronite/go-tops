@@ -102,10 +102,13 @@ func TestOtherLegStillHoldsWhatOnlyItCompiles(t *testing.T) {
 	}
 }
 
-// When what the ledger build compiles cannot be read at all, the leg does not
-// judge: the ratchet is a skip that says why, and the leg holds every function to
-// the cap rather than carry any of them on a guess. It never fails the ratchet.
-func TestOtherLegThatCannotReadTheLedgerSourcesSkipsAndSaysWhy(t *testing.T) {
+// When what the ledger build compiles cannot be read at all, the leg does not judge
+// the ratchet: it is a skip that says why. It fails closed on everything else: with
+// no function known to be the ledger build's, the leg holds every function over the
+// cap to the cap rather than carry any of them on a guess, so the CRAP layer fails
+// on the legacy function that the ledger would have held. The failure is the CRAP
+// layer's, never the ratchet's.
+func TestOtherLegThatCannotReadTheLedgerSourcesSkipsTheRatchetAndFailsCrapClosed(t *testing.T) {
 	probe := legacyProject(t)
 	host, err := gobuild.Resolve(probe.dir, tests.Build)
 	if err != nil {
@@ -137,5 +140,8 @@ func TestOtherLegThatCannotReadTheLedgerSourcesSkipsAndSaysWhy(t *testing.T) {
 	}
 	if !strings.Contains(run.Text, "could not find what the ledger build compiles") {
 		t.Errorf("the run does not say why it could not read the ledger build's sources:\n%s", run.Text)
+	}
+	if o := outcomes(run); o["crap"] != "fail" || run.ExitCode != 1 || !strings.Contains(run.Text, "example.com/m/low.Big") {
+		t.Errorf("layers %v exit %d, want crap fail naming low.Big: the leg cannot say the ledger build carries it\n%s", o, run.ExitCode, run.Text)
 	}
 }
