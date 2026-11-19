@@ -15,7 +15,8 @@ name: ci
 # to end test of the adoption path (GO_TOPS.md section 6.7), which needs the
 # network and takes minutes, so it does not belong on every push. Every job says
 # which events it runs on. The `skills` job runs the tests of the agent skills,
-# which need Nushell, on both platforms of every push and pull request.
+# which need Nushell, on both platforms of every push and pull request. The
+# `bootstrap` job proves the drop-in's first-ledger route on ubuntu-latest.
 
 on:
   pull_request:
@@ -266,6 +267,51 @@ jobs:
             fi
           done
 
+  # The first-ledger bootstrap of the drop-in (internal/initcmd/bootstrap_ci_test.go,
+  # build tag `bootstrap`), run on the runner the ledger leg uses. The test adopts a
+  # scratch module with this pull request's gotops and runs the template's own steps
+  # as a pull_request, each step's `if` evaluated for that event: with no ledger the
+  # ubuntu leg writes one on linux/amd64 and uploads it and the run fails; the ledger
+  # is committed as uploaded and the next run passes with the ratchet judged; a
+  # ledger planted for another build fails the judge. It reads the network and runs
+  # the template's golangci-lint install step for real, so the linter is not
+  # installed here. The log must show the test passing: a run that found none, or
+  # one that skipped it, is a failure.
+  bootstrap:
+    name: bootstrap (ubuntu)
+    if: ${{ github.event_name == 'pull_request' || github.event_name == 'push' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version: ${{ env.CURRENT_GO }}
+          cache-dependency-path: |
+            go.sum
+            tools/go.sum
+      - name: tool versions
+        run: |
+          set -euo pipefail
+          jq --version
+          git --version
+      - name: first-ledger bootstrap
+        env:
+          CGO_ENABLED: "1"
+          GOTOOLCHAIN: local
+        shell: bash
+        run: |
+          set -euo pipefail
+          log="${RUNNER_TEMP}/bootstrap.log"
+          go test -v -tags bootstrap -run TestFirstLedger -timeout 20m -count=1 ./internal/initcmd 2>&1 | tee "${log}"
+          if ! grep -q -- "--- PASS: TestFirstLedgerBootstrapOnAPullRequest " "${log}"; then
+            echo "::error::no '--- PASS' line for TestFirstLedgerBootstrapOnAPullRequest: the test did not run, or it was skipped"
+            exit 1
+          fi
+
   ci:
     name: ci
     # Runs even when a dependency failed, was skipped or was cancelled, and
@@ -273,7 +319,7 @@ jobs:
     # runs on the events the gate runs on; a scheduled or dispatched run has no
     # gate to wait for.
     if: ${{ always() && (github.event_name == 'pull_request' || github.event_name == 'push') }}
-    needs: [gate, skills]
+    needs: [gate, skills, bootstrap]
     runs-on: ubuntu-latest
     steps:
       - name: every ci job succeeded
