@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	gotops "github.com/Hedronite/go-tops"
 )
@@ -101,6 +102,19 @@ type Exemption struct {
 	Reason  string `json:"reason"`
 	Owner   string `json:"owner"`
 	Expires string `json:"expires"`
+}
+
+// Line is the exemption as one printed line, with its expiry (§6.8): the text
+// output prints one for every exemption in force, on every run.
+func (e Exemption) Line() string {
+	line := "exemption in force: layer " + e.Layer + " path " + e.Path
+	if e.Symbol != "" {
+		line += " symbol " + e.Symbol
+	}
+	if e.Shape != "" {
+		line += " shape " + e.Shape
+	}
+	return line + " expires " + e.Expires + " owner " + e.Owner + ": " + strings.Join(strings.Fields(e.Reason), " ")
 }
 
 // Layer is one layer in range with its outcome (§3.3).

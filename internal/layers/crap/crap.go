@@ -10,12 +10,16 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
+	"time"
 
 	"github.com/Hedronite/go-tops/internal/crap"
+	"github.com/Hedronite/go-tops/internal/exempt"
 	"github.com/Hedronite/go-tops/internal/gate"
 	"github.com/Hedronite/go-tops/internal/gobuild"
 	"github.com/Hedronite/go-tops/internal/layers/tests"
+	"github.com/Hedronite/go-tops/internal/report"
 )
 
 // ID is the layer's ID.
@@ -54,14 +58,21 @@ func (Layer) Run(_ context.Context, env *gate.Env) gate.Result {
 	if err != nil {
 		return failure(err)
 	}
-	return judge(rep, cc.Cap)
+	return judge(rep, cc.Cap, env.Config.Exemptions, time.Now())
 }
 
 // judge turns a scored module into the layer's result. Under every mode the
 // layer reports honestly what is over the cap; what a mode does with it is the
-// runner's and the ratchet's (§6.7).
-func judge(rep crap.Report, limit float64) gate.Result {
-	measured, unmeasured := rep.Over(limit)
+// runner's and the ratchet's (§6.7). The exemptions in force (§6.8) take the
+// functions they cover out of the cap check: those are still scored and listed
+// under exempt. An entry that matches nothing fails the layer, naming it.
+func judge(rep crap.Report, limit float64, exemptions []report.Exemption, now time.Time) gate.Result {
+	m := exempt.Match(exemptions, exemptFuncs(rep), now)
+	covered := make(map[string]bool, len(m.Exempt))
+	for _, f := range m.Exempt {
+		covered[f.Key] = true
+	}
+	measured, unmeasured := over(rep, limit, covered)
 	violations := make([]any, 0, len(measured)+len(unmeasured))
 	for _, f := range measured {
 		violations = append(violations, violation(f.Key, f.File, f.Comp, f.Cov*100, f.CRAP))
@@ -73,15 +84,87 @@ func judge(rep crap.Report, limit float64) gate.Result {
 		violations = append(violations, violation(f.Key, f.File, f.Comp, nil, nil))
 	}
 	details := map[string]any{"cap": limit, "violations": violations, "not_measured": len(rep.NotMeasured)}
-	note := notMeasuredNote(len(rep.NotMeasured), rep.PlatformLoads)
-	if len(violations) == 0 {
-		return gate.Result{Outcome: gate.Pass, Reason: note, Details: details}
+	if rows := exemptRows(rep, covered); len(rows) > 0 {
+		details["exempt"] = rows
 	}
-	reason := fmt.Sprintf("%d function(s) over the CRAP cap %g: %s", len(violations), limit, list(measured, unmeasured))
-	if note != "" {
-		reason += "; " + note
+	reason := joinReasons(
+		violationNote(measured, unmeasured, limit),
+		problemNote(m.Problems),
+		lostNote(m.Lost),
+		notMeasuredNote(len(rep.NotMeasured), rep.PlatformLoads),
+	)
+	outcome := gate.Pass
+	if len(violations) > 0 || len(m.Problems) > 0 {
+		outcome = gate.Fail
 	}
-	return gate.Result{Outcome: gate.Fail, Reason: reason, Details: details}
+	return gate.Result{Outcome: outcome, Reason: reason, Details: details}
+}
+
+// exemptFuncs lists every production function for the exemption matcher,
+// measured or not: a path matches production files whatever their build tags.
+func exemptFuncs(rep crap.Report) []exempt.Func {
+	out := make([]exempt.Func, 0, len(rep.Measured)+len(rep.NotMeasured))
+	for _, f := range rep.Measured {
+		out = append(out, exempt.Func{Key: f.Key, File: f.File, Recv: f.Recv, Name: f.Name, Table: f.Table})
+	}
+	for _, f := range rep.NotMeasured {
+		out = append(out, exempt.Func{Key: f.Key, File: f.File, Recv: f.Recv, Name: f.Name, Table: f.Table})
+	}
+	return out
+}
+
+// over is the functions over the cap that no exemption covers.
+func over(rep crap.Report, limit float64, covered map[string]bool) ([]crap.Function, []crap.NotMeasured) {
+	m, n := rep.Over(limit)
+	m = slices.DeleteFunc(m, func(f crap.Function) bool { return covered[f.Key] })
+	n = slices.DeleteFunc(n, func(f crap.NotMeasured) bool { return covered[f.Key] })
+	return m, n
+}
+
+// exemptRows are the covered functions as crapFunction rows, scored (null for a
+// function that is not measured), in the scorer's order.
+func exemptRows(rep crap.Report, covered map[string]bool) []any {
+	var rows []any
+	for _, f := range rep.Measured {
+		if covered[f.Key] {
+			rows = append(rows, violation(f.Key, f.File, f.Comp, f.Cov*100, f.CRAP))
+		}
+	}
+	for _, f := range rep.NotMeasured {
+		if covered[f.Key] {
+			rows = append(rows, violation(f.Key, f.File, f.Comp, nil, nil))
+		}
+	}
+	return rows
+}
+
+func violationNote(measured []crap.Function, unmeasured []crap.NotMeasured, limit float64) string {
+	if len(measured)+len(unmeasured) == 0 {
+		return ""
+	}
+	return fmt.Sprintf("%d function(s) over the CRAP cap %g: %s", len(measured)+len(unmeasured), limit, list(measured, unmeasured))
+}
+
+func problemNote(ps []exempt.Problem) string {
+	msgs := make([]string, 0, len(ps))
+	for _, p := range ps {
+		msgs = append(msgs, p.Message)
+	}
+	return strings.Join(msgs, "; ")
+}
+
+// lostNote names each table-switch exemption whose function stopped being a
+// table: it answers to the cap now (§6.8).
+func lostNote(ls []exempt.Lost) string {
+	msgs := make([]string, 0, len(ls))
+	for _, l := range ls {
+		msgs = append(msgs, fmt.Sprintf("the table-switch exemption for %s no longer holds: it is not table-shaped, so it answers to the cap", l.Func.Key))
+	}
+	return strings.Join(msgs, "; ")
+}
+
+func joinReasons(parts ...string) string {
+	return strings.Join(slices.DeleteFunc(parts, func(s string) bool { return s == "" }), "; ")
 }
 
 // violation is one crapFunction row. cov and score are nil for a function that

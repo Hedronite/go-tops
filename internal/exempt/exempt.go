@@ -34,8 +34,12 @@ type Func struct {
 	// Recv is the receiver type name without * or type parameters, "" for a
 	// package-level function. The symbol of an entry is Name or Recv.Name.
 	Recv string
-	// Name is the function name.
+	// Name is the function name, or the variable a package-level literal
+	// initializes.
 	Name string
+	// Table reports whether the function has the table shape of §6.8. The CRAP
+	// scorer computes it from the source on every run.
+	Table bool
 }
 
 func (f Func) symbol() string {
@@ -83,31 +87,33 @@ func Glob(pattern, name string) bool {
 	return globElems(strings.Split(pattern, "/"), strings.Split(name, "/"))
 }
 
+// globElems matches the elements of a pattern against the elements of a name.
 func globElems(pat, name []string) bool {
-	for len(pat) > 0 {
-		if pat[0] == globAnyDirs {
-			for len(pat) > 1 && pat[1] == globAnyDirs {
-				pat = pat[1:]
-			}
-			if len(pat) == 1 {
-				return len(name) > 0
-			}
-			for i := 0; i <= len(name); i++ {
-				if globElems(pat[1:], name[i:]) {
-					return true
-				}
-			}
-			return false
-		}
-		if len(name) == 0 {
-			return false
-		}
-		if ok, err := path.Match(pat[0], name[0]); err != nil || !ok {
-			return false
-		}
-		pat, name = pat[1:], name[1:]
+	switch {
+	case len(pat) == 0:
+		return len(name) == 0
+	case pat[0] == globAnyDirs:
+		return globAny(pat[1:], name)
+	case len(name) == 0:
+		return false
 	}
-	return len(name) == 0
+	ok, err := path.Match(pat[0], name[0])
+	return err == nil && ok && globElems(pat[1:], name[1:])
+}
+
+// globAny matches what follows a `**`. As the last element it takes one or more
+// elements; before others it takes zero or more, so repeated `**` need no
+// special case.
+func globAny(rest, name []string) bool {
+	if len(rest) == 0 {
+		return len(name) > 0
+	}
+	for i := 0; i <= len(name); i++ {
+		if globElems(rest, name[i:]) {
+			return true
+		}
+	}
+	return false
 }
 
 // InForce returns the entries in force on the day of today (UTC): those whose
@@ -134,14 +140,7 @@ func Count(entries []report.Exemption, today time.Time) int {
 func Lines(entries []report.Exemption, today time.Time) []string {
 	var out []string
 	for _, e := range InForce(entries, today) {
-		line := "exemption in force: layer " + e.Layer + " path " + e.Path
-		if e.Symbol != "" {
-			line += " symbol " + e.Symbol
-		}
-		if e.Shape != "" {
-			line += " shape " + e.Shape
-		}
-		out = append(out, fmt.Sprintf("%s expires %s owner %s: %s", line, e.Expires, e.Owner, strings.Join(strings.Fields(e.Reason), " ")))
+		out = append(out, e.Line())
 	}
 	return out
 }
@@ -152,11 +151,13 @@ func Lines(entries []report.Exemption, today time.Time) []string {
 //
 // An entry whose path matches no file that holds a function, or whose symbol
 // names no function in the files the path matches, is a Problem. An entry with
-// `shape: table-switch` covers a function only while tableShape says it is
-// table-shaped; it is asked on every call, and a nil tableShape finds no
-// function table-shaped. Entries of any other layer exempt nothing from CRAP
-// (the mutation layer matches its own, from M4) but are counted.
-func Match(entries []report.Exemption, funcs []Func, today time.Time, tableShape func(Func) bool) Result {
+// `shape: table-switch` covers a function only while the function is
+// table-shaped (its Table flag, which the scorer sets on every run). Entries of
+// any other layer exempt nothing from CRAP (the mutation layer matches its own,
+// from M4) but are counted. funcs holds every production function, whether or
+// not the run's build compiled it: a path matches production files whatever
+// their build tags (§6.8).
+func Match(entries []report.Exemption, funcs []Func, today time.Time) Result {
 	live := InForce(entries, today)
 	r := Result{Count: len(live)}
 	exempt := make([]bool, len(funcs))
@@ -171,7 +172,7 @@ func Match(entries []report.Exemption, funcs []Func, today time.Time, tableShape
 			continue
 		}
 		for _, i := range covered {
-			if e.Shape == shapeTable && (tableShape == nil || !tableShape(funcs[i])) {
+			if e.Shape == shapeTable && !funcs[i].Table {
 				lostBy[i] = append(lostBy[i], e)
 				continue
 			}

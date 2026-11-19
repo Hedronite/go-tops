@@ -112,7 +112,7 @@ func TestMatchPathCoversEveryFunctionInTheFiles(t *testing.T) {
 		fn("internal/wire/dispatch.go", "Server", "B"),
 		fn("internal/wire/other.go", "", "C"),
 	}
-	r := Match([]report.Exemption{entry(nil)}, funcs, day, nil)
+	r := Match([]report.Exemption{entry(nil)}, funcs, day)
 	if want := []string{"internal/wire/dispatch.go|A", "internal/wire/dispatch.go|Server.B"}; !slices.Equal(keys(r.Exempt), want) {
 		t.Errorf("exempt = %v, want %v", keys(r.Exempt), want)
 	}
@@ -135,7 +135,7 @@ func TestMatchSymbolForms(t *testing.T) {
 		{"Server.handleOp", []string{"internal/wire/dispatch.go|Server.handleOp"}},
 		{"Client.handleOp", []string{"internal/wire/dispatch.go|Client.handleOp"}},
 	} {
-		r := Match([]report.Exemption{entry(func(e *report.Exemption) { e.Symbol = c.symbol })}, funcs, day, nil)
+		r := Match([]report.Exemption{entry(func(e *report.Exemption) { e.Symbol = c.symbol })}, funcs, day)
 		if !slices.Equal(keys(r.Exempt), c.want) {
 			t.Errorf("symbol %q: exempt = %v, want %v", c.symbol, keys(r.Exempt), c.want)
 		}
@@ -148,7 +148,7 @@ func TestMatchSymbolStaysInItsFiles(t *testing.T) {
 		fn("internal/wire/dispatch.go", "", "F"),
 		fn("internal/wire/other.go", "", "F"),
 	}
-	r := Match([]report.Exemption{entry(func(e *report.Exemption) { e.Symbol = "F" })}, funcs, day, nil)
+	r := Match([]report.Exemption{entry(func(e *report.Exemption) { e.Symbol = "F" })}, funcs, day)
 	if want := []string{"internal/wire/dispatch.go|F"}; !slices.Equal(keys(r.Exempt), want) {
 		t.Errorf("exempt = %v, want %v", keys(r.Exempt), want)
 	}
@@ -159,7 +159,7 @@ func TestMatchSymbolStaysInItsFiles(t *testing.T) {
 func TestMatchRepeatedNames(t *testing.T) {
 	a, b := fn("p/a.go", "", "init"), fn("p/a.go", "", "init")
 	a.Key, b.Key = "p.init#1", "p.init#2"
-	r := Match([]report.Exemption{entry(func(e *report.Exemption) { e.Path, e.Symbol = "p/*.go", "init" })}, []Func{a, b}, day, nil)
+	r := Match([]report.Exemption{entry(func(e *report.Exemption) { e.Path, e.Symbol = "p/*.go", "init" })}, []Func{a, b}, day)
 	if want := []string{"p.init#1", "p.init#2"}; !slices.Equal(keys(r.Exempt), want) {
 		t.Errorf("exempt = %v, want %v", keys(r.Exempt), want)
 	}
@@ -173,7 +173,7 @@ func TestMatchOverlapListsOnce(t *testing.T) {
 		entry(func(e *report.Exemption) { e.Path = "a.go" }),
 		entry(func(e *report.Exemption) { e.Path, e.Symbol = "*.go", "A" }),
 	}
-	r := Match(es, funcs, day, nil)
+	r := Match(es, funcs, day)
 	if want := []string{"a.go|Z", "a.go|A"}; !slices.Equal(keys(r.Exempt), want) {
 		t.Errorf("exempt = %v, want %v", keys(r.Exempt), want)
 	}
@@ -194,7 +194,7 @@ func TestMatchUnmatchedEntriesFailNamingTheEntry(t *testing.T) {
 		{"symbol in another file", func(e *report.Exemption) { e.Path, e.Symbol = "internal/wire/other.go", "Server.handleOp" }, []string{"internal/wire/other.go", "no production file"}},
 	} {
 		es := []report.Exemption{entry(c.mod)}
-		r := Match(es, funcs, day, nil)
+		r := Match(es, funcs, day)
 		if len(r.Problems) != 1 {
 			t.Errorf("%s: problems = %v, want one", c.name, r.Problems)
 			continue
@@ -217,7 +217,7 @@ func TestMatchUnmatchedEntriesFailNamingTheEntry(t *testing.T) {
 // A path-only entry whose files hold no function covers nothing: the entry
 // has outlived its code.
 func TestMatchPathOnlyEntryWithNoFunctionsFails(t *testing.T) {
-	r := Match([]report.Exemption{entry(nil)}, nil, day, nil)
+	r := Match([]report.Exemption{entry(nil)}, nil, day)
 	if len(r.Problems) != 1 {
 		t.Errorf("problems = %v, want one", r.Problems)
 	}
@@ -231,7 +231,7 @@ func TestMatchSkipsExpiredEntries(t *testing.T) {
 		entry(func(e *report.Exemption) { e.Expires = "2026-11-18" }),
 		entry(func(e *report.Exemption) { e.Path = "gone.go"; e.Expires = "2026-01-01" }),
 	}
-	r := Match(es, funcs, day, nil)
+	r := Match(es, funcs, day)
 	if len(r.Exempt) != 0 || len(r.Problems) != 0 || r.Count != 0 {
 		t.Errorf("exempt %v, problems %v, count %d: want none", keys(r.Exempt), r.Problems, r.Count)
 	}
@@ -242,7 +242,7 @@ func TestMatchSkipsExpiredEntries(t *testing.T) {
 func TestMatchLeavesMutationEntriesAlone(t *testing.T) {
 	funcs := []Func{fn("internal/legacy/x.go", "", "A")}
 	es := []report.Exemption{entry(func(e *report.Exemption) { e.Path, e.Layer = "internal/legacy/**", "mutation" })}
-	r := Match(es, funcs, day, nil)
+	r := Match(es, funcs, day)
 	if len(r.Exempt) != 0 || len(r.Problems) != 0 {
 		t.Errorf("exempt %v, problems %v: a mutation entry acted on CRAP", keys(r.Exempt), r.Problems)
 	}
@@ -252,20 +252,20 @@ func TestMatchLeavesMutationEntriesAlone(t *testing.T) {
 }
 
 // §6.8: with shape: table-switch the shape is checked on every run. A function
-// that stopped being a table loses the exemption and answers to the cap.
+// that stopped being a table loses the exemption and answers to the cap. The
+// shape is the function's own flag (G1 computes it from the source each run).
 func TestMatchTableSwitchChecksTheShape(t *testing.T) {
 	f := fn("internal/wire/dispatch.go", "Server", "handleOp")
+	f.Table = true
 	es := []report.Exemption{entry(func(e *report.Exemption) { e.Symbol, e.Shape = "Server.handleOp", "table-switch" })}
 
-	var asked []string
-	table := func(f Func) bool { asked = append(asked, f.Key); return true }
-	r := Match(es, []Func{f}, day, table)
-	if !slices.Equal(keys(r.Exempt), []string{f.Key}) || len(r.Lost) != 0 || !slices.Equal(asked, []string{f.Key}) {
-		t.Errorf("table-shaped: exempt %v, lost %v, asked %v", keys(r.Exempt), r.Lost, asked)
+	r := Match(es, []Func{f}, day)
+	if !slices.Equal(keys(r.Exempt), []string{f.Key}) || len(r.Lost) != 0 {
+		t.Errorf("table-shaped: exempt %v, lost %v", keys(r.Exempt), r.Lost)
 	}
 
-	grown := func(Func) bool { return false }
-	r = Match(es, []Func{f}, day, grown)
+	f.Table = false
+	r = Match(es, []Func{f}, day)
 	if len(r.Exempt) != 0 {
 		t.Errorf("a function that grew a branch kept the exemption: %v", keys(r.Exempt))
 	}
@@ -280,13 +280,13 @@ func TestMatchTableSwitchChecksTheShape(t *testing.T) {
 	}
 }
 
-// The shape check belongs to entries that ask for it, and to none else.
-func TestMatchShapeCheckedOnlyForShapedEntries(t *testing.T) {
+// The shape belongs to entries that ask for it, and to none else: a function
+// that is not a table keeps an exemption that names no shape.
+func TestMatchShapeIsRequiredOnlyByShapedEntries(t *testing.T) {
 	f := fn("a.go", "", "F")
-	called := false
-	r := Match([]report.Exemption{entry(func(e *report.Exemption) { e.Path = "a.go" })}, []Func{f}, day, func(Func) bool { called = true; return false })
-	if called || len(r.Exempt) != 1 {
-		t.Errorf("called %v, exempt %v: an entry without a shape was shape-checked", called, keys(r.Exempt))
+	r := Match([]report.Exemption{entry(func(e *report.Exemption) { e.Path = "a.go" })}, []Func{f}, day)
+	if len(r.Exempt) != 1 || len(r.Lost) != 0 {
+		t.Errorf("exempt %v, lost %v: an entry without a shape asked for one", keys(r.Exempt), r.Lost)
 	}
 }
 
@@ -297,7 +297,7 @@ func TestMatchLostShapeStaysExemptUnderAnotherEntry(t *testing.T) {
 		entry(func(e *report.Exemption) { e.Path, e.Symbol, e.Shape = "a.go", "F", "table-switch" }),
 		entry(func(e *report.Exemption) { e.Path = "a.go" }),
 	}
-	r := Match(es, []Func{f}, day, func(Func) bool { return false })
+	r := Match(es, []Func{f}, day)
 	if len(r.Exempt) != 1 || len(r.Lost) != 0 {
 		t.Errorf("exempt %v, lost %v", keys(r.Exempt), r.Lost)
 	}
