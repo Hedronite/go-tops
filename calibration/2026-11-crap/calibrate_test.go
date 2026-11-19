@@ -67,15 +67,16 @@ func scoreAll(t *testing.T, work string) []repoResult {
 		if !ok {
 			t.Fatalf("repos.txt: bad line %q", line)
 		}
-		fs, err := scoreModule(filepath.Join(work, name), filepath.Join(work, name+".cover"))
+		fs, ns, err := scoreModule(filepath.Join(work, name), filepath.Join(work, name+".cover"))
 		if err != nil {
 			t.Fatalf("%s: %v", name, err)
 		}
 		if len(fs) == 0 {
-			t.Fatalf("%s: the scorer found no production function", name)
+			t.Fatalf("%s: the scorer measured no production function", name)
 		}
 		slices.SortFunc(fs, func(a, b scored) int { return strings.Compare(a.Key, b.Key) })
-		rs = append(rs, repoResult{Repo: name, SHA: sha, Funcs: fs})
+		slices.SortFunc(ns, func(a, b unmeasured) int { return strings.Compare(a.Key, b.Key) })
+		rs = append(rs, repoResult{Repo: name, SHA: sha, Funcs: fs, NotMeasured: ns})
 	}
 	return rs
 }
@@ -83,9 +84,10 @@ func scoreAll(t *testing.T, work string) []repoResult {
 func writeResults(t *testing.T, out string, rs []repoResult) {
 	t.Helper()
 	type repoDoc struct {
-		Repo      string   `json:"repo"`
-		Commit    string   `json:"commit"`
-		Functions []scored `json:"functions"`
+		Repo        string       `json:"repo"`
+		Commit      string       `json:"commit"`
+		Functions   []scored     `json:"functions"`
+		NotMeasured []unmeasured `json:"not_measured"`
 	}
 	doc := struct {
 		GoVersion string    `json:"go_version"`
@@ -94,7 +96,7 @@ func writeResults(t *testing.T, out string, rs []repoResult) {
 		Repos     []repoDoc `json:"repos"`
 	}{GoVersion: runtime.Version(), Platform: runtime.GOOS + "/" + runtime.GOARCH, Caps: caps}
 	for _, r := range rs {
-		doc.Repos = append(doc.Repos, repoDoc{r.Repo, r.SHA, r.Funcs})
+		doc.Repos = append(doc.Repos, repoDoc{r.Repo, r.SHA, r.Funcs, r.NotMeasured})
 	}
 	b, err := json.MarshalIndent(doc, "", "  ")
 	if err != nil {
@@ -114,13 +116,13 @@ func crossCheck(t *testing.T, out string, rs []repoResult) {
 		t.Fatalf("cross-check repo %s is not in repos.txt", repo)
 	}
 	var b strings.Builder
-	fmt.Fprintf(&b, "| Repo | Cap | Gate violations | Scorer over cap | Agree |\n|---|---|---|---|---|\n")
+	fmt.Fprintf(&b, "| Repo | Cap | Gate violations | Scorer over cap (measured, plus not measured by complexity) | Agree |\n|---|---|---|---|---|\n")
 	for _, c := range caps {
 		got, err := gateViolations(filepath.Join(dir, fmt.Sprintf("report-%g.json", c)))
 		if err != nil {
 			t.Fatalf("cap %g: %v", c, err)
 		}
-		want := overCap(rs[i].Funcs, c)
+		want := rs[i].over(c)
 		fmt.Fprintf(&b, "| %s | %g | %d | %d | %t |\n", repo, c, got, want, got == want)
 		if got != want {
 			t.Errorf("%s at cap %g: the gate reports %d violations, the scorer %d functions over the cap", repo, c, got, want)

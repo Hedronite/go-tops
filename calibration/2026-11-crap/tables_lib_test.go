@@ -22,11 +22,38 @@ type scored struct {
 	CRAP float64 `json:"crap"`
 }
 
-// repoResult is every scored function of one repository at its pinned commit.
+// unmeasured is a production function in a file the run's build does not
+// compile (GO_TOPS.md §6.2, ruling C2). It has a complexity and no coverage, so
+// no CRAP score; it is over a cap exactly when its complexity is.
+type unmeasured struct {
+	Key   string `json:"key"`
+	File  string `json:"file"`
+	Comp  int    `json:"comp"`
+	Typed bool   `json:"typed"`
+}
+
+// repoResult is every production function of one repository at its pinned
+// commit: the ones the run measured, and the ones its build does not compile.
 type repoResult struct {
-	Repo  string
-	SHA   string
-	Funcs []scored
+	Repo        string
+	SHA         string
+	Funcs       []scored
+	NotMeasured []unmeasured
+}
+
+// functions counts every function, measured or not.
+func (r repoResult) functions() int { return len(r.Funcs) + len(r.NotMeasured) }
+
+// over counts the functions the CRAP layer fails at the cap: the measured ones
+// scoring above it and the not-measured ones whose complexity is above it.
+func (r repoResult) over(limit float64) int {
+	return overCap(r.Funcs, limit) + overNotMeasured(r.NotMeasured, limit)
+}
+
+// overByComplexity counts every function, measured or not, whose complexity
+// alone is above the limit.
+func (r repoResult) overByComplexity(limit float64) int {
+	return overByComplexity(r.Funcs, limit) + overNotMeasured(r.NotMeasured, limit)
 }
 
 // probeRepo is the probe's figure for one repository: its function count and,
@@ -50,6 +77,18 @@ func overCap(fs []scored, limit float64) int {
 	n := 0
 	for _, f := range fs {
 		if f.CRAP > limit {
+			n++
+		}
+	}
+	return n
+}
+
+// overNotMeasured counts the not-measured functions whose complexity is above
+// the limit: they fail at every coverage (§6.2).
+func overNotMeasured(ns []unmeasured, limit float64) int {
+	n := 0
+	for _, f := range ns {
+		if float64(f.Comp) > limit {
 			n++
 		}
 	}
@@ -158,30 +197,31 @@ func renderTables(rs []repoResult, probe map[string]probeRepo) string {
 }
 
 func counts(b *strings.Builder, rs []repoResult, probe map[string]probeRepo) {
-	b.WriteString("| Repo | Commit | Functions | Probe | Δ |")
+	b.WriteString("| Repo | Commit | Functions | Probe | Δ | Not measured |")
 	for _, c := range caps {
 		fmt.Fprintf(b, " Over %g | Probe | Δ |", c)
 	}
-	b.WriteString("\n|---|---|---|---|---|" + strings.Repeat("---|---|---|", len(caps)) + "\n")
+	b.WriteString("\n|---|---|---|---|---|---|" + strings.Repeat("---|---|---|", len(caps)) + "\n")
 
-	var n, pn int
+	var n, pn, nm int
 	over, pover := make([]int, len(caps)), make([]int, len(caps))
 	allProbed := true
 	for _, r := range rs {
 		p, ok := probe[r.Repo]
-		fmt.Fprintf(b, "| %s | `%.7s` | %d | %s | %s |", r.Repo, r.SHA, len(r.Funcs), cell(ok, p.Functions), cellDelta(ok, len(r.Funcs), p.Functions))
-		n += len(r.Funcs)
+		fmt.Fprintf(b, "| %s | `%.7s` | %d | %s | %s | %d |", r.Repo, r.SHA, r.functions(), cell(ok, p.Functions), cellDelta(ok, r.functions(), p.Functions), len(r.NotMeasured))
+		n += r.functions()
+		nm += len(r.NotMeasured)
 		pn += p.Functions
 		allProbed = allProbed && ok
 		for i, c := range caps {
-			k := overCap(r.Funcs, c)
+			k := r.over(c)
 			over[i] += k
 			pover[i] += p.Over[int(c)]
 			fmt.Fprintf(b, " %d | %s | %s |", k, cell(ok, p.Over[int(c)]), cellDelta(ok, k, p.Over[int(c)]))
 		}
 		b.WriteString("\n")
 	}
-	fmt.Fprintf(b, "| **all** | | **%d** | **%d** | %s |", n, pn, cellDelta(allProbed, n, pn))
+	fmt.Fprintf(b, "| **all** | | **%d** | **%d** | %s | **%d** |", n, pn, cellDelta(allProbed, n, pn), nm)
 	for i := range caps {
 		fmt.Fprintf(b, " **%d** | **%d** | %s |", over[i], pover[i], cellDelta(allProbed, over[i], pover[i]))
 	}
@@ -204,7 +244,7 @@ func alone(b *strings.Builder, rs []repoResult, probe map[string]probeRepo) {
 		allProbed = allProbed && ok
 		fmt.Fprintf(b, "| %s |", r.Repo)
 		for i, c := range caps {
-			k := overByComplexity(r.Funcs, c)
+			k := r.overByComplexity(c)
 			over[i] += k
 			pover[i] += p.CompOnly[int(c)]
 			fmt.Fprintf(b, " %d | %s | %s |", k, cell(ok, p.CompOnly[int(c)]), cellDelta(ok, k, p.CompOnly[int(c)]))

@@ -46,7 +46,9 @@ for entry in $REPOS; do
 		exit 1
 	fi
 	# The profile the gate's tests layer writes: the whole module, -coverpkg=./... .
-	if ! (cd "$W/$name" && GOFLAGS=-mod=mod go test -count=1 -coverprofile="$W/$name.cover" -coverpkg=./... ./... >"$W/$name.test.log" 2>&1); then
+	# The run of the gate's tests layer: -race, cgo on, the whole module's profile. The
+	# scorer loads the module under that same build, so the profile and the load agree.
+	if ! (cd "$W/$name" && CGO_ENABLED=1 GOFLAGS="-mod=mod -count=1" go test -race -count=1 -coverprofile="$W/$name.cover" -coverpkg=./... ./... >"$W/$name.test.log" 2>&1); then
 		echo "run.sh: tests failed in $name; the scorer needs green suites. Last lines:" >&2
 		tail -n 20 "$W/$name.test.log" >&2
 		exit 1
@@ -60,7 +62,7 @@ done
 # only the crap layer's violations are read, from the report the run wrote.
 (cd "$ROOT" && go build -o "$W/gotops" ./cmd/gotops)
 mod=$(cd "$W/$XREPO" && go list -m)
-(cd "$W/$XREPO" && "$W/gotops" init --class binary-cli --offline >/dev/null)
+(cd "$W/$XREPO" && "$W/gotops" init --class binary-cli --offline --force >/dev/null)
 for cap in 6 8 10; do
 	cat >"$W/$XREPO/go-tops.yaml" <<EOF
 protocol: "0.4.2"
@@ -82,8 +84,8 @@ gates:
     govulncheck:   { fail_on: reachable }
     deps:          { depguard: true, licenses: { allow: [MIT, Apache-2.0, BSD-3-Clause, BSD-2-Clause, ISC] } }
   tests:
-    race: false
-    shuffle: false
+    race: true
+    shuffle: true
     count: 1
   coverage:
     statements_floor: 0
