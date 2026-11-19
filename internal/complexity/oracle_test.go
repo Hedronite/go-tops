@@ -130,6 +130,8 @@ var oracleCases = []oracleCase{
 	{name: "WrapVerbHasNoOperand", comp: 2, src: `func FN() error { err := mk(); if err != nil { return fmt.Errorf("%v %w", err) }; return nil }`},
 	{name: "WrapVerbWithNoOperands", comp: 2, src: `func FN() error { err := mk(); if err != nil { return fmt.Errorf("%w") }; return nil }`},
 	{name: "WrapVerbIndexPastTheOperands", comp: 2, src: `func FN() error { err := mk(); if err != nil { return fmt.Errorf("%[3]w", err) }; return nil }`},
+	{name: "OverflowingOperandIndex", comp: 2, src: `func FN() error { err := mk(); if err != nil { return fmt.Errorf("%[9223372036854775807]*.*w", err) }; return nil }`},
+	{name: "OperandIndexPastTheLimit", comp: 2, src: `func FN() error { err := mk(); if err != nil { return fmt.Errorf("%[65537]w", err) }; return nil }`},
 	{name: "UnparsableFormat", comp: 2, src: `func FN() error { err := mk(); if err != nil { return fmt.Errorf("%[x]w", err) }; return nil }`},
 	{name: "CompareWithACall", comp: 2, src: `func FN() error { err := mk(); if err != mk() { return err }; return nil }`},
 	{name: "FunctionValueIsNotAWrapFunction", comp: 2, src: `func FN() error { f := wrap.Wrap; err := mk(); if err != nil { return f(err) }; return nil }`},
