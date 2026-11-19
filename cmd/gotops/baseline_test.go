@@ -527,7 +527,7 @@ func withInventory(t *testing.T, fns ...string) {
 	for _, f := range fns {
 		set[f] = true
 	}
-	scanInventory = func(string, string) (baseline.Inventory, error) { return stubInventory{fns: set}, nil }
+	scanInventory = func(string) (baseline.Inventory, error) { return stubInventory{fns: set}, nil }
 }
 
 func TestRenameMovesTheKeyAndNeverTheValue(t *testing.T) {
@@ -683,5 +683,53 @@ func TestPlainWriteRemovesAnExemptFunctionsEntry(t *testing.T) {
 	}
 	if got.Ledger.Functions["example.com/app/b.Beta"] != 14.5 {
 		t.Errorf("functions %v", got.Ledger.Functions)
+	}
+}
+
+// The existence set comes from internal/crap, which reads every production file
+// whatever its build tags, so a rename is checked against the real source tree.
+func TestRenameIsCheckedAgainstTheRealSourceTree(t *testing.T) {
+	fx := newFixture()
+	fx.install(t)
+	dir := repoWith(t, ratchetConfig(t), "")
+	writeFile(t, dir, "a/a.go", "package a\n\nfunc New() {}\n\nfunc Same() {}\n")
+	writeFile(t, dir, "a/a_windows.go", "package a\n\nfunc OnlyWindows() {}\n")
+	ledger := baseline.Init(baseline.Measure{
+		Build:     cmdBuild,
+		Functions: map[string]float64{"example.com/app/a.Old": 21, "example.com/app/a.Same": 14, "example.com/app/a.WasWindows": 12},
+	})
+	writeFile(t, dir, ledgerRel, string(baseline.Marshal(ledger)))
+	commitAll(t, dir)
+	// Old is gone, New exists: allowed.
+	if code, _, stderr := baselineIn(t, dir, "--rename", "example.com/app/a.Old", "example.com/app/a.New"); code != 0 {
+		t.Fatalf("exit %d: %s", code, stderr)
+	}
+	if got := readLedgerFile(t, dir).Ledger.Functions; got["example.com/app/a.New"] != 21 {
+		t.Errorf("functions %v", got)
+	}
+	// Same still exists: refused.
+	if code, _, stderr := baselineIn(t, dir, "--rename", "example.com/app/a.Same", "example.com/app/a.New2"); code != 1 || !strings.Contains(stderr, "still exists") {
+		t.Errorf("exit %d, stderr %q", code, stderr)
+	}
+	// A function in a file this build does not compile still exists, so its key is
+	// a valid target.
+	if code, _, stderr := baselineIn(t, dir, "--rename", "example.com/app/a.WasWindows", "example.com/app/a.OnlyWindows"); code != 0 {
+		t.Errorf("exit %d: %s", code, stderr)
+	}
+}
+
+func TestRenameMovesAPackageKeyAgainstTheRealPackageSet(t *testing.T) {
+	fx := newFixture()
+	fx.install(t)
+	dir := repoWith(t, ratchetConfig(t), "")
+	writeFile(t, dir, "b/b.go", "package b\n\nfunc F() {}\n")
+	ledger := baseline.Init(baseline.Measure{Build: cmdBuild, Packages: map[string]baseline.Package{"example.com/app/old": {StatementsPct: 50, Uncovered: 9}}})
+	writeFile(t, dir, ledgerRel, string(baseline.Marshal(ledger)))
+	commitAll(t, dir)
+	if code, _, stderr := baselineIn(t, dir, "--rename", "example.com/app/old", "example.com/app/b"); code != 0 {
+		t.Fatalf("exit %d: %s", code, stderr)
+	}
+	if got := readLedgerFile(t, dir).Ledger.Packages; got["example.com/app/b"] != (baseline.Package{StatementsPct: 50, Uncovered: 9}) {
+		t.Errorf("packages %v", got)
 	}
 }

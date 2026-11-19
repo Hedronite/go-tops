@@ -564,3 +564,10 @@ func TestWritesKeepTheLedgerBuild(t *testing.T) {
 		t.Errorf("Rename: %v %+v", err, got.Build)
 	}
 }
+
+func TestKeySetsAnswerPerKind(t *testing.T) {
+	s := baseline.KeySets{Functions: []string{"m/a.F"}, Packages: []string{"m/a"}}
+	if !s.Has(baseline.KindFunction, "m/a.F") || s.Has(baseline.KindFunction, "m/a") || !s.Has(baseline.KindPackage, "m/a") || s.Has(baseline.KindPackage, "m/a.F") {
+		t.Error("KeySets mixed functions and packages")
+	}
+}

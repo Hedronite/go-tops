@@ -16,7 +16,9 @@ import (
 	"github.com/Hedronite/go-tops/internal/baseline"
 	"github.com/Hedronite/go-tops/internal/cli"
 	"github.com/Hedronite/go-tops/internal/config"
+	"github.com/Hedronite/go-tops/internal/crap"
 	"github.com/Hedronite/go-tops/internal/gate"
+	"github.com/Hedronite/go-tops/internal/gobuild"
 	"github.com/Hedronite/go-tops/internal/layers/tests"
 	"github.com/Hedronite/go-tops/internal/report"
 )
@@ -80,8 +82,17 @@ func bfail(code int, format string, a ...any) *baselineError {
 var (
 	runFeeding = runFeedingLayers
 	// runBuild is the build the run measures (ruling C3).
-	runBuild      = currentBuild
-	scanInventory = func(dir, module string) (baseline.Inventory, error) { return baseline.ScanInventory(dir, module) }
+	runBuild = currentBuild
+	// scanInventory is the existence set of `--rename`: every function identity
+	// and package in any production .go file, read by internal/crap without a
+	// test run or a build.
+	scanInventory = func(dir string) (baseline.Inventory, error) {
+		e, err := crap.Exist(dir)
+		if err != nil {
+			return nil, err
+		}
+		return baseline.KeySets{Functions: e.Keys, Packages: e.Packages}, nil
+	}
 )
 
 type baselineArgs struct {
@@ -236,7 +247,7 @@ func refusal(err error) error {
 }
 
 func renameKey(env cli.Env, dir string, cfg gate.Config, path, rel string, old baseline.File, a baselineArgs) error {
-	inv, err := scanInventory(dir, cfg.Module)
+	inv, err := scanInventory(dir)
 	if err != nil {
 		return bfail(baselineEnv, "read the source tree: %v", err)
 	}
@@ -265,23 +276,15 @@ func measure(ctx context.Context, dir string, cfg gate.Config, acks string, buil
 	return m, nil
 }
 
-// currentBuild is the build of the run: the tests layer's build (cgo on and its
-// tags; the race tag is implicit in `go test -race`) with the GOOS and GOARCH the
-// go command resolves, because a ledger that left them empty would let every
-// platform write it.
-func currentBuild(ctx context.Context, dir string) (baseline.Build, error) {
-	cmd := exec.CommandContext(ctx, "go", "env", "GOOS", "GOARCH")
-	cmd.Dir = dir
-	out, err := cmd.Output()
+// currentBuild is the build of the run: the tests layer's build with the GOOS and
+// GOARCH the go command resolves (gobuild.Resolve), because a ledger that left
+// them empty would let every platform write it.
+func currentBuild(_ context.Context, dir string) (baseline.Build, error) {
+	b, err := gobuild.Resolve(dir, tests.Build)
 	if err != nil {
 		return baseline.Build{}, err
 	}
-	f := strings.Fields(string(out))
-	if len(f) != 2 {
-		return baseline.Build{}, fmt.Errorf("go env GOOS GOARCH printed %q", strings.TrimSpace(string(out)))
-	}
-	b := tests.Build
-	return baseline.Build{GOOS: f[0], GOARCH: f[1], Tags: slices.Clone(b.Tags), CGOEnabled: b.CGOEnabled}, nil
+	return baseline.Build{GOOS: b.GOOS, GOARCH: b.GOARCH, Tags: slices.Clone(b.Tags), CGOEnabled: b.CGOEnabled}, nil
 }
 
 // runFeedingLayers runs hygiene, tests, coverage and CRAP as `gate` would and

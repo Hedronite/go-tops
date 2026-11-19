@@ -1,6 +1,7 @@
 package baseline
 
 import (
+	"slices"
 	"sort"
 	"strings"
 )
@@ -307,6 +308,18 @@ const (
 // directory's.
 type Inventory interface {
 	Has(k Kind, key string) bool
+}
+
+// KeySets is an Inventory over the keys found in the source: every function
+// identity and every package import path, whatever any build compiles.
+type KeySets struct{ Functions, Packages []string }
+
+// Has implements Inventory.
+func (s KeySets) Has(k Kind, key string) bool {
+	if k == KindPackage {
+		return slices.Contains(s.Packages, key)
+	}
+	return slices.Contains(s.Functions, key)
 }
 
 // Rename rewrites one key of the ledger, a function or a package, and never a
