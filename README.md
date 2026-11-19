@@ -9,14 +9,14 @@ A written spec, a JSON Schema, per-class profiles, a laws layer of `go/analysis`
 
 Draft. Protocol **0.4.3**. The package is unreleased (0.0.0), and no tag exists.
 
-Milestone M1 is done: the `gotops` CLI (`version`, `check`, `init`, `gate`, `report`, `lock`, `doctor`) judges hygiene, tests and coverage at tier 1, and this repo's own CI gates it with `go run ./cmd/gotops gate`. Go-TOPS runs `advisory` on itself until its laws layer lands at M5 (§6.7), and its CI asserts the gates that exist. The next milestone is M2: native CRAP and the ratchet. CRAP, mutation and the laws layer do not run yet, no adopter has used the kit, and nothing here is released or ready to copy into CI.
+Milestones M1 and M2 are done: the `gotops` CLI (`version`, `check`, `init`, `gate`, `report`, `lock`, `doctor`, `baseline`) judges hygiene, tests, coverage and native CRAP at tier 1, and under `ratchet` it holds a legacy repo to a debt ledger, `.go-tops/baseline.json`. This repo's own CI gates it with `go run ./cmd/gotops gate`. Go-TOPS runs `advisory` on itself until its laws layer lands at M5 (§6.7), and its CI asserts the gates that exist. The next milestone is M3: the first adopter, `vigil`, gated under `ratchet`. Mutation and the laws layer do not run yet, no adopter has used the kit, and nothing here is released or ready to copy into CI.
 
 | Milestone | Contents |
 |---|---|
 | **M0, M0.5** spec | `GO_TOPS.md` 0.4.0, three schemas, profiles for three launch classes, a calibration record, docs CI |
 | **M1** CLI (done) | `init`, `check`, `gate` at tier 1 (hygiene, tests, coverage), `report`, `lock`, `doctor`, `report.json`; Go-TOPS gates itself under the advisory bootstrap rule |
-| M2 (next) | Native CRAP and the ratchet: complexity, guard-neutral coverage, the baseline ledger, exemptions |
-| M3 | First adopter: `vigil` gated under `ratchet` |
+| **M2** CRAP and ratchet (done) | Native CRAP: complexity, guard-neutral coverage, exemptions; `baseline` and the ratchet judge; Go-TOPS gates itself with CRAP on |
+| M3 (next) | First adopter: `vigil` gated under `ratchet` |
 | M4 | Mutation: a gremlins adapter and the survivor ledger |
 | M5 | Laws v0.1: 16 of 43 laws judged by analyzers; the kit switches its own gate to `hard` |
 | M6–M7 | Deep layers and the second and third adopters; the release tier and protocol 1.0 |
