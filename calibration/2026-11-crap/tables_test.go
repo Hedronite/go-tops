@@ -19,6 +19,20 @@ func TestOverCapIsStrictAndUnrounded(t *testing.T) {
 	}
 }
 
+// A function whose complexity is above the cap fails at every coverage (§6.2):
+// one at the cap does not, because full coverage brings it to the cap.
+func TestOverByComplexityIsStrict(t *testing.T) {
+	fs := []scored{{Comp: 5}, {Comp: 10}, {Comp: 11}, {Comp: 30}}
+	for _, c := range []struct {
+		limit float64
+		want  int
+	}{{6, 3}, {10, 2}, {11, 1}, {30, 0}} {
+		if got := overByComplexity(fs, c.limit); got != c.want {
+			t.Errorf("overByComplexity(%v) = %d, want %d", c.limit, got, c.want)
+		}
+	}
+}
+
 // Each bin holds the scores above the previous edge and up to its own, so the
 // bins at 6, 8 and 10 line up with the "over the cap" counts.
 func TestHistogramEdgesLineUpWithTheCaps(t *testing.T) {
@@ -65,7 +79,7 @@ func TestTopN(t *testing.T) {
 }
 
 const probeSample = `{"go_version":"go1.27.4","probe":[
- {"repo":"augur","functions":140,"caps":[4,5,6,8,10,15,30],"functions_over_cap":{"neutral":[64,49,35,28,19,7,1],"raw":[67,52,40,30,22,10,2]}},
+ {"repo":"augur","functions":140,"caps":[4,5,6,8,10,15,30],"functions_over_cap":{"neutral":[64,49,35,28,19,7,1],"ccdisc_only":[52,40,31,24,16,6,0],"raw":[67,52,40,30,22,10,2]}},
  {"repo":"vigil","functions":100,"caps":[4,5,6,8,10,15,30],"functions_over_cap":{"neutral":[20,15,10,8,6,3,0]}}]}`
 
 // The probe's guard-neutral row is the one the native layer is compared with.
@@ -78,11 +92,15 @@ func TestParseProbeReadsTheNeutralRow(t *testing.T) {
 	if a.Functions != 140 || a.Over[6] != 35 || a.Over[8] != 28 || a.Over[10] != 19 {
 		t.Errorf("augur = %+v", a)
 	}
-	if v := p["vigil"]; v.Functions != 100 || v.Over[10] != 6 {
+	if a.CompOnly[6] != 31 || a.CompOnly[10] != 16 {
+		t.Errorf("augur complexity alone = %v", a.CompOnly)
+	}
+	if v := p["vigil"]; v.Functions != 100 || v.Over[10] != 6 || v.CompOnly != nil {
 		t.Errorf("vigil = %+v", v)
 	}
 	for _, bad := range []string{``, `{`, `{"probe":[{"repo":"x","functions":1,"caps":[6],"functions_over_cap":{}}]}`,
-		`{"probe":[{"repo":"x","functions":1,"caps":[6,8],"functions_over_cap":{"neutral":[1]}}]}`} {
+		`{"probe":[{"repo":"x","functions":1,"caps":[6,8],"functions_over_cap":{"neutral":[1]}}]}`,
+		`{"probe":[{"repo":"x","functions":1,"caps":[6,8],"functions_over_cap":{"neutral":[1,1],"ccdisc_only":[1]}}]}`} {
 		if _, err := parseProbe([]byte(bad)); err == nil {
 			t.Errorf("parseProbe(%q) accepted a bad document", bad)
 		}
@@ -118,7 +136,9 @@ func TestRenderTables(t *testing.T) {
 		"| **all** | | **3** |",     // total row: 3 native functions
 		"**240**",                   // probe functions 140 + 100
 		"p.A", "a.go", "30.0",       // top scorer with its score
-		"(<=4)", "(>30)", // histogram bin labels
+		"complexity alone",
+		"| augur | 1 | 31 | -30 |", // complexity above 6: native 1 (12), probe 31
+		"(<=4)", "(>30)",           // histogram bin labels
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("tables lack %q:\n%s", want, out)

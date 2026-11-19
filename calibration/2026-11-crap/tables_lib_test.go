@@ -30,10 +30,12 @@ type repoResult struct {
 }
 
 // probeRepo is the probe's figure for one repository: its function count and,
-// per cap, the functions over it under the guard-neutral rule.
+// per cap, the functions over it under the guard-neutral rule, and the ones
+// over it by complexity alone (nil when the probe file lacks that row).
 type probeRepo struct {
 	Functions int
 	Over      map[int]int
+	CompOnly  map[int]int
 }
 
 var (
@@ -48,6 +50,18 @@ func overCap(fs []scored, limit float64) int {
 	n := 0
 	for _, f := range fs {
 		if f.CRAP > limit {
+			n++
+		}
+	}
+	return n
+}
+
+// overByComplexity counts the functions whose complexity alone is above the
+// limit: they fail at every coverage (§6.2), and no test can change that.
+func overByComplexity(fs []scored, limit float64) int {
+	n := 0
+	for _, f := range fs {
+		if float64(f.Comp) > limit {
 			n++
 		}
 	}
@@ -85,7 +99,8 @@ func parseProbe(raw []byte) (map[string]probeRepo, error) {
 			Functions int    `json:"functions"`
 			Caps      []int  `json:"caps"`
 			Over      struct {
-				Neutral []int `json:"neutral"`
+				Neutral    []int `json:"neutral"`
+				CCDiscOnly []int `json:"ccdisc_only"`
 			} `json:"functions_over_cap"`
 		} `json:"probe"`
 	}
@@ -97,9 +112,18 @@ func parseProbe(raw []byte) (map[string]probeRepo, error) {
 		if len(p.Over.Neutral) == 0 || len(p.Over.Neutral) != len(p.Caps) {
 			return nil, fmt.Errorf("probe results: %s: %d neutral counts for %d caps", p.Repo, len(p.Over.Neutral), len(p.Caps))
 		}
+		if n := len(p.Over.CCDiscOnly); n != 0 && n != len(p.Caps) {
+			return nil, fmt.Errorf("probe results: %s: %d complexity counts for %d caps", p.Repo, n, len(p.Caps))
+		}
 		r := probeRepo{Functions: p.Functions, Over: map[int]int{}}
+		if len(p.Over.CCDiscOnly) != 0 {
+			r.CompOnly = map[int]int{}
+		}
 		for i, c := range p.Caps {
 			r.Over[c] = p.Over.Neutral[i]
+			if r.CompOnly != nil {
+				r.CompOnly[c] = p.Over.CCDiscOnly[i]
+			}
 		}
 		out[p.Repo] = r
 	}
@@ -127,6 +151,7 @@ func delta(native, probe int) string {
 func renderTables(rs []repoResult, probe map[string]probeRepo) string {
 	var b strings.Builder
 	counts(&b, rs, probe)
+	alone(&b, rs, probe)
 	hist(&b, rs)
 	top(&b, rs)
 	return b.String()
@@ -157,6 +182,36 @@ func counts(b *strings.Builder, rs []repoResult, probe map[string]probeRepo) {
 		b.WriteString("\n")
 	}
 	fmt.Fprintf(b, "| **all** | | **%d** | **%d** | %s |", n, pn, cellDelta(allProbed, n, pn))
+	for i := range caps {
+		fmt.Fprintf(b, " **%d** | **%d** | %s |", over[i], pover[i], cellDelta(allProbed, over[i], pover[i]))
+	}
+	b.WriteString("\n\n")
+}
+
+// alone writes the count of functions over each cap by complexity alone,
+// against the probe's guard-discounted complexity row.
+func alone(b *strings.Builder, rs []repoResult, probe map[string]probeRepo) {
+	b.WriteString("Over the cap by complexity alone (no test can change these):\n\n| Repo |")
+	for _, c := range caps {
+		fmt.Fprintf(b, " Comp > %g | Probe | Δ |", c)
+	}
+	b.WriteString("\n|---|" + strings.Repeat("---|---|---|", len(caps)) + "\n")
+	over, pover := make([]int, len(caps)), make([]int, len(caps))
+	allProbed := true
+	for _, r := range rs {
+		p := probe[r.Repo]
+		ok := p.CompOnly != nil
+		allProbed = allProbed && ok
+		fmt.Fprintf(b, "| %s |", r.Repo)
+		for i, c := range caps {
+			k := overByComplexity(r.Funcs, c)
+			over[i] += k
+			pover[i] += p.CompOnly[int(c)]
+			fmt.Fprintf(b, " %d | %s | %s |", k, cell(ok, p.CompOnly[int(c)]), cellDelta(ok, k, p.CompOnly[int(c)]))
+		}
+		b.WriteString("\n")
+	}
+	b.WriteString("| **all** |")
 	for i := range caps {
 		fmt.Fprintf(b, " **%d** | **%d** | %s |", over[i], pover[i], cellDelta(allProbed, over[i], pover[i]))
 	}
