@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -337,5 +338,16 @@ func TestTestsFigureCountsLeaves(t *testing.T) {
 	r := Tests{}.Run(context.Background(), env)
 	if r.Outcome != gate.Pass || r.Details["tests"] != 3 || r.Details["skipped"] != 0 {
 		t.Fatalf("%s %v: want 3 leaf tests (TestA/x, TestA/y, TestB)", r.Outcome, r.Details)
+	}
+}
+
+// One build for the test run and for the CRAP layer's loads: the environment
+// the run takes is the build's, so the two cannot drift apart.
+func TestRunEnvIsTheSharedBuilds(t *testing.T) {
+	if !slices.Equal(Env, Build.Env()) {
+		t.Errorf("Env %v, want the shared build's %v", Env, Build.Env())
+	}
+	if !Build.CGOEnabled {
+		t.Error("the test run needs cgo for -race")
 	}
 }
