@@ -154,33 +154,54 @@ type blockKey struct {
 	sl, sc, el, ec int
 }
 
+// blockTotal is a block listed once: its statements, and how often it ran.
+type blockTotal struct{ stmts, count int }
+
 // Summarize totals the profile's statements per package. A block listed more
 // than once (one per test binary under -coverpkg) is one block, covered when
 // any listing ran it. Files excluded by opt are left out; if nothing remains
 // it returns ErrNoBlocks.
 func (p *Profile) Summarize(opt Options) (Summary, error) {
-	type agg struct{ stmts, count int }
-	blocks := map[blockKey]*agg{}
+	pkgs := perPackage(p.uniqueBlocks(), skipper(opt))
+	if len(pkgs) == 0 {
+		return Summary{}, ErrNoBlocks
+	}
+	return summaryOf(pkgs), nil
+}
+
+// uniqueBlocks merges the listings of each block into one.
+func (p *Profile) uniqueBlocks() map[blockKey]*blockTotal {
+	blocks := map[blockKey]*blockTotal{}
 	for _, b := range p.Blocks {
 		k := blockKey{b.File, b.StartLine, b.StartCol, b.EndLine, b.EndCol}
 		if a, ok := blocks[k]; ok {
 			a.count += b.Count
 			continue
 		}
-		blocks[k] = &agg{stmts: b.Stmts, count: b.Count}
+		blocks[k] = &blockTotal{stmts: b.Stmts, count: b.Count}
 	}
+	return blocks
+}
+
+// skipper says whether a file is left out of the summary: a generated file, when
+// the options ask for those to be excluded. It asks the file once.
+func skipper(opt Options) func(file string) bool {
 	excluded := map[string]bool{}
-	skip := func(file string) bool {
+	return func(file string) bool {
 		if !opt.ExcludeGenerated {
 			return false
 		}
-		if v, ok := excluded[file]; ok {
-			return v
+		v, ok := excluded[file]
+		if !ok {
+			v = generated(opt, file)
+			excluded[file] = v
 		}
-		v := generated(opt, file)
-		excluded[file] = v
 		return v
 	}
+}
+
+// perPackage totals the blocks of the files that are not skipped, by package.
+func perPackage(blocks map[blockKey]*blockTotal, skip func(file string) bool) map[string]*Package {
 	pkgs := map[string]*Package{}
 	for k, a := range blocks {
 		if skip(k.file) {
@@ -197,17 +218,19 @@ func (p *Profile) Summarize(opt Options) (Summary, error) {
 			pk.Covered += a.stmts
 		}
 	}
+	return pkgs
+}
+
+// summaryOf lists the packages by import path with their totals.
+func summaryOf(pkgs map[string]*Package) Summary {
 	var s Summary
 	for _, pk := range pkgs {
 		s.Packages = append(s.Packages, *pk)
 		s.Statements += pk.Statements
 		s.Covered += pk.Covered
 	}
-	if len(s.Packages) == 0 {
-		return Summary{}, ErrNoBlocks
-	}
 	sort.Slice(s.Packages, func(i, j int) bool { return s.Packages[i].Path < s.Packages[j].Path })
-	return s, nil
+	return s
 }
 
 var generatedHeader = regexp.MustCompile(`^// Code generated .* DO NOT EDIT\.$`)
