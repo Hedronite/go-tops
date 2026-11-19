@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/Hedronite/go-tops/internal/cli"
 )
 
 // runIn runs the gotops process in dir with extra environment variables.
@@ -290,4 +292,60 @@ func TestLockUpdateExitCodes(t *testing.T) {
 	if code, _, _ := runIn(t, t.TempDir(), nil, "lock", "--update"); code != 2 {
 		t.Errorf("no lock: exit %d, want 2", code)
 	}
+}
+
+// updateIn runs `gotops lock --update` in dir, in this process, with every
+// download answered by body, so the command runs end to end without the network.
+func updateIn(t *testing.T, dir, body string, args ...string) (code int, stdout, stderr string) {
+	t.Helper()
+	old := fetchLock
+	t.Cleanup(func() { fetchLock = old })
+	fetchLock = func(string) ([]byte, error) { return []byte(body), nil }
+	t.Chdir(dir)
+	var o, e bytes.Buffer
+	code = runLock(cli.NewEnv(&o, &e), append([]string{"--update"}, args...))
+	return code, o.String(), e.String()
+}
+
+// A lock whose downloads hash as pinned is left alone, and the command says so.
+func TestLockUpdateSaysWhenTheLockIsCurrent(t *testing.T) {
+	dir := lockRepo(t, "x")
+	before := fileBytes(t, dir, "go-tops.lock")
+	code, stdout, stderr := updateIn(t, dir, "x")
+	if code != 0 || !strings.Contains(stdout, "is current") {
+		t.Fatalf("exit %d, stdout %q, stderr %q", code, stdout, stderr)
+	}
+	if fileBytes(t, dir, "go-tops.lock") != before {
+		t.Error("a current lock was rewritten")
+	}
+}
+
+// A download that hashes differently rewrites the lock and prints each hash that
+// moved, then how many.
+func TestLockUpdatePrintsEachHashItChanged(t *testing.T) {
+	dir := lockRepo(t, "x")
+	code, stdout, stderr := updateIn(t, dir, "a different download")
+	if code != 0 || !strings.Contains(stdout, "gotools") || !strings.Contains(stdout, "->") || !strings.Contains(stdout, "hashes changed") {
+		t.Fatalf("exit %d, stdout %q, stderr %q", code, stdout, stderr)
+	}
+	if !strings.Contains(fileBytes(t, dir, "go-tops.lock"), "tofu") {
+		t.Error("the lock was not rewritten with the trust mode tofu")
+	}
+}
+
+// A pin to raise must be name@version.
+func TestLockUpdateRefusesAPinThatIsNotNameAtVersion(t *testing.T) {
+	code, _, stderr := updateIn(t, lockRepo(t, "x"), "x", "gotools")
+	if code != 2 || !strings.Contains(stderr, "name@version") {
+		t.Errorf("exit %d, stderr %q", code, stderr)
+	}
+}
+
+func fileBytes(t *testing.T, dir, rel string) string {
+	t.Helper()
+	b, err := os.ReadFile(filepath.Join(dir, rel))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
 }
