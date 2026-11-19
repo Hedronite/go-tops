@@ -119,7 +119,7 @@ func (p *ratchetProject) writeLedgerFor(t *testing.T, functions map[string]float
 		delete(ledger, "packages")
 	}
 	doc := map[string]any{
-		"build":       map[string]any{"goos": build.GOOS, "goarch": build.GOARCH, "tags": []string{}, "cgo_enabled": build.CGOEnabled},
+		"build":       map[string]any{"goos": build.GOOS, "goarch": build.GOARCH, "tags": append([]string{}, build.Tags...), "cgo_enabled": build.CGOEnabled},
 		"ledger":      ledger,
 		"judged_laws": 0,
 	}

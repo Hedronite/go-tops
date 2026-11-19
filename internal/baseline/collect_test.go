@@ -318,6 +318,27 @@ func TestFindingsAreCountedPerLinterAndFileAndPathsAreModuleRelative(t *testing.
 	}
 }
 
+// The kit's lint pass may read a config under .go-tops/, and the linter then names a
+// file from that directory ("../a/a.go"). The ledger counts it under the module-relative
+// name the rest of the gate uses, so the leg's file sets and the count agree.
+func TestFindingsFromAConfigUnderGoTopsAreCountedUnderModuleRelativeNames(t *testing.T) {
+	f := newFeeds(t)
+	f.in.Config.Hygiene.LintConfig = ".go-tops/golangci.yml"
+	f.write(".go-tops/lint-style.json", `{"Issues":[
+ {"FromLinter":"errcheck","Text":"x","Pos":{"Filename":"../a/a.go","Line":3}},
+ {"FromLinter":"errcheck","Text":"y","Pos":{"Filename":"../a/a.go","Line":9}},
+ {"FromLinter":"errcheck","Text":"z","Pos":{"Filename":"../b/b.go","Line":4}}
+]}`)
+	got, err := baseline.Collect(f.in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := baseline.Counts{"errcheck": {"a/a.go": 2, "b/b.go": 1}}
+	if !reflect.DeepEqual(got.Findings, want) {
+		t.Errorf("findings %v, want %v", got.Findings, want)
+	}
+}
+
 func TestSuppressionsCountNolintPerLinterAndFile(t *testing.T) {
 	f := newFeeds(t)
 	f.write("a/a.go", `package a

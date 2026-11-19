@@ -228,17 +228,36 @@ func Score(dir, profile string, opt Options) (Report, error) {
 // Compiled returns the keys of the production functions that build compiles:
 // the functions a run under that build measures. A leg that is not the
 // ledger leg asks this with the ledger's recorded build, to find the functions
-// the ledger leg does not compile (ruling C3). It reads no profile.
+// the ledger leg does not compile (ruling C3). It reads no profile and compiles
+// nothing: the files the build selects come from go/build (Select), and the
+// functions from the source, so it needs no C toolchain for another platform.
 func Compiled(dir string, build gobuild.Build) (map[string]bool, error) {
-	m, err := analyze(dir, Options{Build: build}, false)
+	sel, err := Select(dir, build)
 	if err != nil {
 		return nil, err
 	}
-	keys := make(map[string]bool, len(m.measured))
-	for _, f := range m.measured {
-		keys[m.keys[f.id]] = true
+	return CompiledBy(dir, sel)
+}
+
+// CompiledBy is Compiled for a selection already made: the keys of the production
+// functions declared in a file the selection holds.
+func CompiledBy(dir string, sel Selection) (map[string]bool, error) {
+	module, err := moduleOf(dir)
+	if err != nil {
+		return nil, err
 	}
-	return keys, nil
+	src, err := scan(dir, module)
+	if err != nil {
+		return nil, err
+	}
+	keys := identities(src.funcs)
+	compiled := map[string]bool{}
+	for _, f := range src.funcs {
+		if sel.Files[f.File] {
+			compiled[keys[f.id]] = true
+		}
+	}
+	return compiled, nil
 }
 
 // Existence is what exists in a module's source, whatever any build compiles.

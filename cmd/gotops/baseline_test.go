@@ -1016,6 +1016,33 @@ func TestDeletingTheLedgerIsNotAResetInASubdirectoryModule(t *testing.T) {
 	}
 }
 
+// A ledger the repository root tracks is not the ledger of a module in a
+// subdirectory: that module has none at HEAD, and --init writes its first. A read
+// of "HEAD:path" from the root would find the root one and refuse.
+func TestInitIsAllowedForAModuleWhoseLedgerIsNotTrackedAtHead(t *testing.T) {
+	fx := newFixture()
+	fx.install(t)
+	root := t.TempDir()
+	mod := filepath.Join(root, "mod")
+	for rel, data := range map[string]string{"go.mod": "module example.com/app\n\ngo 1.26\n", "go-tops.lock": goodLock(t), "go-tops.yaml": ratchetConfig(t)} {
+		writeFile(t, mod, rel, data)
+	}
+	writeFile(t, root, ledgerRel, string(baseline.Marshal(baseline.Init(baseline.Measure{Build: cmdBuild}))))
+	for _, args := range [][]string{{"init", "-q"}, {"add", "-A"}, {"-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-q", "-m", "x"}} {
+		cmd := exec.CommandContext(t.Context(), "git", args...)
+		cmd.Dir = root
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	if code, _, stderr := baselineIn(t, mod, "--init"); code != 0 {
+		t.Fatalf("--init: exit %d, stderr %q; want 0, the module has no ledger at HEAD", code, stderr)
+	}
+	if _, err := os.Stat(filepath.Join(mod, ledgerRel)); err != nil {
+		t.Errorf("no ledger was written for the module: %v", err)
+	}
+}
+
 // The accept line says how many records this write recorded, not how many the file
 // holds: after a second accept one record is the earlier one's, possibly under
 // another owner.

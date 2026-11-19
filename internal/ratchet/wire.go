@@ -152,26 +152,31 @@ func judgeInput(env *gate.Env, run gobuild.Build, ps Paths) (Input, error) {
 	// others only say when the build moved. Only the ledger leg fails on it.
 	in.Base = ReadBase(env.Dir, env.Base, ps.Ledger)
 	if !run.Equal(ledger.Build) {
-		if err := ledgerSources(&in, env.Dir); err != nil {
-			return in, fmt.Errorf("find what the ledger build compiles: %w", err)
-		}
+		ledgerSources(&in, env.Dir)
 	}
 	return in, nil
 }
 
-// ledgerSources finds what the ledger build compiles by loading and selecting with
-// the recorded build: its functions, its files and its packages.
-func ledgerSources(in *Input, dir string) error {
-	var err error
-	if in.LedgerCompiled, err = crap.Compiled(dir, in.Ledger.Build); err != nil {
-		return err
-	}
+// ledgerSources finds what the ledger build compiles by selecting files with the
+// recorded build and reading the functions from the source: its functions, its files
+// and its packages. It compiles nothing, because the other build may need a C
+// toolchain this leg does not have. A leg that is not the ledger leg judges no
+// ledger entry, so when the source cannot be read the sets are empty. That fails
+// closed: no function, finding or package is known to be the ledger build's, so this
+// leg holds each to the cap, the hard rules and the floor, and the layers that carry
+// them (crap, hygiene, coverage) fail on what the ledger would have held. The ratchet
+// itself stays a skip, and the reason is kept for the report.
+func ledgerSources(in *Input, dir string) {
 	sel, err := crap.Select(dir, in.Ledger.Build)
+	if err == nil {
+		in.LedgerCompiled, err = crap.CompiledBy(dir, sel)
+	}
 	if err != nil {
-		return err
+		in.LedgerUnread = err.Error()
+		sel = crap.Selection{Files: map[string]bool{}, Packages: map[string]bool{}}
+		in.LedgerCompiled = map[string]bool{}
 	}
 	in.LedgerFiles, in.LedgerPackages = sel.Files, sel.Packages
-	return nil
 }
 
 // refused is a failed ratchet that judged nothing, with the layers as they ran.

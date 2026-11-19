@@ -317,7 +317,7 @@ func adoptLegacy(t *testing.T, sub string) {
 
 	// 4b. --accept-regression records the raise, and the gate then passes.
 	code, stdout, stderr = gotopsEnv(t, dir, cgo, "baseline", "--accept-regression", "--reason", "Heavy gained a branch for a new limit", "--owner", "legacy-owners")
-	if code != 0 || !strings.Contains(stdout, "1 regression(s) recorded under owner legacy-owners") {
+	if code != 0 || !strings.Contains(stdout, "1 regression(s) recorded by this write under owner legacy-owners") {
 		t.Fatalf("baseline --accept-regression: exit %d\n%s\n%s", code, stdout, stderr)
 	}
 	adGit(t, repo, "commit", "-q", "-a", "-m", "accept the raise of Heavy")

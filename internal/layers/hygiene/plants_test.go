@@ -89,6 +89,9 @@ type module map[string]string
 // matching toolchain pin and the repository's own tools/go.mod.
 func plant(t *testing.T, over module, cfg gate.HygieneConfig) gate.Result {
 	t.Helper()
+	// golangci-lint refuses to run beside another run that shares its lock file in the
+	// temp directory, and other packages' tests run it too: this run has its own.
+	t.Setenv("TMPDIR", t.TempDir())
 	dir := t.TempDir()
 	files := module{
 		"go.mod":        "module example.com/app\n\ngo 1.26\n",
