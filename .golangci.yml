@@ -62,8 +62,9 @@ linters:
     # testing/synctest). The exclusions below scope each pattern.
     - forbidigo
     # depguard: the dependency policy of GO_TOPS.md §3.1 gate 1, and the standing
-    # rule that go-tops takes no runtime dependency beyond its two (the schema
-    # validator and the YAML decoder) without an explicit decision. The allow list
+    # rule that go-tops takes no runtime dependency beyond its three (the schema
+    # validator, the YAML decoder and golang.org/x/tools for the typed complexity
+    # count of GO_TOPS.md §6.3) without an explicit decision. The allow list
     # below is the whole policy: an import outside it is a finding.
     - depguard
     # usetesting: t.Context, t.TempDir, t.Setenv and t.Chdir replace the os and
@@ -85,7 +86,13 @@ linters:
             - $all
           allow:
             - $gostd
-            # Standard library, but newer than depguard's $gostd list.
+            # Standard library, but newer than depguard's $gostd list (go/version),
+            # or missing from it (the go/ syntax and type packages the complexity
+            # count reads, GO_TOPS.md §6.3).
+            - go/ast
+            - go/parser
+            - go/token
+            - go/types
             - go/version
             # Standard library the source readers of baseline use: the
             # suppression scan reads comments through the parser.
@@ -95,6 +102,7 @@ linters:
             - github.com/Hedronite/go-tops
             - github.com/santhosh-tekuri/jsonschema/v6
             - go.yaml.in/yaml/v3
+            - golang.org/x/tools/go/packages
     errorlint:
       errorf: true
       asserts: true
