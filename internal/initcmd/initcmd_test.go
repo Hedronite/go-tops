@@ -232,10 +232,11 @@ func TestConfigValidatesAndCarriesTheProfile(t *testing.T) {
 	}
 }
 
-// crap and mutation are written off with a reason and an unexpired expires;
-// the other layers init leaves off carry a reason; gates 1 to 3 have no
-// enabled key (§3.3, §12.1).
-func TestUnbuiltLayersAreOffWithReasonAndExpiry(t *testing.T) {
+// §12.1, §3.3: init turns CRAP on at the class cap: no enabled: false, so no
+// reason and no expiry. Mutation lands at M4, so it is written off with a reason
+// and an unexpired expires; the other layers init leaves off carry a reason;
+// gates 1 to 3 have no enabled key.
+func TestCrapIsOnAndMutationIsOffWithReasonAndExpiry(t *testing.T) {
 	for _, class := range launchClasses {
 		t.Run(class, func(t *testing.T) {
 			dir := newModule(t, "github.com/acme/demo", "1.26")
@@ -244,12 +245,14 @@ func TestUnbuiltLayersAreOffWithReasonAndExpiry(t *testing.T) {
 			}
 			cfg := asMap(t, decodeYAML(t, read(t, dir, "go-tops.yaml")))
 			gates := asMap(t, cfg["gates"])
-			for _, g := range []string{"crap", "mutation"} {
-				m := asMap(t, gates[g])
-				exp, err := time.Parse("2006-01-02", fmt.Sprint(m["expires"]))
-				if m["enabled"] != false || m["reason"] == nil || err != nil || !exp.After(today) {
-					t.Errorf("%s must be off with a reason and an unexpired expires: %v", g, m)
-				}
+			crap := asMap(t, gates["crap"])
+			if crap["enabled"] != true || crap["reason"] != nil || crap["expires"] != nil || crap["cap"] == nil {
+				t.Errorf("crap must be on with the class cap and no off-switch fields: %v", crap)
+			}
+			m := asMap(t, gates["mutation"])
+			exp, err := time.Parse("2006-01-02", fmt.Sprint(m["expires"]))
+			if m["enabled"] != false || m["reason"] == nil || err != nil || !exp.After(today) {
+				t.Errorf("mutation must be off with a reason and an unexpired expires: %v", m)
 			}
 			for _, g := range []string{"hygiene", "tests", "coverage"} {
 				if _, has := asMap(t, gates[g])["enabled"]; has {
@@ -416,7 +419,7 @@ func TestWorkflowIsThePinnedDropIn(t *testing.T) {
 		}
 	}
 	if _, has := wf.Jobs["gate"]; !has || len(wf.Jobs) != 1 {
-		t.Errorf("want one job named gate, got %v", wf.Jobs)
+		t.Errorf("want one job named gate (GO_TOPS.md section 16 item 26), got %v", wf.Jobs)
 	}
 }
 
@@ -511,4 +514,67 @@ func mustProtocol(t *testing.T) string {
 		t.Fatal(err)
 	}
 	return p
+}
+
+// §12.1, §6.7: after init the next step is the first ledger: run
+// gotops baseline --init on the ledger leg's build, then commit the file.
+func TestInitPrintsTheBaselineNextStep(t *testing.T) {
+	dir := newModule(t, "github.com/acme/demo", "1.26")
+	code, out, errs := run(opts(dir, "binary-cli"))
+	if code != ExitOK {
+		t.Fatal(errs)
+	}
+	var next string
+	for _, l := range strings.Split(out, "\n") {
+		if strings.HasPrefix(l, "next: ") {
+			next = l
+		}
+	}
+	for _, want := range []string{"gotops baseline --init", "ledger leg", "commit", ".go-tops/baseline.json"} {
+		if !strings.Contains(next, want) {
+			t.Errorf("the next-step line %q lacks %q\n%s", next, want, out)
+		}
+	}
+}
+
+// GO-TOPS.md item 6 says where the baseline lives, who writes it, which leg
+// is the ledger leg, how to write the first ledger and how to refresh it.
+func TestAdoptionRecordItem6NamesTheLedgerLeg(t *testing.T) {
+	dir := newModule(t, "github.com/acme/demo", "1.26")
+	if code, _, errs := run(opts(dir, "binary-cli")); code != ExitOK {
+		t.Fatal(errs)
+	}
+	rec := read(t, dir, "GO-TOPS.md")
+	i := strings.Index(rec, "\n6. **")
+	j := strings.Index(rec, "\n7. **")
+	if i < 0 || j < i {
+		t.Fatalf("no item 6 before item 7:\n%s", rec)
+	}
+	item := rec[i:j]
+	for _, want := range []string{
+		".go-tops/baseline.json", "only `gotops baseline` writes it", "ledger leg", "`ubuntu` leg",
+		"`skip`", "gotops baseline --init", "workflow_dispatch", "go-tops-baseline", "gotops baseline`",
+		"`init`", "`refresh`", "only on the ledger leg's build", "linux/amd64", "golang:1.", "git config --global --add safe.directory /repo", "needs network", "vulnerability database", "--accept-regression", "is manual", ".go-tops/survivors.yaml", ".go-tops/acks.yaml",
+	} {
+		if !strings.Contains(item, want) {
+			t.Errorf("item 6 lacks %q:\n%s", want, item)
+		}
+	}
+}
+
+// CRAP is on from init, so the record's known deviations name only mutation.
+func TestAdoptionRecordItem8NamesOnlyMutation(t *testing.T) {
+	dir := newModule(t, "github.com/acme/demo", "1.26")
+	if code, _, errs := run(opts(dir, "binary-cli")); code != ExitOK {
+		t.Fatal(errs)
+	}
+	rec := read(t, dir, "GO-TOPS.md")
+	i := strings.Index(rec, "\n8. **")
+	if i < 0 {
+		t.Fatal("no item 8")
+	}
+	item := rec[i:]
+	if !strings.Contains(item, "mutation gate is off until 2027-03-01") || strings.Contains(item, "CRAP gate is off") {
+		t.Errorf("item 8 should name the mutation gate and not CRAP:\n%s", item)
+	}
 }
