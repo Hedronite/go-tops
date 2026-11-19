@@ -3,6 +3,7 @@ module github.com/Hedronite/go-tops/tools
 go 1.26.0
 
 tool (
+	github.com/fzipp/gocyclo/cmd/gocyclo
 	github.com/google/go-licenses/v2
 	github.com/unbound-force/gaze/cmd/gaze
 	golang.org/x/vuln/cmd/govulncheck
