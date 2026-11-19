@@ -60,6 +60,19 @@ func (b Build) LoadEnv() []string {
 	return b.Env()
 }
 
+// Equal reports whether two builds compile the same files: the same platform and
+// cgo setting, and the same set of tags, in any order and with any repeat. The
+// baseline records a build and the ratchet compares it with the run's.
+func (b Build) Equal(o Build) bool {
+	return b.GOOS == o.GOOS && b.GOARCH == o.GOARCH && b.CGOEnabled == o.CGOEnabled && slices.Equal(tagSet(b.Tags), tagSet(o.Tags))
+}
+
+func tagSet(tags []string) []string {
+	set := slices.Clone(tags)
+	slices.Sort(set)
+	return slices.Compact(set)
+}
+
 // Platform returns b on another GOOS and GOARCH. Cgo is off: a cross build
 // has no C toolchain to count on.
 func (b Build) Platform(goos, goarch string) Build {
