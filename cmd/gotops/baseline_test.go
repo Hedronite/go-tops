@@ -1,0 +1,583 @@
+package main
+
+import (
+	"bytes"
+	"context"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/Hedronite/go-tops/internal/baseline"
+	"github.com/Hedronite/go-tops/internal/cli"
+	"github.com/Hedronite/go-tops/internal/gate"
+	"github.com/Hedronite/go-tops/internal/report"
+)
+
+// GO_TOPS.md §6.7 and §12.1 `baseline`: the only command that writes
+// .go-tops/baseline.json. --init measures and writes when the tests are green and
+// every feeding layer produced non-empty output; a plain write only lowers;
+// --accept-regression records a raise; --rename moves one key. Every write is
+// refused under advisory. Custody errors exit 2.
+
+const ledgerRel = ".go-tops/baseline.json"
+
+const profileFix = `mode: atomic
+example.com/app/a/a.go:3.10,5.2 4 1
+example.com/app/b/b.go:3.10,5.2 1 1
+example.com/app/b/b.go:6.10,8.2 3 0
+`
+
+const lintFix = `{"Issues":[{"FromLinter":"revive","Text":"x","Pos":{"Filename":"a/a.go","Line":3}}]}`
+
+// fixture is what the stubbed feeding layers leave behind.
+type fixture struct {
+	rep     report.Report
+	profile string
+	lint    string
+	ran     int
+}
+
+func cfn(fn string, crap float64) map[string]any {
+	return map[string]any{"func": fn, "file": "a/a.go", "cc": 12, "cov_pct": 50.0, "crap": crap, "baseline": nil}
+}
+
+func newFixture() *fixture {
+	return &fixture{
+		profile: profileFix,
+		lint:    lintFix,
+		rep: report.Report{
+			Layers: []report.Layer{
+				{ID: "hygiene", Outcome: "fail"},
+				{ID: "tests", Outcome: "pass"},
+				{ID: "coverage", Outcome: "fail", Details: map[string]any{"statements_pct": 62.5, "floor": 90.0, "profile_bytes": 1}},
+				{ID: "crap", Outcome: "fail", Details: map[string]any{"cap": 10.0, "violations": []map[string]any{
+					cfn("example.com/app/a.Alpha", 21), cfn("example.com/app/b.Beta", 14.5),
+				}}},
+			},
+			Laws: report.Laws{ApplicableJudged: 2},
+		},
+	}
+}
+
+func (fx *fixture) setCrap(fns ...map[string]any) {
+	for i, l := range fx.rep.Layers {
+		if l.ID == "crap" {
+			fx.rep.Layers[i].Details = map[string]any{"cap": 10.0, "violations": append([]map[string]any{}, fns...)}
+		}
+	}
+}
+
+func (fx *fixture) setTests(outcome string) {
+	for i, l := range fx.rep.Layers {
+		if l.ID == "tests" {
+			fx.rep.Layers[i].Outcome = outcome
+		}
+	}
+}
+
+// install replaces the feeding run with the fixture: it writes the profile and
+// the lint output where the layers do, and returns the report.
+func (fx *fixture) install(t *testing.T) {
+	t.Helper()
+	old := runFeeding
+	t.Cleanup(func() { runFeeding = old })
+	runFeeding = func(_ context.Context, dir string, _ gate.Config) (report.Report, error) {
+		fx.ran++
+		for rel, data := range map[string]string{".go-tops/cover.out": fx.profile, ".go-tops/lint-style.json": fx.lint} {
+			p := filepath.Join(dir, filepath.FromSlash(rel))
+			if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+				return report.Report{}, err
+			}
+			if err := os.WriteFile(p, []byte(data), 0o644); err != nil {
+				return report.Report{}, err
+			}
+		}
+		return fx.rep, nil
+	}
+}
+
+func ratchetConfig(t *testing.T) string {
+	t.Helper()
+	return strings.Replace(goodConfig(t), "enforce: hard", "enforce: ratchet", 1)
+}
+
+func advisoryConfig(t *testing.T) string {
+	t.Helper()
+	return strings.Replace(goodConfig(t), "enforce: hard", "enforce: advisory\nadvisory:\n  reason: the laws layer lands at M5\n  owner: ali\n  expires: \"2099-01-01\"", 1)
+}
+
+// repoWith is a git module with go-tops.yaml and, when ledger is not empty, a
+// committed ledger. The tests mutate its working tree.
+func repoWith(t *testing.T, cfg, ledger string) string {
+	t.Helper()
+	dir := module(t, cfg)
+	if ledger != "" {
+		writeFile(t, dir, ledgerRel, ledger)
+	}
+	for _, args := range [][]string{
+		{"init", "-q"},
+		{"add", "-A"},
+		{"-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-q", "-m", "init"},
+	} {
+		cmd := exec.CommandContext(t.Context(), "git", args...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	return dir
+}
+
+func baselineIn(t *testing.T, dir string, args ...string) (code int, stdout, stderr string) {
+	t.Helper()
+	t.Chdir(dir)
+	var o, e bytes.Buffer
+	code = runBaseline(cli.NewEnv(&o, &e), args)
+	return code, o.String(), e.String()
+}
+
+func readLedgerFile(t *testing.T, dir string) baseline.File {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(dir, ledgerRel))
+	if err != nil {
+		t.Fatal(err)
+	}
+	f, err := baseline.Parse(data)
+	if err != nil {
+		t.Fatalf("%v\n%s", err, data)
+	}
+	return f
+}
+
+func commitAll(t *testing.T, dir string) {
+	t.Helper()
+	for _, args := range [][]string{{"add", "-A"}, {"-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-q", "-m", "ledger"}} {
+		cmd := exec.CommandContext(t.Context(), "git", args...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+}
+
+func fileBytes(t *testing.T, dir, rel string) string {
+	t.Helper()
+	b, err := os.ReadFile(filepath.Join(dir, rel))
+	if err != nil {
+		return "<absent>"
+	}
+	return string(b)
+}
+
+// initialised is a ratchet repo that has had `baseline --init` and committed.
+func initialised(t *testing.T) (string, *fixture) {
+	t.Helper()
+	fx := newFixture()
+	fx.install(t)
+	dir := repoWith(t, ratchetConfig(t), "")
+	if code, _, stderr := baselineIn(t, dir, "--init"); code != 0 {
+		t.Fatalf("init exit %d: %s", code, stderr)
+	}
+	commitAll(t, dir)
+	return dir, fx
+}
+
+func TestInitWritesTheMeasuredLedgerAndCheckAcceptsIt(t *testing.T) {
+	fx := newFixture()
+	fx.install(t)
+	dir := repoWith(t, ratchetConfig(t), "")
+	code, stdout, stderr := baselineIn(t, dir, "--init")
+	if code != 0 {
+		t.Fatalf("exit %d: %s", code, stderr)
+	}
+	if !strings.Contains(stdout, ledgerRel) {
+		t.Errorf("stdout %q does not say what was written", stdout)
+	}
+	got := readLedgerFile(t, dir)
+	if got.Ledger.Functions["example.com/app/a.Alpha"] != 21 || got.Ledger.Functions["example.com/app/b.Beta"] != 14.5 {
+		t.Errorf("functions %v", got.Ledger.Functions)
+	}
+	if got.Ledger.Packages["example.com/app/b"] != (baseline.Package{StatementsPct: 25, Uncovered: 3}) {
+		t.Errorf("packages %v", got.Ledger.Packages)
+	}
+	if got.Ledger.Findings["revive"]["a/a.go"] != 1 || got.JudgedLaws != 2 || len(got.Regressions) != 0 {
+		t.Errorf("ledger %+v", got)
+	}
+	// check reads the committed ledger and finds it valid against the schema.
+	commitAll(t, dir)
+	if code, _, stderr := gotopsIn(t, dir, "check"); code != 0 {
+		t.Errorf("check exit %d: %s", code, stderr)
+	}
+}
+
+func TestInitWritesAnEmptyLedgerWhenNothingIsOverTheLine(t *testing.T) {
+	fx := newFixture()
+	fx.profile = "mode: atomic\nexample.com/app/a/a.go:3.10,5.2 4 1\n"
+	fx.lint = `{"Issues":[]}`
+	fx.setCrap()
+	fx.install(t)
+	dir := repoWith(t, ratchetConfig(t), "")
+	if code, _, stderr := baselineIn(t, dir, "--init"); code != 0 {
+		t.Fatalf("exit %d: %s", code, stderr)
+	}
+	want := "{\n  \"judged_laws\": 2,\n  \"ledger\": {}\n}\n"
+	if got := fileBytes(t, dir, ledgerRel); got != want {
+		t.Errorf("ledger %q, want %q", got, want)
+	}
+}
+
+func TestInitIsRefusedWhenALedgerExists(t *testing.T) {
+	dir, _ := initialised(t)
+	before := fileBytes(t, dir, ledgerRel)
+	code, _, stderr := baselineIn(t, dir, "--init")
+	if code != 1 || !strings.Contains(stderr, "exists") {
+		t.Errorf("exit %d, stderr %q", code, stderr)
+	}
+	if fileBytes(t, dir, ledgerRel) != before {
+		t.Error("a refused --init changed the ledger")
+	}
+}
+
+func TestDeletingTheLedgerIsNotAReset(t *testing.T) {
+	// §6.7: under ratchet a missing baseline fails; deleting the file is not a
+	// reset. The tracked copy is still the repo's ledger, so --init does not
+	// write a fresh one over the debt, and a plain write has nothing to lower.
+	dir, _ := initialised(t)
+	if err := os.Remove(filepath.Join(dir, ledgerRel)); err != nil {
+		t.Fatal(err)
+	}
+	if code, _, stderr := baselineIn(t, dir, "--init"); code != 1 || !strings.Contains(stderr, "HEAD") {
+		t.Errorf("--init: exit %d, stderr %q", code, stderr)
+	}
+	if code, _, _ := baselineIn(t, dir); code != 2 {
+		t.Errorf("plain: exit %d, want 2", code)
+	}
+	if _, err := os.Stat(filepath.Join(dir, ledgerRel)); err == nil {
+		t.Error("a ledger was written over a deleted one")
+	}
+	if code, _, _ := gotopsIn(t, dir, "check"); code != 2 {
+		t.Errorf("check exit %d, want 2 for a deleted baseline", code)
+	}
+}
+
+func TestEveryWriteIsRefusedUnderAdvisory(t *testing.T) {
+	fx := newFixture()
+	fx.install(t)
+	dir := repoWith(t, advisoryConfig(t), "")
+	for _, args := range [][]string{
+		{"--init"},
+		{},
+		{"--accept-regression", "--reason", "the parser grows one arm", "--owner", "ali"},
+		{"--rename", "a", "b"},
+	} {
+		code, _, stderr := baselineIn(t, dir, args...)
+		if code != 1 || !strings.Contains(stderr, "advisory") {
+			t.Errorf("%v: exit %d, stderr %q", args, code, stderr)
+		}
+		if _, err := os.Stat(filepath.Join(dir, ledgerRel)); err == nil {
+			t.Errorf("%v: a ledger was written under advisory", args)
+		}
+	}
+	if fx.ran != 0 {
+		t.Error("the feeding layers ran before the refusal")
+	}
+}
+
+func TestAdvisoryRefusesEvenWithALedgerPresent(t *testing.T) {
+	fx := newFixture()
+	fx.install(t)
+	dir := repoWith(t, advisoryConfig(t), `{"judged_laws":0,"ledger":{}}`+"\n")
+	before := fileBytes(t, dir, ledgerRel)
+	if code, _, _ := baselineIn(t, dir); code != 1 {
+		t.Errorf("exit %d", code)
+	}
+	if fileBytes(t, dir, ledgerRel) != before {
+		t.Error("changed under advisory")
+	}
+}
+
+func TestInitRefusesWhatWasNotMeasured(t *testing.T) {
+	tests := map[string]func(fx *fixture){
+		"red tests":     func(fx *fixture) { fx.setTests("fail") },
+		"empty profile": func(fx *fixture) { fx.profile = "" },
+		"no lint file":  func(fx *fixture) { fx.lint = "" },
+	}
+	for name, plant := range tests {
+		t.Run(name, func(t *testing.T) {
+			fx := newFixture()
+			plant(fx)
+			fx.install(t)
+			dir := repoWith(t, ratchetConfig(t), "")
+			code, _, stderr := baselineIn(t, dir, "--init")
+			if code != 1 || stderr == "" {
+				t.Errorf("exit %d, stderr %q", code, stderr)
+			}
+			if _, err := os.Stat(filepath.Join(dir, ledgerRel)); err == nil {
+				t.Error("a ledger was written from a run that measured nothing")
+			}
+		})
+	}
+}
+
+func TestInitWritesWhenOnlyTheThresholdsAreRed(t *testing.T) {
+	// The default fixture has a package under the floor, functions over the cap,
+	// a lint finding and red coverage and CRAP outcomes: all measured.
+	fx := newFixture()
+	fx.install(t)
+	dir := repoWith(t, ratchetConfig(t), "")
+	if code, _, stderr := baselineIn(t, dir, "--init"); code != 0 {
+		t.Fatalf("exit %d: %s", code, stderr)
+	}
+}
+
+func TestACustodyErrorExitsTwo(t *testing.T) {
+	fx := newFixture()
+	fx.install(t)
+	t.Run("invalid go-tops.yaml", func(t *testing.T) {
+		dir := repoWith(t, "protocol: nope\n", "")
+		if code, _, stderr := baselineIn(t, dir, "--init"); code != 2 || stderr == "" {
+			t.Errorf("exit %d, stderr %q", code, stderr)
+		}
+	})
+	t.Run("no go-tops.yaml", func(t *testing.T) {
+		if code, _, _ := baselineIn(t, repoWith(t, "", ""), "--init"); code != 2 {
+			t.Errorf("exit %d", code)
+		}
+	})
+	t.Run("plain write with no ledger", func(t *testing.T) {
+		dir := repoWith(t, ratchetConfig(t), "")
+		code, _, stderr := baselineIn(t, dir)
+		if code != 2 || !strings.Contains(stderr, "--init") {
+			t.Errorf("exit %d, stderr %q", code, stderr)
+		}
+	})
+	for _, bad := range []string{"not json", `{"ledger":{}}`, `{"ledger":{},"judged_laws":0,"extra":1}`, ""} {
+		for _, args := range [][]string{{}, {"--accept-regression", "--reason", "the parser grows one arm", "--owner", "ali"}, {"--rename", "a", "b"}} {
+			t.Run("ledger "+bad+" "+strings.Join(args, " "), func(t *testing.T) {
+				dir := repoWith(t, ratchetConfig(t), bad)
+				if bad == "" {
+					writeFile(t, dir, ledgerRel, "")
+				}
+				before := fileBytes(t, dir, ledgerRel)
+				if code, _, stderr := baselineIn(t, dir, args...); code != 2 || stderr == "" {
+					t.Errorf("exit %d, stderr %q", code, stderr)
+				}
+				if fileBytes(t, dir, ledgerRel) != before {
+					t.Error("an invalid ledger was overwritten")
+				}
+			})
+		}
+	}
+}
+
+func TestPlainWriteLowersAndRemovesAndNeverAddsOrRaises(t *testing.T) {
+	dir, fx := initialised(t)
+	// Alpha improves to 15, Beta is paid (under the cap), Gamma is new debt, and
+	// the one finding in a/a.go grows to two.
+	fx.setCrap(cfn("example.com/app/a.Alpha", 15), cfn("example.com/app/a.Gamma", 30))
+	fx.lint = `{"Issues":[{"FromLinter":"revive","Text":"x","Pos":{"Filename":"a/a.go","Line":3}},{"FromLinter":"revive","Text":"y","Pos":{"Filename":"a/a.go","Line":4}}]}`
+	code, stdout, stderr := baselineIn(t, dir)
+	if code != 0 {
+		t.Fatalf("exit %d: %s", code, stderr)
+	}
+	got := readLedgerFile(t, dir)
+	if got.Ledger.Functions["example.com/app/a.Alpha"] != 15 {
+		t.Errorf("Alpha %v, want 15", got.Ledger.Functions["example.com/app/a.Alpha"])
+	}
+	if _, ok := got.Ledger.Functions["example.com/app/b.Beta"]; ok {
+		t.Error("a paid entry stayed")
+	}
+	if _, ok := got.Ledger.Functions["example.com/app/a.Gamma"]; ok {
+		t.Error("a plain write added an entry")
+	}
+	if got.Ledger.Findings["revive"]["a/a.go"] != 1 {
+		t.Errorf("findings %v: a plain write raised a count", got.Ledger.Findings)
+	}
+	if !strings.Contains(stdout, "--accept-regression") {
+		t.Errorf("stdout %q should point at --accept-regression for what was left", stdout)
+	}
+}
+
+func TestPlainWriteWithNothingToLowerLeavesTheFileAlone(t *testing.T) {
+	dir, _ := initialised(t)
+	before := fileBytes(t, dir, ledgerRel)
+	code, stdout, stderr := baselineIn(t, dir)
+	if code != 0 {
+		t.Fatalf("exit %d: %s", code, stderr)
+	}
+	if fileBytes(t, dir, ledgerRel) != before || !strings.Contains(stdout, "unchanged") {
+		t.Errorf("stdout %q", stdout)
+	}
+}
+
+func TestPlainWriteNeedsGreenTests(t *testing.T) {
+	dir, fx := initialised(t)
+	before := fileBytes(t, dir, ledgerRel)
+	fx.setTests("fail")
+	fx.setCrap() // everything "paid", but the run measured nothing
+	if code, _, _ := baselineIn(t, dir); code != 1 {
+		t.Errorf("exit %d", code)
+	}
+	if fileBytes(t, dir, ledgerRel) != before {
+		t.Error("a red test run emptied the ledger")
+	}
+}
+
+func TestAcceptRegressionRaisesAndRecords(t *testing.T) {
+	dir, fx := initialised(t)
+	fx.setCrap(cfn("example.com/app/a.Alpha", 25), cfn("example.com/app/b.Beta", 14.5), cfn("example.com/app/a.Gamma", 30))
+	code, _, stderr := baselineIn(t, dir, "--accept-regression", "--reason", "the parser grows one arm", "--owner", "ali")
+	if code != 0 {
+		t.Fatalf("exit %d: %s", code, stderr)
+	}
+	got := readLedgerFile(t, dir)
+	if got.Ledger.Functions["example.com/app/a.Alpha"] != 25 || got.Ledger.Functions["example.com/app/a.Gamma"] != 30 {
+		t.Errorf("functions %v", got.Ledger.Functions)
+	}
+	if len(got.Regressions) != 2 || got.Regressions[0].Key != "example.com/app/a.Alpha" || got.Regressions[0].Owner != "ali" || got.Regressions[1].From != nil {
+		t.Errorf("regressions %+v", got.Regressions)
+	}
+	commitAll(t, dir)
+	if code, _, stderr := gotopsIn(t, dir, "check"); code != 0 {
+		t.Errorf("check exit %d: %s", code, stderr)
+	}
+}
+
+func TestAcceptRegressionNeedsAReasonAndAnOwner(t *testing.T) {
+	dir, fx := initialised(t)
+	fx.setCrap(cfn("example.com/app/a.Alpha", 25))
+	before := fileBytes(t, dir, ledgerRel)
+	for _, args := range [][]string{
+		{"--accept-regression"},
+		{"--accept-regression", "--reason", "the parser grows one arm"},
+		{"--accept-regression", "--owner", "ali"},
+		{"--accept-regression", "--reason", "too short", "--owner", "ali"},
+		{"--accept-regression", "--reason", "the parser grows one arm", "--owner", " "},
+	} {
+		fx.ran = 0
+		if code, _, stderr := baselineIn(t, dir, args...); code != 2 || stderr == "" {
+			t.Errorf("%v: exit %d, stderr %q", args, code, stderr)
+		}
+		if fx.ran != 0 {
+			t.Errorf("%v: the layers ran for a request that is refused on its flags", args)
+		}
+	}
+	if fileBytes(t, dir, ledgerRel) != before {
+		t.Error("the ledger changed")
+	}
+}
+
+func TestAcceptRegressionWithNothingToAcceptIsRefused(t *testing.T) {
+	dir, _ := initialised(t)
+	before := fileBytes(t, dir, ledgerRel)
+	code, _, stderr := baselineIn(t, dir, "--accept-regression", "--reason", "the parser grows one arm", "--owner", "ali")
+	if code != 1 || !strings.Contains(stderr, "nothing to accept") {
+		t.Errorf("exit %d, stderr %q", code, stderr)
+	}
+	if fileBytes(t, dir, ledgerRel) != before {
+		t.Error("the ledger changed")
+	}
+}
+
+// stubInventory replaces the source scan with fixed key sets.
+type stubInventory struct{ fns, pkgs map[string]bool }
+
+func (s stubInventory) Has(k baseline.Kind, key string) bool {
+	if k == baseline.KindPackage {
+		return s.pkgs[key]
+	}
+	return s.fns[key]
+}
+
+func withInventory(t *testing.T, fns ...string) {
+	t.Helper()
+	old := scanInventory
+	t.Cleanup(func() { scanInventory = old })
+	set := map[string]bool{}
+	for _, f := range fns {
+		set[f] = true
+	}
+	scanInventory = func(string, string) (baseline.Inventory, error) { return stubInventory{fns: set}, nil }
+}
+
+func TestRenameMovesTheKeyAndNeverTheValue(t *testing.T) {
+	dir, fx := initialised(t)
+	withInventory(t, "example.com/app/a.Renamed", "example.com/app/b.Beta")
+	code, _, stderr := baselineIn(t, dir, "--rename", "example.com/app/a.Alpha", "example.com/app/a.Renamed")
+	if code != 0 {
+		t.Fatalf("exit %d: %s", code, stderr)
+	}
+	got := readLedgerFile(t, dir)
+	if _, ok := got.Ledger.Functions["example.com/app/a.Alpha"]; ok || got.Ledger.Functions["example.com/app/a.Renamed"] != 21 {
+		t.Errorf("functions %v", got.Ledger.Functions)
+	}
+	if fx.ran != 1 {
+		t.Errorf("the feeding layers ran %d times; a rename measures nothing (the one run is the init)", fx.ran)
+	}
+}
+
+func TestRenameRefusalsExitOneAndChangeNothing(t *testing.T) {
+	dir, _ := initialised(t)
+	before := fileBytes(t, dir, ledgerRel)
+	withInventory(t, "example.com/app/a.Alpha", "example.com/app/a.Renamed") // the old key is still there
+	code, _, stderr := baselineIn(t, dir, "--rename", "example.com/app/a.Alpha", "example.com/app/a.Renamed")
+	if code != 1 || !strings.Contains(stderr, "still exists") {
+		t.Errorf("exit %d, stderr %q", code, stderr)
+	}
+	withInventory(t) // the new key does not exist
+	if code, _, _ := baselineIn(t, dir, "--rename", "example.com/app/a.Alpha", "example.com/app/a.Nowhere"); code != 1 {
+		t.Errorf("exit %d", code)
+	}
+	if fileBytes(t, dir, ledgerRel) != before {
+		t.Error("a refused rename changed the ledger")
+	}
+}
+
+func TestUsageErrorsExitTwo(t *testing.T) {
+	dir, fx := initialised(t)
+	fx.ran = 0
+	for name, args := range map[string][]string{
+		"unknown flag":        {"--bogus"},
+		"two modes":           {"--init", "--accept-regression"},
+		"init and rename":     {"--init", "--rename", "a", "b"},
+		"rename one key":      {"--rename", "a"},
+		"rename three keys":   {"--rename", "a", "b", "c"},
+		"stray argument":      {"extra"},
+		"reason without mode": {"--reason", "three words here"},
+		"owner without mode":  {"--owner", "ali"},
+		"survivors kind":      {"--init", "--kind", "survivors"},
+	} {
+		if code, _, stderr := baselineIn(t, dir, args...); code != 2 || stderr == "" {
+			t.Errorf("%s: exit %d, stderr %q", name, code, stderr)
+		}
+	}
+	if fx.ran != 0 {
+		t.Error("the layers ran for a usage error")
+	}
+}
+
+func TestHelpAndTheRegistry(t *testing.T) {
+	code, stdout, _ := gotopsCmd(t, "baseline", "--help")
+	if code != 0 || !strings.Contains(stdout, "--accept-regression") || !strings.Contains(stdout, "--rename") {
+		t.Errorf("exit %d, stdout %q", code, stdout)
+	}
+	if _, stdout, _ := gotopsCmd(t, "--help"); !strings.Contains(stdout, "baseline") {
+		t.Errorf("baseline is not listed in help: %q", stdout)
+	}
+}
+
+func TestTheLedgerIsWrittenInOneStep(t *testing.T) {
+	// No temporary file is left beside the ledger.
+	dir, _ := initialised(t)
+	entries, err := os.ReadDir(filepath.Join(dir, ".go-tops"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		if strings.HasSuffix(e.Name(), ".tmp") {
+			t.Errorf("left behind: %s", e.Name())
+		}
+	}
+}

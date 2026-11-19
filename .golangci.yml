@@ -87,6 +87,11 @@ linters:
             - $gostd
             # Standard library, but newer than depguard's $gostd list.
             - go/version
+            # Standard library the source readers of baseline use: the
+            # suppression scan reads comments through the parser.
+            - go/ast
+            - go/parser
+            - go/token
             - github.com/Hedronite/go-tops
             - github.com/santhosh-tekuri/jsonschema/v6
             - go.yaml.in/yaml/v3
