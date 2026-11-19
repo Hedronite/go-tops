@@ -545,7 +545,7 @@ func TestLowerRemovesAnEntryTheRunDoesNotMeasure(t *testing.T) {
 
 func TestWritesKeepTheLedgerBuild(t *testing.T) {
 	old := baseline.Init(baseline.Measure{Build: testBuild, Functions: map[string]float64{"m/a.F": 21}})
-	if old.Build.String() != testBuild.String() {
+	if !old.Build.Equal(testBuild) {
 		t.Fatalf("Init dropped the build: %+v", old.Build)
 	}
 	if got := baseline.Lower(old, baseline.Measure{}); !got.Build.Equal(testBuild) {
@@ -603,5 +603,37 @@ func TestRenameRefusesAKeyThatIsBothAFunctionAndAPackage(t *testing.T) {
 	var ref *baseline.RefusalError
 	if !errors.As(err, &ref) || !strings.Contains(err.Error(), "both") {
 		t.Errorf("err %v", err)
+	}
+}
+
+// §6.7: a refresh must not tell the user to accept a regression the ratchet
+// would not fail. A package fails only when its percentage falls and its
+// uncovered count rises, so deleting tested code moves one number, not both.
+func TestNeedsAcceptKeepsOnlyWhatTheRatchetWouldFail(t *testing.T) {
+	pkg := baseline.Package{StatementsPct: 50, Uncovered: 10}
+	old := baseline.File{Ledger: baseline.Ledger{
+		Functions: map[string]float64{"m/a.F": 12},
+		Packages:  map[string]baseline.Package{"m/pct": pkg, "m/unc": pkg, "m/both": pkg},
+	}}
+	cur := baseline.File{Ledger: baseline.Ledger{
+		Functions: map[string]float64{"m/a.F": 15, "m/a.New": 13},
+		Packages: map[string]baseline.Package{
+			"m/pct":  {StatementsPct: 40, Uncovered: 10}, // percentage falls, count the same: deleted tested code
+			"m/unc":  {StatementsPct: 50, Uncovered: 14}, // count rises, percentage the same
+			"m/both": {StatementsPct: 40, Uncovered: 14}, // both: the rule fails
+			"m/new":  {StatementsPct: 20, Uncovered: 30}, // absent: held to the floor
+		},
+	}}
+	var keys []string
+	for _, c := range baseline.NeedsAccept(baseline.Raised(old, cur)) {
+		keys = append(keys, c.Kind+" "+c.Key)
+	}
+	want := []string{
+		"functions m/a.F", "functions m/a.New",
+		"packages.statements_pct m/both", "packages.statements_pct m/new",
+		"packages.uncovered m/both", "packages.uncovered m/new",
+	}
+	if !reflect.DeepEqual(keys, want) {
+		t.Errorf("NeedsAccept\n%v\nwant\n%v", keys, want)
 	}
 }

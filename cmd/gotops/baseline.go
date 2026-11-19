@@ -344,7 +344,7 @@ func (r *baselineRun) checkLeg(ctx context.Context) error {
 	}
 	r.build = build
 	if !r.a.init && !build.Equal(r.old.Build) {
-		return bfail(baselineRefused, "this run's build (%s) is not the ledger build (%s): the baseline is written only on the ledger leg (GO_TOPS.md §6.7)", build, r.old.Build)
+		return bfail(baselineRefused, "this run's build (%s) is not the ledger build (%s): the baseline is written only on the ledger leg (GO_TOPS.md §6.7)", baseline.DescribeBuild(build), baseline.DescribeBuild(r.old.Build))
 	}
 	return nil
 }
@@ -376,7 +376,7 @@ func (r *baselineRun) lower(m baseline.Measure) error {
 	if err := r.writeIfChanged(next); err != nil {
 		return err
 	}
-	if n := len(baseline.Raised(next, baseline.Init(m))); n > 0 {
+	if n := len(baseline.NeedsAccept(baseline.Raised(next, baseline.Init(m)))); n > 0 {
 		r.env.Stdout.Printf("%d measured value(s) are above the ledger or absent from it and were left as they are. `gotops baseline --accept-regression --reason TEXT --owner HANDLE` records them.\n", n)
 	}
 	return nil
@@ -443,7 +443,8 @@ func currentBuild(_ context.Context, dir string) (baseline.Build, error) {
 	if err != nil {
 		return baseline.Build{}, err
 	}
-	return baseline.Build{GOOS: b.GOOS, GOARCH: b.GOARCH, Tags: slices.Clone(b.Tags), CGOEnabled: b.CGOEnabled}, nil
+	b.Tags = slices.Clone(b.Tags)
+	return b, nil
 }
 
 // runFeedingLayers runs hygiene, tests, coverage and CRAP as `gate` would and
@@ -484,6 +485,9 @@ func (l floorFree) Needs() []string {
 // runLayers runs layers through the gate's runner and returns its report. A run
 // that cannot start is the exit code the gate gives it.
 func runLayers(ctx context.Context, dir string, cfg gate.Config, layers []gate.Layer) (report.Report, error) {
+	// The feeding layers read figures and judge nothing, so they run under hard:
+	// the ratchet judgment, once it is wired into the gate, never runs for a write.
+	cfg.Enforce = "hard"
 	res, err := gate.Execute(ctx, cfg, gate.Options{MaxTier: 1}, gate.Deps{Dir: dir, Layers: layers, ToolVersion: packageVersion})
 	if err != nil {
 		return report.Report{}, startError(err)

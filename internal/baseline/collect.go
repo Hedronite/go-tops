@@ -252,16 +252,15 @@ type crapRow struct {
 	Crap *float64
 }
 
-// functions lists the functions the CRAP layer scored over the cap. Functions
+// functions lists the functions the CRAP layer scored over the cap. A CRAP layer
+// that is off, or did not run, measured no function: a write from it would remove
+// every function entry, so it is a refusal like any feeding layer's. Functions
 // under a crap exemption are listed apart in the report and are not debt: the
 // exemption count carries them. A function the run does not measure has no
 // score, so it gets no entry (ruling C3).
 func (f Feeds) functions() (map[string]float64, error) {
-	l, ok := f.layer(crapID)
-	if ok && l.Outcome == string(gate.Skip) {
-		return nil, nil // switched off in go-tops.yaml with a reason and an expiry
-	}
-	if _, err := f.ranLayer(crapID); err != nil {
+	l, err := f.ranLayer(crapID)
+	if err != nil {
 		return nil, err
 	}
 	rows, err := crapRows(l)

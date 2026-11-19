@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -743,14 +744,18 @@ type fakeLayer struct {
 	pre     error
 	needs   []string
 	ran     *bool
+	enforce *string
 }
 
 func (l fakeLayer) ID() string      { return l.id }
 func (fakeLayer) Tier() int         { return 1 }
 func (l fakeLayer) Needs() []string { return l.needs }
-func (l fakeLayer) Run(context.Context, *gate.Env) gate.Result {
+func (l fakeLayer) Run(_ context.Context, env *gate.Env) gate.Result {
 	if l.ran != nil {
 		*l.ran = true
+	}
+	if l.enforce != nil {
+		*l.enforce = env.Config.Enforce
 	}
 	return gate.Result{Outcome: l.outcome}
 }
@@ -901,5 +906,78 @@ func TestACommittedLedgerIsWrittenAgain(t *testing.T) {
 	fx.setCrap(cfn("example.com/app/a.Alpha", 12), cfn("example.com/app/b.Beta", 14.5))
 	if code, _, stderr := baselineIn(t, dir); code != 0 {
 		t.Errorf("after a commit: exit %d: %s", code, stderr)
+	}
+}
+
+// The feeding run reads figures and judges nothing: it runs the layers under
+// hard, so a ratchet judge added to the gate never runs for a write.
+func TestFeedingRunsTheLayersUnderHard(t *testing.T) {
+	dir := repoWith(t, ratchetConfig(t), "")
+	var seen string
+	layers := []gate.Layer{fakeLayer{id: "tests", outcome: gate.Pass, enforce: &seen}}
+	if _, err := runLayers(t.Context(), dir, gate.Config{Module: "example.com/app", Class: "binary-cli", Enforce: "ratchet"}, layers); err != nil {
+		t.Fatal(err)
+	}
+	if seen != "hard" {
+		t.Errorf("the layers saw enforce %q, want hard", seen)
+	}
+}
+
+// A CRAP layer that is off measured no function. A plain write from it would
+// remove every function entry, so every write refuses.
+func TestEveryWriteRefusesWhenAFeedingLayerDidNotRun(t *testing.T) {
+	for _, outcome := range []string{"skip", "not-reached", "not-run"} {
+		dir, fx := initialised(t)
+		before := fileBytes(t, dir, ledgerRel)
+		for i, l := range fx.rep.Layers {
+			if l.ID == "crap" {
+				fx.rep.Layers[i] = report.Layer{ID: "crap", Outcome: outcome, Reason: "switched off"}
+			}
+		}
+		for _, args := range [][]string{{}, {"--accept-regression", "--reason", "the parser grows one arm", "--owner", "maintainer"}} {
+			code, _, stderr := baselineIn(t, dir, args...)
+			if code != 1 || !strings.Contains(stderr, "crap") {
+				t.Errorf("%s %v: exit %d, stderr %q", outcome, args, code, stderr)
+			}
+		}
+		if fileBytes(t, dir, ledgerRel) != before {
+			t.Errorf("%s: the ledger changed", outcome)
+		}
+	}
+	fx := newFixture()
+	for i, l := range fx.rep.Layers {
+		if l.ID == "crap" {
+			fx.rep.Layers[i] = report.Layer{ID: "crap", Outcome: "skip", Reason: "off"}
+		}
+	}
+	fx.install(t)
+	dir := repoWith(t, ratchetConfig(t), "")
+	if code, _, _ := baselineIn(t, dir, "--init"); code != 1 {
+		t.Errorf("--init with the crap layer off: exit %d, want 1", code)
+	}
+}
+
+// After code deletion the percentage of a package falls and its count does not
+// rise: the ratchet does not fail it, so the refresh must not say to accept it.
+func TestRefreshDoesNotAskToAcceptAPackageTheRatchetWouldPass(t *testing.T) {
+	profile := func(covered, uncovered int) string {
+		return fmt.Sprintf("mode: atomic\nexample.com/app/a/a.go:3.10,5.2 4 1\nexample.com/app/b/b.go:3.10,5.2 %d 1\nexample.com/app/b/b.go:6.10,8.2 %d 0\n", covered, uncovered)
+	}
+	fx := newFixture()
+	fx.profile = profile(3, 3) // 50% with 3 uncovered
+	fx.install(t)
+	dir := repoWith(t, ratchetConfig(t), "")
+	if code, _, stderr := baselineIn(t, dir, "--init"); code != 0 {
+		t.Fatalf("init: exit %d: %s", code, stderr)
+	}
+	commitAll(t, dir)
+	fx.profile = profile(1, 3) // tested code deleted: 25%, still 3 uncovered
+	_, stdout, _ := baselineIn(t, dir)
+	if strings.Contains(stdout, "--accept-regression") {
+		t.Errorf("stdout %q tells the user to accept a package the ratchet passes", stdout)
+	}
+	fx.profile = profile(1, 6) // and untested code added: 14% with 6 uncovered
+	if _, stdout, _ := baselineIn(t, dir); !strings.Contains(stdout, "--accept-regression") {
+		t.Errorf("stdout %q should offer --accept-regression when the package rule would fail", stdout)
 	}
 }

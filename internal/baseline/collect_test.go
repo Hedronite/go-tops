@@ -253,6 +253,9 @@ func TestCollectRefusesWhatWasNotMeasured(t *testing.T) {
 		"crap passed with no cap": func(f *feeds) {
 			f.setLayer("crap", report.Layer{ID: "crap", Outcome: "pass", Details: map[string]any{"violations": fns()}})
 		},
+		"crap switched off": func(f *feeds) {
+			f.setLayer("crap", report.Layer{ID: "crap", Outcome: "skip", Reason: "calibrating", Expires: "2027-01-01"})
+		},
 		"crap tool missing": func(f *feeds) { f.setLayer("crap", report.Layer{ID: "crap", Outcome: "tool-missing"}) },
 	}
 	for name, plant := range tests {
@@ -265,20 +268,6 @@ func TestCollectRefusesWhatWasNotMeasured(t *testing.T) {
 				t.Fatalf("err %v, want a refusal", err)
 			}
 		})
-	}
-}
-
-func TestCollectAcceptsACrapLayerSwitchedOff(t *testing.T) {
-	// enabled: false needs a reason and an expiry, so a switched-off layer is a
-	// stated choice, not a missing output. No function is measured.
-	f := newFeeds(t)
-	f.setLayer("crap", report.Layer{ID: "crap", Outcome: "skip", Reason: "calibrating", Expires: "2027-01-01"})
-	got, err := baseline.Collect(f.in)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(got.Functions) != 0 {
-		t.Errorf("functions %v", got.Functions)
 	}
 }
 

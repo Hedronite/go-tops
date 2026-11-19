@@ -329,6 +329,32 @@ func Raised(old, cur File) []Change {
 	return out
 }
 
+// NeedsAccept keeps, of the changes Raised lists, the ones the ratchet would fail
+// without a record. A package fails only when its percentage falls and its
+// uncovered count rises (§6.7), so a change to one of the two alone is not one:
+// deleting tested code moves the percentage and not the count. The rest are
+// whole.
+func NeedsAccept(changes []Change) []Change {
+	pct, unc := map[string]bool{}, map[string]bool{}
+	for _, c := range changes {
+		switch c.Kind {
+		case kindPkgPct:
+			pct[c.Key] = true
+		case kindPkgUncovered:
+			unc[c.Key] = true
+		}
+	}
+	var out []Change
+	for _, c := range changes {
+		isPkg := c.Kind == kindPkgPct || c.Kind == kindPkgUncovered
+		if isPkg && !(pct[c.Key] && unc[c.Key]) {
+			continue
+		}
+		out = append(out, c)
+	}
+	return out
+}
+
 // Kind says what a ledger key names.
 type Kind int
 

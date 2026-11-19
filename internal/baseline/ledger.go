@@ -20,6 +20,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/Hedronite/go-tops/internal/gobuild"
 )
 
 // Counts is a count per name (a linter or a law ID), then per module-relative
@@ -49,6 +51,11 @@ type Ledger struct {
 // Regression is one accepted regression, written by --accept-regression. Kind
 // and Key name one scalar of the ledger (see Change); From is nil when the
 // entry did not exist.
+//
+// A record matches an entry by Kind, Key and To, never by From. Accept keeps the
+// earliest From of an entry raised more than once, so a record that has been
+// merged with a later one carries a From the diff base may no longer hold; To is
+// the value the ledger has, and it is what a reader compares.
 type Regression struct {
 	Kind, Key string
 	From      *float64
@@ -59,31 +66,24 @@ type Regression struct {
 
 // Build is the build a ledger was measured on (ruling C3): the operating
 // system, the architecture, the build tags and whether cgo is on. The run whose
-// build equals it is the ledger leg, the only run that writes the file.
-type Build struct {
-	GOOS, GOARCH string
-	Tags         []string
-	CGOEnabled   bool
-}
+// build equals it (gobuild.Build.Equal) is the ledger leg, the only run that
+// writes the file.
+type Build = gobuild.Build
 
-func (b Build) sortedTags() []string {
-	tags := append([]string{}, b.Tags...)
+// sortedTags is the build's tags as the file writes them: sorted, once each.
+func sortedTags(b Build) []string {
+	tags := slices.Clone(b.Tags)
 	sort.Strings(tags)
 	return slices.Compact(tags)
 }
 
-// Equal reports whether two builds are the same: tags are a set.
-func (b Build) Equal(o Build) bool {
-	return b.GOOS == o.GOOS && b.GOARCH == o.GOARCH && b.CGOEnabled == o.CGOEnabled && slices.Equal(b.sortedTags(), o.sortedTags())
-}
-
-// String is the build as a message names it.
-func (b Build) String() string {
+// DescribeBuild is the build as a message names it.
+func DescribeBuild(b Build) string {
 	cgo := "cgo=0"
 	if b.CGOEnabled {
 		cgo = "cgo=1"
 	}
-	return fmt.Sprintf("%s/%s %s tags=%s", b.GOOS, b.GOARCH, cgo, strings.Join(b.sortedTags(), ","))
+	return fmt.Sprintf("%s/%s %s tags=%s", b.GOOS, b.GOARCH, cgo, strings.Join(sortedTags(b), ","))
 }
 
 // File is .go-tops/baseline.json.
@@ -359,7 +359,7 @@ func Marshal(f File) []byte {
 	b.WriteString("    \"cgo_enabled\": " + strconv.FormatBool(f.Build.CGOEnabled) + ",\n")
 	b.WriteString("    \"goarch\": " + quote(f.Build.GOARCH) + ",\n    \"goos\": " + quote(f.Build.GOOS) + ",\n")
 	tags := make([]string, 0, len(f.Build.Tags))
-	for _, tag := range f.Build.sortedTags() {
+	for _, tag := range sortedTags(f.Build) {
 		tags = append(tags, quote(tag))
 	}
 	b.WriteString("    \"tags\": [" + strings.Join(tags, ", ") + "]\n  },\n")

@@ -273,25 +273,13 @@ func TestMarshalledStringsAreEscapedAsJSON(t *testing.T) {
 	}
 }
 
-func TestBuildEquality(t *testing.T) {
-	a := baseline.Build{GOOS: "linux", GOARCH: "amd64", Tags: []string{"b", "a"}, CGOEnabled: true}
-	for name, c := range map[string]struct {
-		b    baseline.Build
-		want bool
-	}{
-		"same, tags in another order": {baseline.Build{GOOS: "linux", GOARCH: "amd64", Tags: []string{"a", "b"}, CGOEnabled: true}, true},
-		"duplicate tag":               {baseline.Build{GOOS: "linux", GOARCH: "amd64", Tags: []string{"a", "b", "a"}, CGOEnabled: true}, true},
-		"other os":                    {baseline.Build{GOOS: "darwin", GOARCH: "amd64", Tags: []string{"a", "b"}, CGOEnabled: true}, false},
-		"other arch":                  {baseline.Build{GOOS: "linux", GOARCH: "arm64", Tags: []string{"a", "b"}, CGOEnabled: true}, false},
-		"other tags":                  {baseline.Build{GOOS: "linux", GOARCH: "amd64", Tags: []string{"a"}, CGOEnabled: true}, false},
-		"cgo off":                     {baseline.Build{GOOS: "linux", GOARCH: "amd64", Tags: []string{"a", "b"}}, false},
-	} {
-		if got := a.Equal(c.b); got != c.want {
-			t.Errorf("%s: Equal = %v, want %v", name, got, c.want)
-		}
+func TestDescribeBuildNamesTheOSArchTagsAndCgo(t *testing.T) {
+	b := baseline.Build{GOOS: "linux", GOARCH: "amd64", Tags: []string{"b", "a", "a"}, CGOEnabled: true}
+	if s := baseline.DescribeBuild(b); s != "linux/amd64 cgo=1 tags=a,b" {
+		t.Errorf("DescribeBuild = %q", s)
 	}
-	if s := a.String(); !strings.Contains(s, "linux/amd64") || !strings.Contains(s, "a,b") || !strings.Contains(s, "cgo") {
-		t.Errorf("String %q should name the os, arch, tags and cgo", s)
+	if s := baseline.DescribeBuild(baseline.Build{GOOS: "darwin", GOARCH: "arm64"}); s != "darwin/arm64 cgo=0 tags=" {
+		t.Errorf("DescribeBuild = %q", s)
 	}
 }
 

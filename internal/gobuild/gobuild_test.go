@@ -104,3 +104,25 @@ func TestResolveFailsWhenGoCannotAnswer(t *testing.T) {
 		t.Error("Resolve succeeded with no go command")
 	}
 }
+
+func TestBuildEqual(t *testing.T) {
+	a := gobuild.Build{GOOS: "linux", GOARCH: "amd64", Tags: []string{"b", "a"}, CGOEnabled: true}
+	for name, c := range map[string]struct {
+		b    gobuild.Build
+		want bool
+	}{
+		"same, tags in another order": {gobuild.Build{GOOS: "linux", GOARCH: "amd64", Tags: []string{"a", "b"}, CGOEnabled: true}, true},
+		"a repeated tag":              {gobuild.Build{GOOS: "linux", GOARCH: "amd64", Tags: []string{"a", "b", "a"}, CGOEnabled: true}, true},
+		"other os":                    {gobuild.Build{GOOS: "darwin", GOARCH: "amd64", Tags: []string{"a", "b"}, CGOEnabled: true}, false},
+		"other arch":                  {gobuild.Build{GOOS: "linux", GOARCH: "arm64", Tags: []string{"a", "b"}, CGOEnabled: true}, false},
+		"other tags":                  {gobuild.Build{GOOS: "linux", GOARCH: "amd64", Tags: []string{"a"}, CGOEnabled: true}, false},
+		"cgo off":                     {gobuild.Build{GOOS: "linux", GOARCH: "amd64", Tags: []string{"a", "b"}}, false},
+	} {
+		if got := a.Equal(c.b); got != c.want {
+			t.Errorf("%s: Equal = %v, want %v", name, got, c.want)
+		}
+	}
+	if !(gobuild.Build{}).Equal(gobuild.Build{Tags: []string{}}) {
+		t.Error("a nil and an empty tag list are the same build")
+	}
+}
