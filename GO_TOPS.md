@@ -91,7 +91,9 @@ Tool versions were read from upstream release tags on 2026-11-17.
 
 Protocol and package versions are **separate planes**, as in Rust-TOPS: a package release can
 change code without changing the protocol, and a protocol change must bump the protocol version
-and schema together.
+and schema together. The report's `tool_version` is the version of the `gotops` that wrote it:
+the module version its build reports, which is a release or, for an adopter that pins a commit
+(D3 a), the pseudo-version of that commit under `go tool`; `0.0.0-dev` only for a development build.
 
 ---
 
@@ -123,8 +125,8 @@ test cannot pass in one gate and be absent from another. With `-race` the cover 
 not the wrapper's output.
 
 **One lint pass per concern.** Gate 1 runs golangci-lint once, with the kit's style configuration
-`.go-tops/golangci.yml` (`run.relative-path-mode: wd`, so a finding's path is relative to the
-module whatever the directory of the file), and saves the JSON. There is no standalone `go vet`:
+`.go-tops/golangci.yml` (`run.relative-path-mode: gomod`, so a finding's path is relative to the
+module root whatever directory the gate runs in or the file sits in, and an anchored exclusion applies), and saves the JSON. There is no standalone `go vet`:
 golangci-lint's `govet` runs the same analyzers. The laws layer runs its own pass with the kit's
 law configuration (§8.1). The adopter's own `.golangci.yml` is read by neither pass and is never
 written or changed by `init`: an adopter that already lints keeps its own rules in its own lint
@@ -291,7 +293,7 @@ For a new repo, copy the drop-in set and replace the placeholders:
 | `tools/go.mod`, `tools/go.sum` | Pins for every module tool, run with `go tool -modfile=tools/go.mod` (§10). Where `tools/go.mod` exists, because the adopter pinned `gotops` first (§4.2), `init` adds the kit's missing pins to it and removes no line; a kit tool pinned at another version is a configuration error | generated |
 | `AGENTS.md` | Agent-facing commands and rules (template: `config/AGENTS.template.md`). `init` writes its block between `<!-- go-tops:begin -->` and `<!-- go-tops:end -->` | `{PROTOCOL}`, `{MODULE}`, `{CLASS}`, `{ENFORCE}`, `{COVERAGE_FLOOR}`, `{CRAP_CAP}` |
 | `GO-TOPS.md` | Adoption record (§13) | generated |
-| `.go-tops/golangci.yml` | The kit's golangci-lint v2 config for gate 1, **style only**: no law reads it (§8.1). `gates.hygiene.golangci_lint.config` names it. It sets `run.relative-path-mode: wd` and carries errcheck `check-blank`, `check-type-assertions` and the same `exclude-functions` list as the law pass (§8.1). The adopter's own `.golangci.yml` is never written, overwritten or changed | generated |
+| `.go-tops/golangci.yml` | The kit's golangci-lint v2 config for gate 1, **style only**: no law reads it (§8.1). `gates.hygiene.golangci_lint.config` names it. It sets `run.relative-path-mode: gomod` and carries errcheck `check-blank`, `check-type-assertions` and the same `exclude-functions` list as the law pass (§8.1). The adopter's own `.golangci.yml` is never written, overwritten or changed | generated |
 | `.gitignore` | `init` writes its block between `# go-tops:begin` and `# go-tops:end` and changes nothing outside the markers: `.go-tops/*`, then `!.go-tops/baseline.json`, `!.go-tops/acks.yaml`, `!.go-tops/survivors.yaml` and `!.go-tops/golangci.yml`, so a gate run's own files (the report, the coverage profile, the lint output, the downloaded binaries) are never committed and the ledgers and the kit config are | generated |
 | `.go-tops/baseline.json` | Ratchet baseline (§6.7); written by `gotops baseline`, not by hand | generated |
 | `.gremlins.yaml` or engine config | Mutation settings **[verify]** | |
@@ -1472,10 +1474,11 @@ CI rules (carried from Rust-TOPS's lessons):
   cannot write the first ledger; a ledger written on a developer's machine has the wrong build
   (§6.7). On a `pull_request` the ubuntu leg, the ledger leg, runs `gotops baseline --status
   --base origin/<base>` (the base ref reaches the command through the environment, never the
-  script text). Exit 0 says a first ledger is due: the leg runs `baseline --init` on its own
-  build, uploads `.go-tops/baseline.json` as the `go-tops-baseline` artifact and fails the run
-  until that file is committed, unchanged. Exit 1 runs the gate and its judge as usual. Any other
-  exit fails the run. The manual run (`workflow_dispatch`, `init` or `refresh`) stays for a
+  script text) and reads the `state` of the one JSON line it prints. Exit 0 with `first-ledger-due`
+  says a first ledger is due: the leg runs `baseline --init` on its own build, uploads
+  `.go-tops/baseline.json` as the `go-tops-baseline` artifact and fails the run until that file is
+  committed, unchanged. Exit 1 with `present`, `deleted` or `advisory` runs the gate and its judge
+  as usual. Any other pair, a missing or unknown state included, fails the run. The manual run (`workflow_dispatch`, `init` or `refresh`) stays for a
   repository whose workflow is on the default branch.
 - **No `law-diff` job in the adopter drop-in.** An adopter has no law files to diff. The risk on
   the adopter's side is an edit to the files that set the gate, so the drop-in ships a CODEOWNERS
@@ -1503,12 +1506,12 @@ CI rules (carried from Rust-TOPS's lessons):
 |---|---|
 | `init --class <c>` | Writes `go-tops.yaml`, `go-tops.lock`, `tools/go.mod` with its pins (added to the file, without removing a line, where one exists), `.go-tops/golangci.yml` (the kit's style rules; the adopter's own `.golangci.yml` is never written or changed), the workflow, the CODEOWNERS fragment, `justfile`, the `.gitignore` block and the adoption record `GO-TOPS.md`. It writes no laws config: the kit embeds it. Where `AGENTS.md` exists it writes only between `<!-- go-tops:begin -->` and `<!-- go-tops:end -->`, replacing the block on a re-run and appending the pair when absent; one marker without the other is a configuration error. Where `AGENTS.md` is absent it creates the file with the block. Refuses to overwrite any other existing file without `--force`. |
 | `check` | Validates `go-tops.yaml` against the **JSON Schema** (full validation, an improvement over Rust-TOPS's partial checks), plus semantic checks: protocol id, non-empty version, module name, language floor ≤ current, `gates.crap.cap` not above the class column of §5.2 and `gates.coverage.statements_floor` not below it (a class with no column takes the cap 8 and the floor 90% of §5.2), an `enabled: false` without a `reason`, a disabled `gates.crap` or `gates.mutation` without an `expires` that has not passed, an `enabled` key on `gates.hygiene`, `gates.tests` or `gates.coverage`, every `laws.required` ID in the catalog, applying to the class, with a reader and at tier 1 or below, every exemption well formed and unexpired (§6.8), every entry of `.go-tops/survivors.yaml` valid against `survivorEntry` and every entry of `.go-tops/acks.yaml` valid against `ackEntry` in `schema/core.schema.json` (§6.4, §3.3), `go-tops.lock` valid against `schema/lock.schema.json` (§10), `enforce: advisory` carrying the `advisory` key (reason, owner, an `expires` that has not passed), and under `ratchet` the baseline file exists and is clean against `HEAD`. |
-| `baseline` | Writes `.go-tops/baseline.json` (§6.7), the only command that does. `--init` measures and writes the first ledger, with the build it ran under, when the tests are green and every feeding layer produced non-empty output (thresholds may be red); `--init --kind survivors` records the tier 2 survivor counts the same way. A plain `baseline` only lowers entries and removes paid ones. `--accept-regression --reason <text> --owner <handle>` is the one way to raise an entry or lower `judged_laws` (the PR carries the `protocol-change` label). `--rename <old-key> <new-key>` moves one key. Refused under `advisory`, and `--init` is refused when a ledger exists. Every write after `--init` runs on the ledger leg, the run whose build equals the `build` the file records (§6.7); on any other leg it exits 1 and names the ledger build. `--init` is run on the build of the leg the repo names as its ledger leg. `--status [--base <ref>]` writes nothing and prints one JSON line: exit 0 when a first ledger is due (neither the base ref's tree nor the working tree has a ledger), 1 when one is present, was deleted or the run is advisory, and 2 when it cannot tell, which the caller treats as a failure. |
+| `baseline` | Writes `.go-tops/baseline.json` (§6.7), the only command that does. `--init` measures and writes the first ledger, with the build it ran under, when the tests are green and every feeding layer produced non-empty output (thresholds may be red); `--init --kind survivors` records the tier 2 survivor counts the same way. A plain `baseline` only lowers entries and removes paid ones. `--accept-regression --reason <text> --owner <handle>` is the one way to raise an entry or lower `judged_laws` (the PR carries the `protocol-change` label). `--rename <old-key> <new-key>` moves one key. Refused under `advisory`, and `--init` is refused when a ledger exists. Every write after `--init` runs on the ledger leg, the run whose build equals the `build` the file records (§6.7); on any other leg it exits 1 and names the ledger build. `--init` is run on the build of the leg the repo names as its ledger leg. `--status [--base <ref>]` writes nothing and prints one JSON line whose `state` is `first-ledger-due` (exit 0: neither the base ref's tree nor the working tree has a ledger), `present`, `deleted` or `advisory` (exit 1), or `error` (exit 2: it cannot tell, which a caller treats as a failure). |
 | `gate` | Runs every enabled layer at or below `--max-tier` (default 1), in order, each judged (§3.5), laws last. Options: `--max-tier N`, `--fail-fast`, `--dry-run` (refused in CI), `--base <ref>`, `--json`, `--only <layer>` (a range that leaves a required law out ends `partial` and is refused in CI). A mapped tool that is missing is `tool-missing` and exits 1. Under `ratchet` the judgment against the ledger is made on the ledger leg only and is `skip` elsewhere (§6.7). Exit codes: §12.2. |
 | `laws [list \| run \| explain G-NN]` | Lists the catalog with readers, runs the laws layer alone, explains a law. |
 | `report [--format text \| json \| junit \| sarif]` | Renders the last report. |
 | `lock [--verify \| --update]` | Verifies or updates tool pins (§10). `--verify` reads the lock, valid against `schema/lock.schema.json`, then reads each module tool's version with `go version -m`, compares each downloaded binary's SHA-256, and compares `go env GOVERSION` with the pinned toolchain. `--update` is a reviewed change, never run in CI. |
-| `doctor` | Diagnoses environment: Go version against the floor (compared in Go's order, §2) and against the pinned toolchain, a C compiler (cgo is required for `-race`), tool presence, `GOFLAGS`, `GOTOOLCHAIN`, cgo state. |
+| `doctor` | Diagnoses environment: Go version against the protocol floor and against the configured `toolchain.go_floor` when one is set (compared in Go's order, §2) and against the pinned toolchain, a C compiler (cgo is required for `-race`), tool presence, each resolved binary's SHA-256 against `go-tops.lock` for the host as the gate checks it (a binary the lock refuses is `fail`, never `ok`), `GOFLAGS`, `GOTOOLCHAIN`, cgo state. |
 | `survivors [list \| explain \| expire]` | Manages the mutation survivor ledger. |
 | `version` | Protocol, package, and pinned-tool versions. |
 
