@@ -357,6 +357,10 @@ func (h *run) runLint(argv []string) (lintResult, gate.Output, *step) {
 		return fail(failed(lintName, "cannot clear the previous result: %v", err))
 	}
 	args := append(append(append([]string{}, argv...), "run"), h.lintConfigArgs()...)
+	// Not capped: the default stops at 3 findings with the same text and 50 per
+	// linter, and which files survive varies from run to run, so a ledger written
+	// from one run would disagree with the gate on identical code.
+	args = append(args, "--max-issues-per-linter=0", "--max-same-issues=0")
 	out, err := h.exec(append(args, "--output.json.path="+LintJSON, "./...")...)
 	if err != nil {
 		return fail(cantStart(lintName, err))

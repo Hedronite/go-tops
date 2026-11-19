@@ -155,3 +155,25 @@ func TestCheckOrderIsTheOrderTheLayerRunsItsChecks(t *testing.T) {
 		last = i
 	}
 }
+
+// golangci-lint stops reporting after 3 findings with the same text, and after 50
+// per linter, and which files survive the cap varies from run to run. The ledger
+// counts findings per file, so a capped run gives a different count each time: the
+// ledger and the gate disagreed on identical code. The one lint run is not capped.
+func TestTheLintRunIsNotCapped(t *testing.T) {
+	f := newFake(t)
+	runLayer(t, f, gate.Config{})
+	for _, argv := range f.calls {
+		call := strings.Join(argv, " ")
+		if !strings.Contains(call, "golangci-lint run") {
+			continue
+		}
+		for _, want := range []string{"--max-issues-per-linter=0", "--max-same-issues=0"} {
+			if !strings.Contains(call, want) {
+				t.Errorf("the lint run %q lacks %s: its findings would be capped", call, want)
+			}
+		}
+		return
+	}
+	t.Fatal("no golangci-lint run was started")
+}
