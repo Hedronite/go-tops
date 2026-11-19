@@ -34,6 +34,9 @@ type Deps struct {
 	ToolVersion string
 	// Laws judges the laws layer; default laws.Judge, the stub until M5.
 	Laws func(laws.Input) []laws.Result
+	// Ratchet judges the run against the debt ledger under enforce: ratchet
+	// (§6.7); default DefaultRatchet. See ratchet.go.
+	Ratchet RatchetJudge
 }
 
 // BinaryVerifier builds the verify hook of the default ToolResolver for a
@@ -132,10 +135,11 @@ func Execute(ctx context.Context, cfg Config, opts Options, d Deps) (*Run, error
 	}
 
 	layers, stopped, vulnDB := runLayers(ctx, env, plan, opts)
+	verdict, layers := d.ratchetStage(ctx, cfg, env, layers, stopped)
 
 	results := d.Laws(laws.Input{Class: cfg.Class, MaxTier: opts.MaxTier, InRange: lawsIn, Reached: !stopped, Required: required})
-	rep := assemble(cfg, opts, git, started, d.Now(), d.ToolVersion, vulnDB, layers, results)
-	return &Run{Report: rep, ExitCode: rep.Summary.ExitCode, Text: report.RenderText(rep)}, nil
+	rep := assemble(cfg, opts, git, started, d.Now(), d.ToolVersion, vulnDB, layers, results, verdict)
+	return &Run{Report: rep, ExitCode: rep.Summary.ExitCode, Text: verdict.text(report.RenderText(rep))}, nil
 }
 
 // makePlan decides, for each layer, whether it is in range (§3.2, §3.5) and
@@ -266,7 +270,7 @@ func judge(l Layer, r Result) Result {
 }
 
 // assemble builds the report and the verdict of the run (§3.3, §12.3).
-func assemble(cfg Config, opts Options, git report.Git, started, ended time.Time, toolVersion, vulnDB string, layers []report.Layer, results []laws.Result) report.Report {
+func assemble(cfg Config, opts Options, git report.Git, started, ended time.Time, toolVersion, vulnDB string, layers []report.Layer, results []laws.Result, rv *RatchetVerdict) report.Report {
 	rep := report.Report{
 		Protocol: report.Protocol, ToolVersion: toolVersion, Module: cfg.Module, Class: cfg.Class, Enforce: cfg.Enforce,
 		Git: git, MaxTier: opts.MaxTier,
@@ -333,6 +337,7 @@ func assemble(cfg Config, opts Options, git report.Git, started, ended time.Time
 	if refused || lw.RequiredNotEvaluated > 0 {
 		failed = append(failed, LawsLayer)
 	}
+	failed = rv.mark(&rep, failed)
 	if rep.LayerCounts.Ran != rep.LayerCounts.EnabledInRange && len(failed) == 0 {
 		failed = append(failed, "layer_counts")
 	}
