@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -56,8 +57,38 @@ type Regression struct {
 	Owner     string
 }
 
+// Build is the build a ledger was measured on (ruling C3): the operating
+// system, the architecture, the build tags and whether cgo is on. The run whose
+// build equals it is the ledger leg, the only run that writes the file.
+type Build struct {
+	GOOS, GOARCH string
+	Tags         []string
+	CGOEnabled   bool
+}
+
+func (b Build) sortedTags() []string {
+	tags := append([]string{}, b.Tags...)
+	sort.Strings(tags)
+	return slices.Compact(tags)
+}
+
+// Equal reports whether two builds are the same: tags are a set.
+func (b Build) Equal(o Build) bool {
+	return b.GOOS == o.GOOS && b.GOARCH == o.GOARCH && b.CGOEnabled == o.CGOEnabled && slices.Equal(b.sortedTags(), o.sortedTags())
+}
+
+// String is the build as a message names it.
+func (b Build) String() string {
+	cgo := "cgo=0"
+	if b.CGOEnabled {
+		cgo = "cgo=1"
+	}
+	return fmt.Sprintf("%s/%s %s tags=%s", b.GOOS, b.GOARCH, cgo, strings.Join(b.sortedTags(), ","))
+}
+
 // File is .go-tops/baseline.json.
 type File struct {
+	Build       Build
 	Ledger      Ledger
 	JudgedLaws  int
 	Regressions []Regression
@@ -75,9 +106,17 @@ func refuse(format string, a ...any) *RefusalError {
 
 // wire is the file as JSON, the way Parse reads it.
 type wire struct {
+	Build       *wireBuild   `json:"build"`
 	JudgedLaws  *int         `json:"judged_laws"`
 	Ledger      *wireLedger  `json:"ledger"`
 	Regressions []wireRecord `json:"regressions"`
+}
+
+type wireBuild struct {
+	GOOS       *string   `json:"goos"`
+	GOARCH     *string   `json:"goarch"`
+	Tags       *[]string `json:"tags"`
+	CGOEnabled *bool     `json:"cgo_enabled"`
 }
 
 type wireLedger struct {
@@ -123,10 +162,13 @@ func Parse(data []byte) (File, error) {
 	if _, err := dec.Token(); !errors.Is(err, io.EOF) {
 		return File{}, errors.New("more than one JSON value, or text after the first")
 	}
-	if w.Ledger == nil || w.JudgedLaws == nil {
-		return File{}, errors.New(`not a baseline: "ledger" and "judged_laws" are required`)
+	if w.Ledger == nil || w.JudgedLaws == nil || w.Build == nil {
+		return File{}, errors.New(`not a baseline: "build", "ledger" and "judged_laws" are required`)
 	}
-	f := File{JudgedLaws: *w.JudgedLaws}
+	if b := w.Build; b.GOOS == nil || b.GOARCH == nil || b.Tags == nil || b.CGOEnabled == nil || *b.GOOS == "" || *b.GOARCH == "" {
+		return File{}, errors.New(`not a baseline: "build" needs goos, goarch, tags and cgo_enabled`)
+	}
+	f := File{JudgedLaws: *w.JudgedLaws, Build: Build{GOOS: *w.Build.GOOS, GOARCH: *w.Build.GOARCH, Tags: *w.Build.Tags, CGOEnabled: *w.Build.CGOEnabled}}
 	l := w.Ledger
 	f.Ledger = Ledger{Functions: nonEmpty(l.Functions), Findings: nonEmptyCounts(l.Findings), Laws: nonEmptyCounts(l.Laws), Exemptions: l.Exemptions, Survivors: nonEmpty(l.Survivors)}
 	if len(l.Packages) > 0 {
@@ -269,7 +311,15 @@ func ledgerNode(l Ledger) node {
 // Regressions are written in order of kind and key.
 func Marshal(f File) []byte {
 	var b bytes.Buffer
-	b.WriteString("{\n  \"judged_laws\": " + strconv.Itoa(f.JudgedLaws) + ",\n  \"ledger\": ")
+	b.WriteString("{\n  \"build\": {\n")
+	b.WriteString("    \"cgo_enabled\": " + strconv.FormatBool(f.Build.CGOEnabled) + ",\n")
+	b.WriteString("    \"goarch\": " + quote(f.Build.GOARCH) + ",\n    \"goos\": " + quote(f.Build.GOOS) + ",\n")
+	tags := make([]string, 0, len(f.Build.Tags))
+	for _, tag := range f.Build.sortedTags() {
+		tags = append(tags, quote(tag))
+	}
+	b.WriteString("    \"tags\": [" + strings.Join(tags, ", ") + "]\n  },\n")
+	b.WriteString("  \"judged_laws\": " + strconv.Itoa(f.JudgedLaws) + ",\n  \"ledger\": ")
 	emit(&b, "  ", ledgerNode(f.Ledger))
 	if recs := sortedRecords(f.Regressions); len(recs) > 0 {
 		b.WriteString(",\n  \"regressions\": [\n")

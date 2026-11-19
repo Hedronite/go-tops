@@ -19,10 +19,6 @@ import (
 // module's production files.
 type SourceInventory struct{ fns, pkgs map[string]bool }
 
-// Functions is every function key found. STAND-IN for the functions the run
-// scored: it assumes every file is in the build.
-func (s *SourceInventory) Functions() map[string]bool { return s.fns }
-
 // Has implements Inventory.
 func (s *SourceInventory) Has(k Kind, key string) bool {
 	if k == KindPackage {

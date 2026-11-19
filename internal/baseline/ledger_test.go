@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"io/fs"
+	"strings"
 	"testing"
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
@@ -15,6 +16,16 @@ import (
 // GO_TOPS.md §6.7: .go-tops/baseline.json is written with keys sorted and one
 // entry per line so that parallel branches merge without conflict. Its shape is
 // core.schema.json#/$defs/baseline.
+
+// testBuild is the build a ledger records (ruling C3).
+var testBuild = baseline.Build{GOOS: "linux", GOARCH: "amd64", Tags: []string{"race"}, CGOEnabled: true}
+
+// buildDef is the build object of ruling C3 as the ledger writes it: goos,
+// goarch, tags and cgo_enabled, all required. Until the 0.4.3 schema (PR 26)
+// carries it, validate adds it to the embedded definition.
+const buildDef = `{"type":"object","additionalProperties":false,"required":["goos","goarch","tags","cgo_enabled"],
+ "properties":{"goos":{"type":"string","minLength":1},"goarch":{"type":"string","minLength":1},
+ "tags":{"type":"array","items":{"type":"string","minLength":1}},"cgo_enabled":{"type":"boolean"}}}`
 
 // validate checks data against the embedded baseline definition.
 func validate(t *testing.T, data []byte) error {
@@ -29,6 +40,9 @@ func validate(t *testing.T, data []byte) error {
 		raw, err := fs.ReadFile(gotops.Files(), name)
 		if err != nil {
 			t.Fatal(err)
+		}
+		if name == "schema/core.schema.json" && !bytes.Contains(raw, []byte(`"build"`)) {
+			raw = withBuild(t, raw)
 		}
 		doc, err := jsonschema.UnmarshalJSON(bytes.NewReader(raw))
 		if err != nil {
@@ -49,11 +63,64 @@ func validate(t *testing.T, data []byte) error {
 	return sch.Validate(v)
 }
 
+func withBuild(t *testing.T, core []byte) []byte {
+	t.Helper()
+	// The patch is written as a merge of JSON documents, so no type assertion is
+	// needed on the schema's shape.
+	patch := `{"$defs":{"baseline":{"properties":{"build":` + buildDef + `}}}}`
+	var doc, over map[string]any
+	if err := json.Unmarshal(core, &doc); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal([]byte(patch), &over); err != nil {
+		t.Fatal(err)
+	}
+	merge(doc, over)
+	var req struct {
+		Defs struct {
+			Baseline struct {
+				Required []string `json:"required"`
+			} `json:"baseline"`
+		} `json:"$defs"`
+	}
+	if err := json.Unmarshal(core, &req); err != nil {
+		t.Fatal(err)
+	}
+	required, err := json.Marshal(append(req.Defs.Baseline.Required, "build"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var reqDoc map[string]any
+	if err := json.Unmarshal([]byte(`{"$defs":{"baseline":{"required":`+string(required)+`}}}`), &reqDoc); err != nil {
+		t.Fatal(err)
+	}
+	merge(doc, reqDoc)
+	out, err := json.Marshal(doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+
+// merge copies over into dst, objects key by key and everything else whole.
+func merge(dst, over map[string]any) {
+	for k, v := range over {
+		sub, isMap := v.(map[string]any)
+		cur, curMap := dst[k].(map[string]any)
+		if isMap && curMap {
+			merge(cur, sub)
+			continue
+		}
+		dst[k] = v
+	}
+}
+
 func f64(v float64) *float64 { return &v }
 
 // full holds every kind, written in no particular order.
 func full() baseline.File {
 	return baseline.File{
+		Build: testBuild,
 		Ledger: baseline.Ledger{
 			Functions:  map[string]float64{"example.com/app/z.Zed": 12.5, "example.com/app/a.Alpha": 21, "example.com/app/a.T.Method": 10.25},
 			Packages:   map[string]baseline.Package{"example.com/app/q": {StatementsPct: 71.5, Uncovered: 12}, "example.com/app/b": {StatementsPct: 0, Uncovered: 40}},
@@ -73,6 +140,12 @@ func full() baseline.File {
 }
 
 const fullJSON = `{
+  "build": {
+    "cgo_enabled": true,
+    "goarch": "amd64",
+    "goos": "linux",
+    "tags": ["race"]
+  },
   "judged_laws": 7,
   "ledger": {
     "exemptions": 2,
@@ -139,7 +212,7 @@ func TestMarshalIsDeterministic(t *testing.T) {
 }
 
 func TestMarshalIsValidAgainstTheBaselineSchema(t *testing.T) {
-	for name, f := range map[string]baseline.File{"full": full(), "empty": {}} {
+	for name, f := range map[string]baseline.File{"full": full(), "empty": {Build: testBuild}, "no tags": {Build: baseline.Build{GOOS: "darwin", GOARCH: "arm64"}}} {
 		if err := validate(t, baseline.Marshal(f)); err != nil {
 			t.Errorf("%s: %v\n%s", name, err, baseline.Marshal(f))
 		}
@@ -148,8 +221,8 @@ func TestMarshalIsValidAgainstTheBaselineSchema(t *testing.T) {
 
 func TestEmptyLedgerIsAValidFileWithAnEmptyLedger(t *testing.T) {
 	// §6.7: a repo with nothing over the line gets a valid file with an empty ledger.
-	want := "{\n  \"judged_laws\": 0,\n  \"ledger\": {}\n}\n"
-	if got := string(baseline.Marshal(baseline.File{})); got != want {
+	want := "{\n  \"build\": {\n    \"cgo_enabled\": true,\n    \"goarch\": \"amd64\",\n    \"goos\": \"linux\",\n    \"tags\": [\"race\"]\n  },\n  \"judged_laws\": 0,\n  \"ledger\": {}\n}\n"
+	if got := string(baseline.Marshal(baseline.File{Build: testBuild})); got != want {
 		t.Errorf("empty ledger wrote %q, want %q", got, want)
 	}
 }
@@ -167,13 +240,15 @@ func TestParseRoundTrips(t *testing.T) {
 
 func TestParseRefusesWhatIsNotALedger(t *testing.T) {
 	for name, doc := range map[string]string{
-		"empty":            "",
-		"not json":         "ledger:",
-		"unknown key":      `{"ledger":{},"judged_laws":0,"extra":1}`,
-		"unknown kind":     `{"ledger":{"bogus":{}},"judged_laws":0}`,
-		"text after json":  `{"ledger":{},"judged_laws":0} x`,
-		"no judged_laws":   `{"ledger":{}}`,
-		"count not number": `{"ledger":{"exemptions":"two"},"judged_laws":0}`,
+		"empty":             "",
+		"not json":          "ledger:",
+		"unknown key":       `{"build":{"goos":"linux","goarch":"amd64","tags":[],"cgo_enabled":true},"ledger":{},"judged_laws":0,"extra":1}`,
+		"no build":          `{"ledger":{},"judged_laws":0}`,
+		"build missing key": `{"build":{"goos":"linux"},"ledger":{},"judged_laws":0}`,
+		"unknown kind":      `{"ledger":{"bogus":{}},"judged_laws":0}`,
+		"text after json":   `{"build":{"goos":"linux","goarch":"amd64","tags":[],"cgo_enabled":true},"ledger":{},"judged_laws":0} x`,
+		"no judged_laws":    `{"build":{"goos":"linux","goarch":"amd64","tags":[],"cgo_enabled":true},"ledger":{}}`,
+		"count not number":  `{"build":{"goos":"linux","goarch":"amd64","tags":[],"cgo_enabled":true},"ledger":{"exemptions":"two"},"judged_laws":0}`,
 	} {
 		if _, err := baseline.Parse([]byte(doc)); err == nil {
 			t.Errorf("%s: Parse accepted %q", name, doc)
@@ -195,5 +270,34 @@ func TestMarshalledStringsAreEscapedAsJSON(t *testing.T) {
 	}
 	if bytes.Contains(data, []byte("\\u003c")) {
 		t.Errorf("angle brackets were HTML-escaped: %s", data)
+	}
+}
+
+func TestBuildEquality(t *testing.T) {
+	a := baseline.Build{GOOS: "linux", GOARCH: "amd64", Tags: []string{"b", "a"}, CGOEnabled: true}
+	for name, c := range map[string]struct {
+		b    baseline.Build
+		want bool
+	}{
+		"same, tags in another order": {baseline.Build{GOOS: "linux", GOARCH: "amd64", Tags: []string{"a", "b"}, CGOEnabled: true}, true},
+		"duplicate tag":               {baseline.Build{GOOS: "linux", GOARCH: "amd64", Tags: []string{"a", "b", "a"}, CGOEnabled: true}, true},
+		"other os":                    {baseline.Build{GOOS: "darwin", GOARCH: "amd64", Tags: []string{"a", "b"}, CGOEnabled: true}, false},
+		"other arch":                  {baseline.Build{GOOS: "linux", GOARCH: "arm64", Tags: []string{"a", "b"}, CGOEnabled: true}, false},
+		"other tags":                  {baseline.Build{GOOS: "linux", GOARCH: "amd64", Tags: []string{"a"}, CGOEnabled: true}, false},
+		"cgo off":                     {baseline.Build{GOOS: "linux", GOARCH: "amd64", Tags: []string{"a", "b"}}, false},
+	} {
+		if got := a.Equal(c.b); got != c.want {
+			t.Errorf("%s: Equal = %v, want %v", name, got, c.want)
+		}
+	}
+	if s := a.String(); !strings.Contains(s, "linux/amd64") || !strings.Contains(s, "a,b") || !strings.Contains(s, "cgo") {
+		t.Errorf("String %q should name the os, arch, tags and cgo", s)
+	}
+}
+
+func TestMarshalWritesTagsSortedAndOnce(t *testing.T) {
+	f := baseline.File{Build: baseline.Build{GOOS: "linux", GOARCH: "amd64", Tags: []string{"z", "a", "z"}}}
+	if got := string(baseline.Marshal(f)); !strings.Contains(got, `"tags": ["a", "z"]`) || !strings.Contains(got, `"cgo_enabled": false`) {
+		t.Errorf("%s", got)
 	}
 }

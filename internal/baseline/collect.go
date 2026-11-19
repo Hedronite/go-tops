@@ -30,10 +30,8 @@ type Feeds struct {
 	Dir    string
 	// Acks is the module-relative path of .go-tops/acks.yaml; "" for none.
 	Acks string
-	// Scored is every production function the CRAP layer scored on this run
-	// (ruling C2). Until internal/crap exports it, the command fills it from a
-	// stand-in.
-	Scored map[string]bool
+	// Build is the build this run measured (ruling C3).
+	Build Build
 }
 
 // Collect measures a run for the ledger (§6.7). It refuses, with a
@@ -61,7 +59,7 @@ func Collect(f Feeds) (Measure, error) {
 	}
 	m.Exemptions = len(f.Config.Exemptions)
 	m.JudgedLaws = f.Report.Laws.ApplicableJudged
-	m.Scored = f.Scored
+	m.Build = f.Build
 	return m, nil
 }
 

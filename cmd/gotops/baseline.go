@@ -77,16 +77,10 @@ func bfail(code int, format string, a ...any) *baselineError {
 // replaces them, so the command is exercised without a test run or a linter.
 var (
 	runFeeding = runFeedingLayers
-	// scoredFunctions is the set of functions the CRAP layer scored (ruling C2).
-	// STAND-IN until internal/crap exports its per-function list: every function
-	// found in the source is taken as scored.
-	scoredFunctions = func(dir string, cfg gate.Config) (map[string]bool, error) {
-		inv, err := baseline.ScanInventory(dir, cfg.Module)
-		if err != nil {
-			return nil, err
-		}
-		return inv.Functions(), nil
-	}
+	// runBuild is the build the run measures (ruling C3). STAND-IN until
+	// internal/crap defines it: the operating system and architecture from the go
+	// command, cgo on and the race tag, as the test run of the tests layer sets.
+	runBuild      = currentBuild
 	scanInventory = func(dir, module string) (baseline.Inventory, error) { return baseline.ScanInventory(dir, module) }
 )
 
@@ -182,16 +176,19 @@ func baselineMain(ctx context.Context, env cli.Env, a baselineArgs) error {
 	case err != nil && !a.init:
 		return err
 	}
+	build, err := runBuild(ctx, dir)
+	if err != nil {
+		return bfail(baselineEnv, "read the build: %v", err)
+	}
+	if !a.init && !build.Equal(old.Build) {
+		return bfail(baselineRefused, "this run's build (%s) is not the ledger build (%s): the baseline is written only on the ledger leg (GO_TOPS.md §6.7)", build, old.Build)
+	}
 	if a.rename {
 		return renameKey(env, dir, cfg, path, rel, old, a)
 	}
-	m, err := measure(ctx, dir, cfg, acks)
+	m, err := measure(ctx, dir, cfg, acks, build)
 	if err != nil {
 		return err
-	}
-	inv, err := scanInventory(dir, cfg.Module)
-	if err != nil {
-		return bfail(baselineEnv, "read the source tree: %v", err)
 	}
 	switch {
 	case a.init:
@@ -202,7 +199,7 @@ func baselineMain(ctx context.Context, env cli.Env, a baselineArgs) error {
 		env.Stdout.Printf("%s written: %s\nCommit it with go-tops.yaml; `gotops check` and `gotops gate` then read it as the first ledger.\n", rel, describe(next))
 		return nil
 	case a.accept:
-		next, err := baseline.Accept(old, m, a.reason, a.owner, inv)
+		next, err := baseline.Accept(old, m, a.reason, a.owner)
 		if err != nil {
 			return refusal(err)
 		}
@@ -212,7 +209,7 @@ func baselineMain(ctx context.Context, env cli.Env, a baselineArgs) error {
 		env.Stdout.Printf("%s written: %s\n%d regression(s) recorded under owner %s. The PR carries the protocol-change label.\n", rel, describe(next), len(next.Regressions), a.owner)
 		return nil
 	}
-	next := baseline.Lower(old, m, inv)
+	next := baseline.Lower(old, m)
 	before, after := baseline.Marshal(old), baseline.Marshal(next)
 	if string(before) == string(after) {
 		env.Stdout.Printf("%s unchanged: nothing to lower.\n", rel)
@@ -256,20 +253,32 @@ func renameKey(env cli.Env, dir string, cfg gate.Config, path, rel string, old b
 
 // measure runs the feeding layers, which judge nothing here, and reads what
 // they measured. A run that measured nothing it can record is a refusal.
-func measure(ctx context.Context, dir string, cfg gate.Config, acks string) (baseline.Measure, error) {
+func measure(ctx context.Context, dir string, cfg gate.Config, acks string, build baseline.Build) (baseline.Measure, error) {
 	rep, err := runFeeding(ctx, dir, cfg)
 	if err != nil {
 		return baseline.Measure{}, err
 	}
-	scored, err := scoredFunctions(dir, cfg)
-	if err != nil {
-		return baseline.Measure{}, bfail(baselineEnv, "read the source tree: %v", err)
-	}
-	m, err := baseline.Collect(baseline.Feeds{Report: rep, Config: cfg, Dir: dir, Acks: acks, Scored: scored})
+	m, err := baseline.Collect(baseline.Feeds{Report: rep, Config: cfg, Dir: dir, Acks: acks, Build: build})
 	if err != nil {
 		return baseline.Measure{}, refusal(err)
 	}
 	return m, nil
+}
+
+// currentBuild is the build of the run: GOOS and GOARCH as the go command sees
+// them, with the settings the test run pins: cgo on and the race tag.
+func currentBuild(ctx context.Context, dir string) (baseline.Build, error) {
+	cmd := exec.CommandContext(ctx, "go", "env", "GOOS", "GOARCH")
+	cmd.Dir = dir
+	out, err := cmd.Output()
+	if err != nil {
+		return baseline.Build{}, err
+	}
+	f := strings.Fields(string(out))
+	if len(f) != 2 {
+		return baseline.Build{}, fmt.Errorf("go env GOOS GOARCH printed %q", strings.TrimSpace(string(out)))
+	}
+	return baseline.Build{GOOS: f[0], GOARCH: f[1], Tags: []string{"race"}, CGOEnabled: true}, nil
 }
 
 // runFeedingLayers runs hygiene, tests, coverage and CRAP as `gate` would and

@@ -62,7 +62,8 @@ func newFeeds(t *testing.T) *feeds {
 	write("b/b.go", "package b\n")
 	f := &feeds{t: t, dir: dir}
 	f.in = baseline.Feeds{
-		Dir: dir,
+		Dir:   dir,
+		Build: testBuild,
 		Config: gate.Config{
 			Module: module, Coverage: gate.CoverageConfig{StatementsFloor: 90},
 			Crap: gate.CrapConfig{Cap: 10},
@@ -139,6 +140,7 @@ func TestCollectMeasuresARunWhoseThresholdsAreRed(t *testing.T) {
 		Findings:   baseline.Counts{"errcheck": {"b/b.go": 1}, "revive": {"a/a.go": 2}},
 		Exemptions: 2,
 		JudgedLaws: 4,
+		Build:      testBuild,
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("Collect:\n%+v\nwant\n%+v", got, want)
@@ -209,7 +211,7 @@ func TestCollectWithNothingOverTheLineIsAnEmptyMeasure(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := baseline.Measure{JudgedLaws: 4}
+	want := baseline.Measure{JudgedLaws: 4, Build: testBuild}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("%+v, want %+v", got, want)
 	}

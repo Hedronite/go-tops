@@ -32,18 +32,8 @@ func legacy() baseline.Measure {
 		Nolint:     baseline.Counts{"gosec": {"a.go": 2, "b.go": 1}},
 		Exemptions: 1,
 		JudgedLaws: 0,
+		Build:      testBuild,
 	}
-}
-
-// lower and accept run with an inventory in which nothing exists: an entry the
-// run did not measure is then one whose function is in no file, which a write
-// removes (ruling C2). The C2 tests below give the inventory real keys.
-func lower(old baseline.File, m baseline.Measure) baseline.File {
-	return baseline.Lower(old, m, inv{})
-}
-
-func accept(old baseline.File, m baseline.Measure, reason, owner string) (baseline.File, error) {
-	return baseline.Accept(old, m, reason, owner, inv{})
 }
 
 func ledgerOf(m baseline.Measure) baseline.File { return baseline.Init(m) }
@@ -51,7 +41,7 @@ func ledgerOf(m baseline.Measure) baseline.File { return baseline.Init(m) }
 func TestInitWritesWhatWasMeasured(t *testing.T) {
 	m := legacy()
 	f := baseline.Init(m)
-	want := baseline.File{Ledger: baseline.Ledger{
+	want := baseline.File{Build: testBuild, Ledger: baseline.Ledger{
 		Functions: m.Functions, Packages: m.Packages, Findings: m.Findings, Nolint: m.Nolint, Exemptions: 1,
 	}}
 	if !reflect.DeepEqual(f, want) {
@@ -65,7 +55,7 @@ func TestInitWritesWhatWasMeasured(t *testing.T) {
 func TestInitOmitsWhatIsNotOverTheLine(t *testing.T) {
 	// The schema allows no zero exemption count and no zero finding count, and
 	// the ledger lists only what is over the line.
-	f := baseline.Init(baseline.Measure{Exemptions: 0, Findings: baseline.Counts{"revive": {}}, JudgedLaws: 3})
+	f := baseline.Init(baseline.Measure{Exemptions: 0, Findings: baseline.Counts{"revive": {}}, JudgedLaws: 3, Build: testBuild})
 	if err := validate(t, baseline.Marshal(f)); err != nil {
 		t.Fatal(err)
 	}
@@ -90,7 +80,7 @@ func TestLowerWalkThroughStep6NoiseIsNotRaised(t *testing.T) {
 	old := ledgerOf(legacy())
 	m := legacy()
 	m.Functions["m/a.F1"] = 21.005
-	got := lower(old, m)
+	got := baseline.Lower(old, m)
 	if got.Ledger.Functions["m/a.F1"] != 21 {
 		t.Errorf("entry rose to %v", got.Ledger.Functions["m/a.F1"])
 	}
@@ -102,8 +92,7 @@ func TestLowerWalkThroughStep7RefactoredFunctionLeavesTheLedger(t *testing.T) {
 	old := ledgerOf(legacy())
 	m := legacy()
 	delete(m.Functions, "m/a.F1")
-	m.Scored = set("m/a.F1")
-	got := baseline.Lower(old, m, inv{fns: set("m/a.F1")})
+	got := baseline.Lower(old, m)
 	want := ledgerOf(m)
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("Lower:\n%+v\nwant\n%+v", got, want)
@@ -117,7 +106,7 @@ func TestLowerLowersAValueStillOverTheCap(t *testing.T) {
 	old := ledgerOf(legacy())
 	m := legacy()
 	m.Functions["m/b.F4"] = 25.25
-	if got := lower(old, m).Ledger.Functions["m/b.F4"]; got != 25.25 {
+	if got := baseline.Lower(old, m).Ledger.Functions["m/b.F4"]; got != 25.25 {
 		t.Errorf("entry %v, want 25.25", got)
 	}
 }
@@ -130,7 +119,7 @@ func TestLowerNeverAddsAnEntry(t *testing.T) {
 	m.Findings["errcheck"] = map[string]int{"z.go": 1}                     // a new finding
 	m.Findings["revive"]["new.go"] = 4                                     // in a new file
 	m.Nolint["gosec"]["c.go"] = 1                                          // a new suppression
-	got := lower(old, m)
+	got := baseline.Lower(old, m)
 	if !reflect.DeepEqual(got, old) {
 		t.Errorf("Lower added something:\n%+v\nold\n%+v", got, old)
 	}
@@ -144,7 +133,7 @@ func TestLowerNeverRaisesAnEntry(t *testing.T) {
 	m.Nolint["gosec"]["b.go"] = 9
 	m.Exemptions = 5
 	m.Packages["m/d"] = baseline.Package{StatementsPct: 40, Uncovered: 90}
-	got := lower(old, m)
+	got := baseline.Lower(old, m)
 	if !reflect.DeepEqual(got, old) {
 		t.Errorf("Lower raised something:\n%+v\nold\n%+v", got, old)
 	}
@@ -156,7 +145,7 @@ func TestLowerCountsFallAndLeaveAtZero(t *testing.T) {
 	m.Findings = baseline.Counts{"revive": {"a.go": 1}}
 	m.Nolint = baseline.Counts{"gosec": {"a.go": 2}} // b.go's comment is gone
 	m.Exemptions = 0
-	got := lower(old, m)
+	got := baseline.Lower(old, m)
 	if got.Ledger.Findings["revive"]["a.go"] != 1 {
 		t.Errorf("findings %v", got.Ledger.Findings)
 	}
@@ -174,7 +163,7 @@ func TestLowerCountsFallAndLeaveAtZero(t *testing.T) {
 func TestLowerDoesNotPoolCountsAcrossFiles(t *testing.T) {
 	// §6.7: removing a finding in one file does not pay for another.
 	old := ledgerOf(baseline.Measure{Findings: baseline.Counts{"revive": {"a.go": 3, "b.go": 1}}})
-	got := lower(old, baseline.Measure{Findings: baseline.Counts{"revive": {"a.go": 1, "b.go": 1}}})
+	got := baseline.Lower(old, baseline.Measure{Findings: baseline.Counts{"revive": {"a.go": 1, "b.go": 1}}})
 	want := baseline.Counts{"revive": {"a.go": 1, "b.go": 1}}
 	if !reflect.DeepEqual(got.Ledger.Findings, want) {
 		t.Errorf("findings %v, want %v", got.Ledger.Findings, want)
@@ -197,7 +186,7 @@ func TestLowerPackages(t *testing.T) {
 		"m/mixed": {StatementsPct: 65, Uncovered: 55}, // more tested code, more untested too
 		"m/worse": {StatementsPct: 50, Uncovered: 60},
 	}}
-	got := lower(old, m).Ledger.Packages
+	got := baseline.Lower(old, m).Ledger.Packages
 	want := map[string]baseline.Package{
 		"m/up":    {StatementsPct: 70, Uncovered: 30},
 		"m/mixed": {StatementsPct: 65, Uncovered: 40},
@@ -210,10 +199,10 @@ func TestLowerPackages(t *testing.T) {
 
 func TestLowerRaisesJudgedLawsAndNeverLowersIt(t *testing.T) {
 	old := baseline.File{JudgedLaws: 5}
-	if got := lower(old, baseline.Measure{JudgedLaws: 9}).JudgedLaws; got != 9 {
+	if got := baseline.Lower(old, baseline.Measure{JudgedLaws: 9}).JudgedLaws; got != 9 {
 		t.Errorf("judged_laws %d, want 9", got)
 	}
-	if got := lower(old, baseline.Measure{JudgedLaws: 2}).JudgedLaws; got != 5 {
+	if got := baseline.Lower(old, baseline.Measure{JudgedLaws: 2}).JudgedLaws; got != 5 {
 		t.Errorf("judged_laws %d, want 5: lowering it needs --accept-regression", got)
 	}
 }
@@ -221,7 +210,7 @@ func TestLowerRaisesJudgedLawsAndNeverLowersIt(t *testing.T) {
 func TestLowerCarriesWhatItDoesNotMeasure(t *testing.T) {
 	// laws (M5) and survivors (M4) are fed by other commands.
 	old := full()
-	got := lower(old, baseline.Measure{JudgedLaws: 7})
+	got := baseline.Lower(old, baseline.Measure{JudgedLaws: 7})
 	if !reflect.DeepEqual(got.Ledger.Laws, old.Ledger.Laws) || !reflect.DeepEqual(got.Ledger.Survivors, old.Ledger.Survivors) {
 		t.Errorf("laws %v survivors %v were not carried", got.Ledger.Laws, got.Ledger.Survivors)
 	}
@@ -232,7 +221,7 @@ func TestLowerDoesNotChangeItsInput(t *testing.T) {
 	snapshot := baseline.Marshal(old)
 	m := legacy()
 	delete(m.Functions, "m/a.F1")
-	lower(old, m)
+	baseline.Lower(old, m)
 	if string(baseline.Marshal(old)) != string(snapshot) {
 		t.Error("Lower wrote into the old ledger")
 	}
@@ -248,7 +237,7 @@ func TestLowerRemovesARecordPaidBackToItsEarlierValue(t *testing.T) {
 		},
 	}
 	m := baseline.Measure{Functions: map[string]float64{"m/a.F": 21, "m/a.G": 22}}
-	got := lower(old, m)
+	got := baseline.Lower(old, m)
 	want := []baseline.Regression{{Kind: "functions", Key: "m/a.G", From: f64(21), To: 22, Reason: goodReason, Owner: "o"}}
 	if !reflect.DeepEqual(got.Regressions, want) {
 		t.Errorf("regressions %+v, want %+v", got.Regressions, want)
@@ -258,7 +247,7 @@ func TestLowerRemovesARecordPaidBackToItsEarlierValue(t *testing.T) {
 func TestLowerKeepsARecordWhileItsEntryIsAboveTheEarlierValue(t *testing.T) {
 	r := baseline.Regression{Kind: "functions", Key: "m/a.F", From: f64(21), To: 25, Reason: goodReason, Owner: "o"}
 	old := baseline.File{Ledger: baseline.Ledger{Functions: map[string]float64{"m/a.F": 25}}, Regressions: []baseline.Regression{r}}
-	got := lower(old, baseline.Measure{Functions: map[string]float64{"m/a.F": 25}})
+	got := baseline.Lower(old, baseline.Measure{Functions: map[string]float64{"m/a.F": 25}})
 	if !reflect.DeepEqual(got.Regressions, []baseline.Regression{r}) {
 		t.Errorf("regressions %+v", got.Regressions)
 	}
@@ -266,7 +255,7 @@ func TestLowerKeepsARecordWhileItsEntryIsAboveTheEarlierValue(t *testing.T) {
 
 func TestLowerRegressionOfJudgedLawsIsPaidWhenItRisesBack(t *testing.T) {
 	old := baseline.File{JudgedLaws: 3, Regressions: []baseline.Regression{{Kind: "judged_laws", Key: "judged_laws", From: f64(5), To: 3, Reason: goodReason, Owner: "o"}}}
-	if got := lower(old, baseline.Measure{JudgedLaws: 5}); len(got.Regressions) != 0 || got.JudgedLaws != 5 {
+	if got := baseline.Lower(old, baseline.Measure{JudgedLaws: 5}); len(got.Regressions) != 0 || got.JudgedLaws != 5 {
 		t.Errorf("%+v", got)
 	}
 }
@@ -275,7 +264,7 @@ func TestAcceptRaisesAnEntryAndRecordsIt(t *testing.T) {
 	old := ledgerOf(legacy())
 	m := legacy()
 	m.Functions["m/a.F1"] = 25
-	got, err := accept(old, m, goodReason, "ali")
+	got, err := baseline.Accept(old, m, goodReason, "ali")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -295,7 +284,7 @@ func TestAcceptAddsAnEntryWithANullFrom(t *testing.T) {
 	m.Findings["errcheck"] = map[string]int{"z.go": 1}
 	m.Nolint["gosec"]["c.go"] = 1
 	m.Exemptions = 2
-	got, err := accept(old, m, goodReason, "ali")
+	got, err := baseline.Accept(old, m, goodReason, "ali")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -321,7 +310,7 @@ func TestAcceptRecordsAPackageThatGotWorse(t *testing.T) {
 	m := legacy()
 	m.Packages["m/d"] = baseline.Package{StatementsPct: 50, Uncovered: 45} // pct fell, uncovered rose
 	m.Packages["m/e"] = baseline.Package{StatementsPct: 10, Uncovered: 90} // a new package under the floor
-	got, err := accept(old, m, goodReason, "ali")
+	got, err := baseline.Accept(old, m, goodReason, "ali")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -341,7 +330,7 @@ func TestAcceptRecordsAPackageThatGotWorse(t *testing.T) {
 
 func TestAcceptRecordsLoweredJudgedLaws(t *testing.T) {
 	old := baseline.File{JudgedLaws: 6}
-	got, err := accept(old, baseline.Measure{JudgedLaws: 4}, goodReason, "ali")
+	got, err := baseline.Accept(old, baseline.Measure{JudgedLaws: 4}, goodReason, "ali")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -357,7 +346,7 @@ func TestAcceptAlsoLowersAndRemovesLikeAPlainWrite(t *testing.T) {
 	m.Functions["m/a.F1"] = 25 // raised
 	m.Functions["m/b.F4"] = 20 // lowered
 	delete(m.Functions, "m/d.F8")
-	got, err := accept(old, m, goodReason, "ali")
+	got, err := baseline.Accept(old, m, goodReason, "ali")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -379,7 +368,7 @@ func TestAcceptRaisedAgainKeepsTheEarliestFrom(t *testing.T) {
 		Ledger:      baseline.Ledger{Functions: map[string]float64{"m/a.F": 25}},
 		Regressions: []baseline.Regression{{Kind: "functions", Key: "m/a.F", From: f64(21), To: 25, Reason: "first reason given", Owner: "first"}},
 	}
-	got, err := accept(old, baseline.Measure{Functions: map[string]float64{"m/a.F": 30}}, goodReason, "ali")
+	got, err := baseline.Accept(old, baseline.Measure{Functions: map[string]float64{"m/a.F": 30}}, goodReason, "ali")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -402,7 +391,7 @@ func TestAcceptNeedsAReasonOfThreeWordsAndAnOwner(t *testing.T) {
 		"blank owner":      {goodReason, "  "},
 		"owner with space": {goodReason, "two words"},
 	} {
-		if _, err := accept(old, m, c.reason, c.owner); err == nil {
+		if _, err := baseline.Accept(old, m, c.reason, c.owner); err == nil {
 			t.Errorf("%s: accepted", name)
 		}
 	}
@@ -412,7 +401,7 @@ func TestAcceptWithNothingToAcceptSaysSo(t *testing.T) {
 	old := ledgerOf(legacy())
 	m := legacy()
 	delete(m.Functions, "m/a.F1") // only an improvement
-	_, err := accept(old, m, goodReason, "ali")
+	_, err := baseline.Accept(old, m, goodReason, "ali")
 	if !errors.Is(err, baseline.ErrNothingToAccept) {
 		t.Errorf("err %v, want ErrNothingToAccept", err)
 	}
@@ -536,71 +525,42 @@ func TestRenameFollowsTheKeyIntoItsRecords(t *testing.T) {
 	}
 }
 
-// Ruling C2: an entry whose function is not measured on this run (its file is
-// outside the run's build) is carried unchanged. A plain write removes an entry
-// only when its function is measured and at or under the cap, or exists in no
-// file.
+// Ruling C3: the ledger leg is the only run that writes, and its ledger holds
+// only what it measured. There are no carried entries for functions it does not
+// measure, and an exempt function has no entry.
 
-func TestLowerCarriesAnEntryThatWasNotMeasured(t *testing.T) {
-	old := ledgerOf(legacy())
-	m := legacy()
-	delete(m.Functions, "m/b.F4") // a file outside this build: not scored, still in the code
-	got := baseline.Lower(old, m, inv{fns: set("m/b.F4")})
-	if got.Ledger.Functions["m/b.F4"] != 30.5 {
-		t.Errorf("entry %v, want 30.5 carried", got.Ledger.Functions["m/b.F4"])
-	}
-}
-
-func TestLowerRemovesAMeasuredFunctionAtOrUnderTheCap(t *testing.T) {
+func TestLowerRemovesAnEntryTheRunDoesNotMeasure(t *testing.T) {
+	// A function that is paid, exempt (scored, not a violation) or no longer
+	// compiled on the ledger leg is not in the measure's over-the-cap list, and
+	// its entry goes.
 	old := ledgerOf(legacy())
 	m := legacy()
 	delete(m.Functions, "m/b.F4")
-	m.Scored = set("m/b.F4")
-	got := baseline.Lower(old, m, inv{fns: set("m/b.F4")})
+	got := baseline.Lower(old, m)
 	if _, ok := got.Ledger.Functions["m/b.F4"]; ok {
-		t.Error("a measured function at or under the cap kept its entry")
+		t.Error("an entry for a function the run did not list over the cap stayed")
 	}
 }
 
-func TestLowerRemovesAnEntryWhoseFunctionIsInNoFile(t *testing.T) {
-	old := ledgerOf(legacy())
-	m := legacy()
-	delete(m.Functions, "m/b.F4")
-	got := baseline.Lower(old, m, inv{}) // deleted from every file, whatever its tags
-	if _, ok := got.Ledger.Functions["m/b.F4"]; ok {
-		t.Error("an entry for a function that exists nowhere stayed")
+func TestWritesKeepTheLedgerBuild(t *testing.T) {
+	old := baseline.Init(baseline.Measure{Build: testBuild, Functions: map[string]float64{"m/a.F": 21}})
+	if old.Build.String() != testBuild.String() {
+		t.Fatalf("Init dropped the build: %+v", old.Build)
 	}
-}
-
-func TestLowerStillLowersAnEntryThatWasMeasuredOverTheCap(t *testing.T) {
-	old := ledgerOf(legacy())
-	m := legacy()
-	m.Functions["m/b.F4"] = 25
-	got := baseline.Lower(old, m, inv{fns: set("m/b.F4")})
-	if got.Ledger.Functions["m/b.F4"] != 25 {
-		t.Errorf("entry %v", got.Ledger.Functions["m/b.F4"])
+	if got := baseline.Lower(old, baseline.Measure{}); !got.Build.Equal(testBuild) {
+		t.Errorf("Lower changed the build: %+v", got.Build)
 	}
-}
-
-func TestCarriedEntryKeepsItsRegressionRecord(t *testing.T) {
-	r := baseline.Regression{Kind: "functions", Key: "m/w.Win", From: f64(21), To: 25, Reason: goodReason, Owner: "o"}
-	old := baseline.File{Ledger: baseline.Ledger{Functions: map[string]float64{"m/w.Win": 25}}, Regressions: []baseline.Regression{r}}
-	got := baseline.Lower(old, baseline.Measure{}, inv{fns: set("m/w.Win")})
-	if got.Ledger.Functions["m/w.Win"] != 25 || !reflect.DeepEqual(got.Regressions, []baseline.Regression{r}) {
-		t.Errorf("%+v", got)
+	got, err := baseline.Accept(old, baseline.Measure{Functions: map[string]float64{"m/a.F": 30}}, goodReason, "ali")
+	if err != nil || !got.Build.Equal(testBuild) {
+		t.Errorf("Accept: %v %+v", err, got.Build)
 	}
-}
-
-func TestAcceptCarriesAnEntryThatWasNotMeasured(t *testing.T) {
-	old := ledgerOf(legacy())
-	m := legacy()
-	delete(m.Functions, "m/b.F4")
-	m.Functions["m/a.F1"] = 25
-	got, err := baseline.Accept(old, m, goodReason, "ali", inv{fns: set("m/b.F4")})
-	if err != nil {
-		t.Fatal(err)
+	// A measure from another build does not rewrite the ledger's.
+	other := baseline.Measure{Build: baseline.Build{GOOS: "darwin", GOARCH: "arm64"}}
+	if got := baseline.Lower(old, other); !got.Build.Equal(testBuild) {
+		t.Errorf("Lower took the build of the measure: %+v", got.Build)
 	}
-	if got.Ledger.Functions["m/b.F4"] != 30.5 {
-		t.Errorf("entry %v, want 30.5 carried", got.Ledger.Functions["m/b.F4"])
+	got, err = baseline.Rename(old, "m/a.F", "m/a.G", inv{fns: set("m/a.G")})
+	if err != nil || !got.Build.Equal(testBuild) {
+		t.Errorf("Rename: %v %+v", err, got.Build)
 	}
 }

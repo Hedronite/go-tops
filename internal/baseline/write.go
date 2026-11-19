@@ -15,9 +15,7 @@ type Measure struct {
 	Ack        Counts             // //tops:ack comments and acks.yaml entries, per law and file
 	Exemptions int                // live exemption records
 	JudgedLaws int                // laws the run judged
-	// Scored is every production function the run measured, over the cap or not.
-	// A function in a file outside the run's build is not in it (ruling C2).
-	Scored map[string]bool
+	Build      Build              // the build the run measured; Init records it
 }
 
 // The kinds of one entry of the ledger, as a Regression names them. Every
@@ -146,18 +144,22 @@ func (m Measure) asFile() File {
 }
 
 // Init is the first ledger: what was measured, and nothing recorded (§6.7).
-func Init(m Measure) File { return m.asFile() }
+func Init(m Measure) File {
+	f := m.asFile()
+	f.Build = m.Build
+	return f
+}
 
 // Lower is a plain write: it lowers a value, removes an entry that is no longer
 // over the line, and raises judged_laws. It never adds an entry and never raises
 // one. A package entry tightens toward coverage, its percentage rising and its
-// uncovered count falling, each on its own. A function entry is removed only
-// when the run scored its function at or under the cap, or when it exists in no
-// file; an entry the run did not measure is carried unchanged (ruling C2). The laws and survivors kinds are
+// uncovered count falling, each on its own. The ledger holds only what its own
+// build measured (ruling C3), so an entry the run does not list is removed: a
+// function paid back, exempt, or gone from the build. The ledger keeps its build. The laws and survivors kinds are
 // fed by other commands and pass through untouched. A regressions record is
 // removed when its entry is back at the value it had before, and follows the
 // entry down while it is on the way.
-func Lower(old File, m Measure, inv Inventory) File {
+func Lower(old File, m Measure) File {
 	fo, fm := flat(old), flat(m.asFile())
 	out := map[ekey]float64{}
 	for k, ov := range fo {
@@ -167,16 +169,13 @@ func Lower(old File, m Measure, inv Inventory) File {
 		}
 		mv, measured := fm[k]
 		if !measured {
-			// Paid back or gone, unless the run did not measure it: a function in a
-			// file outside the run's build is carried (ruling C2).
-			if k.kind == kindFunctions && !m.Scored[k.key] && inv.Has(KindFunction, k.key) {
-				out[k] = ov
-			}
-			continue
+			continue // paid back, exempt, or no longer compiled on the ledger leg
 		}
 		out[k] = stricter(k.kind, ov, mv)
 	}
-	return unflat(out, prune(old.Regressions, out))
+	f := unflat(out, prune(old.Regressions, out))
+	f.Build = old.Build
+	return f
 }
 
 func stricter(kind string, a, b float64) float64 {
@@ -217,14 +216,14 @@ var ErrNothingToAccept = &RefusalError{Msg: "nothing to accept: the measure rais
 // Accept is a write that accepts regressions: every entry the measure raises or
 // adds, and a lowering of judged_laws, is written and recorded with its reason
 // and owner. It also lowers and removes like Lower.
-func Accept(old File, m Measure, reason, owner string, inv Inventory) (File, error) {
+func Accept(old File, m Measure, reason, owner string) (File, error) {
 	if len(strings.Fields(reason)) < 3 {
 		return File{}, refuse("--reason needs at least three words saying why the debt grows")
 	}
 	if owner = strings.TrimSpace(owner); owner == "" || len(strings.Fields(owner)) != 1 {
 		return File{}, refuse("--owner needs one handle, a person or a team")
 	}
-	lowered := Lower(old, m, inv)
+	lowered := Lower(old, m)
 	fl, fm, fo := flat(lowered), flat(m.asFile()), flat(old)
 	recs := append([]Regression(nil), lowered.Regressions...)
 	accepted := 0
@@ -256,7 +255,9 @@ func Accept(old File, m Measure, reason, owner string, inv Inventory) (File, err
 	if accepted == 0 {
 		return File{}, ErrNothingToAccept
 	}
-	return unflat(fl, sortedRecords(recs)), nil
+	out := unflat(fl, sortedRecords(recs))
+	out.Build = old.Build
+	return out, nil
 }
 
 // Change is one entry that moved the wrong way: a raised or added entry, or a
@@ -357,5 +358,7 @@ func Rename(old File, from, to string, inv Inventory) (File, error) {
 
 // copyFile is a deep copy.
 func copyFile(f File) File {
-	return unflat(flat(f), append([]Regression(nil), f.Regressions...))
+	out := unflat(flat(f), append([]Regression(nil), f.Regressions...))
+	out.Build = f.Build
+	return out
 }

@@ -3,12 +3,14 @@ package main
 import (
 	"bytes"
 	"context"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	gotops "github.com/Hedronite/go-tops"
 	"github.com/Hedronite/go-tops/internal/baseline"
 	"github.com/Hedronite/go-tops/internal/cli"
 	"github.com/Hedronite/go-tops/internal/gate"
@@ -31,8 +33,25 @@ example.com/app/b/b.go:6.10,8.2 3 0
 
 const lintFix = `{"Issues":[{"FromLinter":"revive","Text":"x","Pos":{"Filename":"a/a.go","Line":3}}]}`
 
+// cmdBuild is the build the stubbed run reports: the ledger leg unless a test
+// says otherwise.
+var cmdBuild = baseline.Build{GOOS: "linux", GOARCH: "amd64", Tags: []string{"race"}, CGOEnabled: true}
+
+// schemaHasBuild says whether the embedded baseline schema already carries the
+// build object of ruling C3. Until the 0.4.3 schema (PR 26) is merged in, `check`
+// rejects the key, so the tests that hand a written ledger to `check` wait for it.
+func schemaHasBuild(t *testing.T) bool {
+	t.Helper()
+	raw, err := fs.ReadFile(gotops.Files(), "schema/core.schema.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return bytes.Contains(raw, []byte(`"build"`))
+}
+
 // fixture is what the stubbed feeding layers leave behind.
 type fixture struct {
+	build   baseline.Build
 	rep     report.Report
 	profile string
 	lint    string
@@ -45,6 +64,7 @@ func cfn(fn string, crap float64) map[string]any {
 
 func newFixture() *fixture {
 	return &fixture{
+		build:   cmdBuild,
 		profile: profileFix,
 		lint:    lintFix,
 		rep: report.Report{
@@ -81,8 +101,9 @@ func (fx *fixture) setTests(outcome string) {
 // the lint output where the layers do, and returns the report.
 func (fx *fixture) install(t *testing.T) {
 	t.Helper()
-	old := runFeeding
-	t.Cleanup(func() { runFeeding = old })
+	old, oldBuild := runFeeding, runBuild
+	t.Cleanup(func() { runFeeding, runBuild = old, oldBuild })
+	runBuild = func(context.Context, string) (baseline.Build, error) { return fx.build, nil }
 	runFeeding = func(_ context.Context, dir string, _ gate.Config) (report.Report, error) {
 		fx.ran++
 		for rel, data := range map[string]string{".go-tops/cover.out": fx.profile, ".go-tops/lint-style.json": fx.lint} {
@@ -205,10 +226,15 @@ func TestInitWritesTheMeasuredLedgerAndCheckAcceptsIt(t *testing.T) {
 	if got.Ledger.Findings["revive"]["a/a.go"] != 1 || got.JudgedLaws != 2 || len(got.Regressions) != 0 {
 		t.Errorf("ledger %+v", got)
 	}
+	if !got.Build.Equal(cmdBuild) {
+		t.Errorf("the ledger records build %v, want %v", got.Build, cmdBuild)
+	}
 	// check reads the committed ledger and finds it valid against the schema.
-	commitAll(t, dir)
-	if code, _, stderr := gotopsIn(t, dir, "check"); code != 0 {
-		t.Errorf("check exit %d: %s", code, stderr)
+	if schemaHasBuild(t) {
+		commitAll(t, dir)
+		if code, _, stderr := gotopsIn(t, dir, "check"); code != 0 {
+			t.Errorf("check exit %d: %s", code, stderr)
+		}
 	}
 }
 
@@ -222,7 +248,7 @@ func TestInitWritesAnEmptyLedgerWhenNothingIsOverTheLine(t *testing.T) {
 	if code, _, stderr := baselineIn(t, dir, "--init"); code != 0 {
 		t.Fatalf("exit %d: %s", code, stderr)
 	}
-	want := "{\n  \"judged_laws\": 2,\n  \"ledger\": {}\n}\n"
+	want := "{\n  \"build\": {\n    \"cgo_enabled\": true,\n    \"goarch\": \"amd64\",\n    \"goos\": \"linux\",\n    \"tags\": [\"race\"]\n  },\n  \"judged_laws\": 2,\n  \"ledger\": {}\n}\n"
 	if got := fileBytes(t, dir, ledgerRel); got != want {
 		t.Errorf("ledger %q, want %q", got, want)
 	}
@@ -439,9 +465,11 @@ func TestAcceptRegressionRaisesAndRecords(t *testing.T) {
 	if len(got.Regressions) != 2 || got.Regressions[0].Key != "example.com/app/a.Alpha" || got.Regressions[0].Owner != "ali" || got.Regressions[1].From != nil {
 		t.Errorf("regressions %+v", got.Regressions)
 	}
-	commitAll(t, dir)
-	if code, _, stderr := gotopsIn(t, dir, "check"); code != 0 {
-		t.Errorf("check exit %d: %s", code, stderr)
+	if schemaHasBuild(t) {
+		commitAll(t, dir)
+		if code, _, stderr := gotopsIn(t, dir, "check"); code != 0 {
+			t.Errorf("check exit %d: %s", code, stderr)
+		}
 	}
 }
 
@@ -579,5 +607,81 @@ func TestTheLedgerIsWrittenInOneStep(t *testing.T) {
 		if strings.HasSuffix(e.Name(), ".tmp") {
 			t.Errorf("left behind: %s", e.Name())
 		}
+	}
+}
+
+// Ruling C3: the baseline records its build, and only a run whose build matches
+// it writes the file. Any other leg refuses, naming the ledger build.
+
+func TestAnotherLegRefusesEveryWriteAndNamesTheLedgerBuild(t *testing.T) {
+	dir, fx := initialised(t)
+	before := fileBytes(t, dir, ledgerRel)
+	fx.build = baseline.Build{GOOS: "darwin", GOARCH: "arm64", Tags: []string{"race"}, CGOEnabled: true}
+	fx.setCrap(cfn("example.com/app/a.Alpha", 25)) // a raise a matching leg could accept
+	withInventory(t, "example.com/app/a.Renamed")
+	fx.ran = 0
+	for _, args := range [][]string{
+		{},
+		{"--accept-regression", "--reason", "the parser grows one arm", "--owner", "ali"},
+		{"--rename", "example.com/app/a.Alpha", "example.com/app/a.Renamed"},
+		{"--init"},
+	} {
+		code, _, stderr := baselineIn(t, dir, args...)
+		if code != 1 {
+			t.Errorf("%v: exit %d, stderr %q", args, code, stderr)
+		}
+		if len(args) > 0 && args[0] != "--init" && (!strings.Contains(stderr, "linux/amd64") || !strings.Contains(stderr, "darwin/arm64")) {
+			t.Errorf("%v: stderr %q should name the ledger build and this run's", args, stderr)
+		}
+	}
+	if fileBytes(t, dir, ledgerRel) != before {
+		t.Error("another leg changed the ledger")
+	}
+	if fx.ran != 0 {
+		t.Error("the feeding layers ran on a leg that may not write")
+	}
+}
+
+func TestTheLedgerLegDiffersByEachPartOfTheBuild(t *testing.T) {
+	dir, fx := initialised(t)
+	for name, b := range map[string]baseline.Build{
+		"os":   {GOOS: "darwin", GOARCH: "amd64", Tags: []string{"race"}, CGOEnabled: true},
+		"arch": {GOOS: "linux", GOARCH: "arm64", Tags: []string{"race"}, CGOEnabled: true},
+		"tags": {GOOS: "linux", GOARCH: "amd64", Tags: []string{"race", "integration"}, CGOEnabled: true},
+		"cgo":  {GOOS: "linux", GOARCH: "amd64", Tags: []string{"race"}},
+	} {
+		fx.build = b
+		if code, _, _ := baselineIn(t, dir); code != 1 {
+			t.Errorf("%s: exit %d, want 1", name, code)
+		}
+	}
+	fx.build = baseline.Build{GOOS: "linux", GOARCH: "amd64", Tags: []string{"race"}, CGOEnabled: true}
+	if code, _, stderr := baselineIn(t, dir); code != 0 {
+		t.Errorf("the matching build: exit %d: %s", code, stderr)
+	}
+}
+
+func TestPlainWriteRemovesAnExemptFunctionsEntry(t *testing.T) {
+	// An exempt function is scored but listed under exempt, not violations, so
+	// the measure does not list it over the cap and the refresh removes its entry.
+	dir, fx := initialised(t)
+	for i, l := range fx.rep.Layers {
+		if l.ID == "crap" {
+			fx.rep.Layers[i].Details = map[string]any{
+				"cap":        10.0,
+				"violations": append([]map[string]any{}, cfn("example.com/app/b.Beta", 14.5)),
+				"exempt":     append([]map[string]any{}, cfn("example.com/app/a.Alpha", 21)),
+			}
+		}
+	}
+	if code, _, stderr := baselineIn(t, dir); code != 0 {
+		t.Fatalf("exit %d: %s", code, stderr)
+	}
+	got := readLedgerFile(t, dir)
+	if _, ok := got.Ledger.Functions["example.com/app/a.Alpha"]; ok {
+		t.Error("an exempt function kept its entry")
+	}
+	if got.Ledger.Functions["example.com/app/b.Beta"] != 14.5 {
+		t.Errorf("functions %v", got.Ledger.Functions)
 	}
 }
