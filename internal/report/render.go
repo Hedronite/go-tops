@@ -138,6 +138,7 @@ func RenderText(r Report) string {
 		}
 		b.WriteByte('\n')
 	}
+	renderRatchet(&b, r.Ratchet)
 	for _, e := range r.Exemptions {
 		fmt.Fprintf(&b, "  %s\n", e.Line())
 	}
@@ -148,6 +149,30 @@ func RenderText(r Report) string {
 	fmt.Fprintf(&b, "layers: %d enabled in range, %d ran\n", r.LayerCounts.EnabledInRange, r.LayerCounts.Ran)
 	renderVerdict(&b, r.Summary)
 	return b.String()
+}
+
+// renderRatchet prints the ratchet judgment of a run under enforce: ratchet: its
+// outcome, and the ledger's build and this run's, so a skip names the build the
+// ledger leg runs under (§6.7, §12.3). A run with no ratchet object prints
+// nothing.
+func renderRatchet(b *strings.Builder, r *Ratchet) {
+	if r == nil {
+		return
+	}
+	fmt.Fprintf(b, "  %-12s %s  (ledger build %s, this run %s)\n", "ratchet", r.Outcome, describeBuild(r.LedgerBuild), describeBuild(r.RunBuild))
+}
+
+// describeBuild names a build in the text: the platform, with cgo and the tags
+// when they are set.
+func describeBuild(b Build) string {
+	s := b.GOOS + "/" + b.GOARCH
+	if b.CgoEnabled {
+		s += " cgo"
+	}
+	if len(b.Tags) > 0 {
+		s += " tags=" + strings.Join(b.Tags, ",")
+	}
+	return s
 }
 
 // layerError is the text of a failed layer's {error} form (§12.3).
