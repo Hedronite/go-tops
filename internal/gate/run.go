@@ -141,30 +141,9 @@ func Execute(ctx context.Context, cfg Config, opts Options, d Deps) (*Run, error
 // makePlan decides, for each layer, whether it is in range (§3.2, §3.5) and
 // what its switch says.
 func makePlan(ls []Layer, cfg Config, opts Options) ([]planned, error) {
-	only := map[string]bool{}
-	if opts.Only != "" && opts.Only != LawsLayer {
-		known := map[string]Layer{}
-		for _, l := range ls {
-			known[l.ID()] = l
-		}
-		if _, ok := known[opts.Only]; !ok {
-			var names []string
-			for _, l := range ls {
-				names = append(names, l.ID())
-			}
-			return nil, exitf(ExitConfig, "--only %q: no such layer; layers are %s, %s", opts.Only, strings.Join(names, ", "), LawsLayer)
-		}
-		var add func(id string)
-		add = func(id string) {
-			if only[id] {
-				return
-			}
-			only[id] = true
-			for _, n := range known[id].Needs() {
-				add(n)
-			}
-		}
-		add(opts.Only)
+	only, err := onlyClosure(ls, opts.Only)
+	if err != nil {
+		return nil, err
 	}
 	out := make([]planned, 0, len(ls))
 	for _, l := range ls {
@@ -175,6 +154,45 @@ func makePlan(ls []Layer, cfg Config, opts Options) ([]planned, error) {
 		out = append(out, planned{layer: l, inRange: in, cfg: cfg.layer(l.ID())})
 	}
 	return out, nil
+}
+
+// onlyClosure is the set of layers --only asks for: the layer and every layer it
+// needs, since it cannot run without them (§3.5). It is empty with no --only,
+// and for the laws layer, which is not a registered Layer. A name that is no
+// layer is a configuration error.
+func onlyClosure(ls []Layer, only string) (map[string]bool, error) {
+	set := map[string]bool{}
+	if only == "" || only == LawsLayer {
+		return set, nil
+	}
+	known := map[string]Layer{}
+	for _, l := range ls {
+		known[l.ID()] = l
+	}
+	if _, ok := known[only]; !ok {
+		return nil, noSuchLayer(ls, only)
+	}
+	addWithNeeds(known, only, set)
+	return set, nil
+}
+
+func noSuchLayer(ls []Layer, only string) error {
+	var names []string
+	for _, l := range ls {
+		names = append(names, l.ID())
+	}
+	return exitf(ExitConfig, "--only %q: no such layer; layers are %s, %s", only, strings.Join(names, ", "), LawsLayer)
+}
+
+// addWithNeeds adds a layer to the set, and then the layers it needs.
+func addWithNeeds(known map[string]Layer, id string, set map[string]bool) {
+	if set[id] {
+		return
+	}
+	set[id] = true
+	for _, n := range known[id].Needs() {
+		addWithNeeds(known, n, set)
+	}
 }
 
 // runLayers runs every enabled layer in range in gate order, each judged
@@ -189,42 +207,61 @@ func runLayers(ctx context.Context, env *Env, plan []planned, opts Options) ([]r
 		if !p.inRange {
 			continue
 		}
-		l := p.layer
-		entry := report.Layer{ID: l.ID(), Tier: l.Tier()}
-		var res Result
-		switch {
-		case !p.enabled():
-			reason := p.cfg.Reason
-			if reason == "" {
-				reason = "disabled in go-tops.yaml"
-			}
-			res = Result{Outcome: Skip, Reason: reason}
-			entry.Expires = p.cfg.Expires
-		case !hasCommand(l):
-			// Before the needs rule and --fail-fast: not-run is "no command
-			// mapped", not-reached is "has a command, but a layer it needs did
-			// not pass" (§3.3).
-			res = NoCommand(l.ID())
-		case stopped:
-			res = Result{Outcome: NotReached, Reason: "--fail-fast stopped the run before this layer"}
-		default:
-			if n := unmet(l, outcome); n != "" {
-				res = Result{Outcome: NotReached, Reason: fmt.Sprintf("needs %s, which is %s", n, describe(outcome[n]))}
-			} else {
-				res = judge(l, l.Run(ctx, env))
-			}
-		}
-		outcome[l.ID()] = res.Outcome
+		res := layerResult(ctx, env, p, outcome, stopped)
+		outcome[p.layer.ID()] = res.Outcome
 		if res.VulnDBTimestamp != "" {
 			vulnDB = res.VulnDBTimestamp
 		}
-		entry.Outcome, entry.Reason, entry.Details = string(res.Outcome), res.Reason, res.Details
-		out = append(out, entry)
-		if opts.FailFast && p.enabled() && !stopped && (res.Outcome == Fail || res.Outcome == NotRun || res.Outcome == ToolMissing) {
-			stopped = true
-		}
+		out = append(out, reportEntry(p, res))
+		stopped = stopped || stopsRun(p, res, opts)
 	}
 	return out, stopped, vulnDB
+}
+
+// layerResult is what a layer in range gets: a skip when it is switched off, not-run
+// when it has no command, not-reached when --fail-fast stopped the run or a layer
+// it needs did not pass, and otherwise its own judged result.
+func layerResult(ctx context.Context, env *Env, p planned, outcome map[string]Outcome, stopped bool) Result {
+	l := p.layer
+	switch {
+	case !p.enabled():
+		return Result{Outcome: Skip, Reason: p.skipReason()}
+	case !hasCommand(l):
+		// Before the needs rule and --fail-fast: not-run is "no command
+		// mapped", not-reached is "has a command, but a layer it needs did
+		// not pass" (§3.3).
+		return NoCommand(l.ID())
+	case stopped:
+		return Result{Outcome: NotReached, Reason: "--fail-fast stopped the run before this layer"}
+	}
+	if n := unmet(l, outcome); n != "" {
+		return Result{Outcome: NotReached, Reason: fmt.Sprintf("needs %s, which is %s", n, describe(outcome[n]))}
+	}
+	return judge(l, l.Run(ctx, env))
+}
+
+// skipReason is why a layer switched off in go-tops.yaml is skipped.
+func (p planned) skipReason() string {
+	if p.cfg.Reason == "" {
+		return "disabled in go-tops.yaml"
+	}
+	return p.cfg.Reason
+}
+
+// reportEntry is the report's entry for a layer and its result. A skipped layer
+// carries the expiry of its switch.
+func reportEntry(p planned, res Result) report.Layer {
+	entry := report.Layer{ID: p.layer.ID(), Tier: p.layer.Tier(), Outcome: string(res.Outcome), Reason: res.Reason, Details: res.Details}
+	if !p.enabled() {
+		entry.Expires = p.cfg.Expires
+	}
+	return entry
+}
+
+// stopsRun reports whether a layer's result stops the run under --fail-fast: an
+// enabled layer that failed, did not run or lacks a tool.
+func stopsRun(p planned, res Result, opts Options) bool {
+	return opts.FailFast && p.enabled() && (res.Outcome == Fail || res.Outcome == NotRun || res.Outcome == ToolMissing)
 }
 
 func describe(o Outcome) string {
