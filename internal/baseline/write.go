@@ -347,10 +347,10 @@ func NeedsAccept(changes []Change) []Change {
 	var out []Change
 	for _, c := range changes {
 		isPkg := c.Kind == kindPkgPct || c.Kind == kindPkgUncovered
-		if isPkg && !(pct[c.Key] && unc[c.Key]) {
-			continue
+		both := pct[c.Key] && unc[c.Key]
+		if !isPkg || both {
+			out = append(out, c)
 		}
-		out = append(out, c)
 	}
 	return out
 }
