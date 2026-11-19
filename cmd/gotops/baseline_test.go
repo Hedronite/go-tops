@@ -1011,3 +1011,30 @@ func TestDeletingTheLedgerIsNotAResetInASubdirectoryModule(t *testing.T) {
 		t.Error("a ledger was written over a deleted one")
 	}
 }
+
+// The accept line says how many records this write recorded, not how many the file
+// holds: after a second accept one record is the earlier one's, possibly under
+// another owner.
+func TestAcceptCountsOnlyTheRecordsItWrote(t *testing.T) {
+	dir, fx := initialised(t)
+	fx.setCrap(cfn("example.com/app/a.Alpha", 25), cfn("example.com/app/b.Beta", 14.5))
+	if code, _, stderr := baselineIn(t, dir, "--accept-regression", "--reason", "the parser grows one arm", "--owner", "maintainer"); code != 0 {
+		t.Fatalf("first accept: exit %d: %s", code, stderr)
+	}
+	commitAll(t, dir)
+	fx.setCrap(cfn("example.com/app/a.Alpha", 25), cfn("example.com/app/b.Beta", 20))
+	code, stdout, stderr := baselineIn(t, dir, "--accept-regression", "--reason", "the formats grow too", "--owner", "platform")
+	if code != 0 {
+		t.Fatalf("second accept: exit %d: %s", code, stderr)
+	}
+	if !strings.Contains(stdout, "1 regression(s) recorded by this write under owner platform") || !strings.Contains(stdout, "2 record(s) in the file") {
+		t.Errorf("stdout %q should count what this write recorded, and the file separately", stdout)
+	}
+}
+
+// The usage says what a plain write does to a record: it follows its entry down.
+func TestUsageSaysARecordFollowsItsEntryDown(t *testing.T) {
+	if !strings.Contains(baselineUsage, "record") || !strings.Contains(baselineUsage, "follows") {
+		t.Errorf("the usage does not say that a plain write lowers a record with its entry:\n%s", baselineUsage)
+	}
+}

@@ -42,6 +42,9 @@ The only command that writes .go-tops/baseline.json (GO_TOPS.md §6.7).
                          each layer; red thresholds do not stop it. Refused when a
                          ledger exists.
   (no flag)              lower entries and remove paid ones. Never adds or raises one.
+                         A regressions record follows its entry down: its "to" is lowered
+                         with the entry, and the record goes when the entry is back at
+                         its earlier value.
   --accept-regression    also raise or add the entries the run measures above the
                          ledger, and lower judged_laws, each recorded under
                          regressions with --reason (three words or more) and --owner.
@@ -366,7 +369,8 @@ func (r *baselineRun) acceptRegressions(m baseline.Measure) error {
 	if err := writeLedger(r.path, baseline.Marshal(next)); err != nil {
 		return err
 	}
-	r.env.Stdout.Printf("%s written: %s\n%d regression(s) recorded under owner %s. The PR carries the protocol-change label.\n", r.rel, describe(next), len(next.Regressions), r.a.owner)
+	r.env.Stdout.Printf("%s written: %s\n%d regression(s) recorded by this write under owner %s (%d record(s) in the file). The PR carries the protocol-change label.\n",
+		r.rel, describe(next), len(baseline.Raised(r.old, next)), r.a.owner, len(next.Regressions))
 	return nil
 }
 
