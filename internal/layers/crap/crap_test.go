@@ -305,3 +305,22 @@ func TestMissingProfileFails(t *testing.T) {
 		t.Fatalf("%s: %s %v", r.Outcome, r.Reason, r.Details)
 	}
 }
+
+// A not-measured file whose guard formats with an operand index that overflows an
+// int must give a report, not a panic: the CRAP layer type-loads it for another
+// platform, and the guard finder reads its format.
+func TestNotMeasuredFileWithAnOverflowingFormatGivesAReport(t *testing.T) {
+	ovf := "package m\n\nimport \"fmt\"\n\nfunc mk() error { return nil }\n\nfunc Ovf() error {\n\terr := mk()\n\tif err != nil {\n\t\treturn fmt.Errorf(\"%[9223372036854775807]*.*w\", err)\n\t}\n\treturn nil\n}\n"
+	env := fixture(t, map[string]string{
+		"m.go":           "package m\n\n" + ifs("Light", 2),
+		"ovf_windows.go": ovf,
+	}, line("m.go", 3, 1, 10, 2, 10, 1))
+	r := run(env)
+	want := "2 production function(s) not measured on this build, typed by loading the module for 1 other platform(s)"
+	if r.Outcome != gate.Pass || r.Reason != want {
+		t.Fatalf("%s: %q, want a pass naming the not-measured function", r.Outcome, r.Reason)
+	}
+	if err := validate(t, r); err != nil {
+		t.Errorf("details do not validate: %v", err)
+	}
+}
