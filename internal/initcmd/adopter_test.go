@@ -306,3 +306,27 @@ func TestAgentsTemplateDoesNotNameALawsCommand(t *testing.T) {
 		t.Error("config/AGENTS.template.md documents gotops laws")
 	}
 }
+
+// F2: the next step and the record name the pull-request route, the one that works
+// before the workflow is on the default branch.
+func TestNextStepAndRecordNameThePullRequestBootstrap(t *testing.T) {
+	dir := newModule(t, "github.com/acme/demo", "1.26")
+	_, out, _ := run(opts(dir, "binary-cli"))
+	next := ""
+	for _, l := range strings.Split(out, "\n") {
+		if strings.HasPrefix(l, "next: ") {
+			next = l
+		}
+	}
+	for _, want := range []string{"pull request", "go-tops-baseline", "unchanged", "another build"} {
+		if !strings.Contains(next, want) {
+			t.Errorf("the next-step line lacks %q:\n%s", want, next)
+		}
+	}
+	rec := read(t, dir, "GO-TOPS.md")
+	for _, want := range []string{"pull request that adds this workflow", "gotops baseline --status", "fails the run until that file is committed unchanged"} {
+		if !strings.Contains(rec, want) {
+			t.Errorf("GO-TOPS.md lacks %q", want)
+		}
+	}
+}

@@ -122,7 +122,7 @@ const agentsFile = "AGENTS.md"
 // nextStep is what follows init (GO_TOPS.md §6.7, §12.1): the first ledger is
 // measured on the ledger leg's build, then committed. Under ratchet the gate
 // fails until it exists.
-const nextStep = "run gotops baseline --init on the ledger leg's build (run the workflow by hand: its ubuntu leg does it and uploads the file as go-tops-baseline), then commit .go-tops/baseline.json"
+const nextStep = "open the pull request: its ubuntu leg is the ledger leg, so it runs gotops baseline --init on its own build, uploads the file as the go-tops-baseline artifact and fails the run; download it and commit .go-tops/baseline.json unchanged, never a ledger written on another build (once the workflow is on the default branch you can also run it by hand, workflow_dispatch)"
 
 func buildPlan(o Options) (*plan, error) {
 	in, err := gatherInputs(o)

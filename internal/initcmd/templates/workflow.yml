@@ -89,11 +89,59 @@ jobs:
             go{GO_FLOOR}|go{GO_FLOOR}.*) ;;
             *) echo "::error::the floor leg runs ${got}, not a go{GO_FLOOR} release"; exit 1 ;;
           esac
+      # The first ledger (GO_TOPS.md section 6.7). A repository adopting Go-TOPS has no
+      # ledger on its default branch and cannot run the workflow by hand until the
+      # workflow is on that branch, so the ubuntu leg, the ledger leg, writes the first
+      # ledger on a pull request. `baseline --status` says whether one is due: exit 0
+      # when neither the base nor this tree has a ledger, 1 when one is present, was
+      # deleted or the run is advisory, and 2 when it cannot tell, which fails the
+      # run. When it is due the leg writes the ledger on its own build, uploads it as
+      # go-tops-baseline and fails the run until that file is committed: download it
+      # and commit it unchanged, never one written on another build. The base ref
+      # reaches the command through the environment, never through the script text.
+      - name: is a first ledger due (baseline --status)
+        id: status
+        if: matrix.leg == 'ubuntu' && github.event_name == 'pull_request'
+        env:
+          GOTOOLCHAIN: local
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set +e
+          go tool -modfile=tools/go.mod gotops baseline --status --base "origin/$BASE_REF"
+          code=$?
+          echo "code=${code}" >> "$GITHUB_OUTPUT"
+          exit 0
+      - name: baseline --status could not tell
+        if: matrix.leg == 'ubuntu' && github.event_name == 'pull_request' && steps.status.outputs.code != '0' && steps.status.outputs.code != '1'
+        env:
+          STATUS_CODE: ${{ steps.status.outputs.code }}
+        run: |
+          echo "::error::gotops baseline --status exited '$STATUS_CODE': it could not tell whether a first ledger is due, so the run fails closed"
+          exit 1
+      - name: write the first ledger on the ledger leg
+        if: steps.status.outputs.code == '0'
+        env:
+          GOTOOLCHAIN: local
+        run: go tool -modfile=tools/go.mod gotops baseline --init
+      - name: upload the first ledger as go-tops-baseline
+        if: steps.status.outputs.code == '0'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: go-tops-baseline
+          # .go-tops is a hidden directory, which the action skips by default.
+          path: .go-tops/baseline.json
+          include-hidden-files: true
+          if-no-files-found: error
+      - name: the first ledger is written, not committed
+        if: steps.status.outputs.code == '0'
+        run: |
+          echo "::error::this repository has no ledger. The ledger leg wrote one and uploaded it as the go-tops-baseline artifact of this run: download it, commit .go-tops/baseline.json unchanged and push. The run fails until that file is committed."
+          exit 1
       # The gate leg: gotops runs every layer. The step records the exit code and
       # does not fail on it; the next step judges it (ruling C9).
       - name: gate
         id: gate
-        if: matrix.leg != 'floor' && github.event_name != 'workflow_dispatch'
+        if: matrix.leg != 'floor' && github.event_name != 'workflow_dispatch' && steps.status.outputs.code != '0'
         env:
           GOTOOLCHAIN: local
         run: |
@@ -117,7 +165,7 @@ jobs:
       # code (a step before the gate failed), a missing report, a report that is not
       # JSON and a missing field are failures.
       - name: judge the gate (ruling C9) and the ratchet on the ledger leg
-        if: always() && matrix.leg != 'floor' && github.event_name != 'workflow_dispatch'
+        if: always() && matrix.leg != 'floor' && github.event_name != 'workflow_dispatch' && steps.status.outputs.code != '0'
         env:
           GATE_EXIT: ${{ steps.gate.outputs.code }}
           LEG: ${{ matrix.leg }}
@@ -128,7 +176,7 @@ jobs:
           case "${GATE_EXIT:-}" in
             0|1) ;;
             "") fail "the gate step recorded no exit code: a step before it failed, so the gate did not run" ;;
-            *) fail "the gate exited $GATE_EXIT: a usage, configuration or environment error, not a verdict" ;;
+            *) fail "the gate exited $GATE_EXIT: a usage, configuration or environment error, not a verdict. A repository with no committed ledger has the ubuntu leg write one on a pull request: download go-tops-baseline from that leg and commit it." ;;
           esac
           test -f "$report" || fail "the gate wrote no ${report}"
           jq -e 'type == "object"' "$report" > /dev/null 2>&1 || fail "${report} is not a JSON report"

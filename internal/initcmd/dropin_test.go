@@ -116,7 +116,9 @@ func TestWorkflowUploadsHiddenReportFilesButNotTheBinaries(t *testing.T) {
 	if code, _, errs := run(opts(dir, "binary-cli")); code != ExitOK {
 		t.Fatal(errs)
 	}
-	i := indexOf2(workflowSteps(t, dir), func(s step) bool { return strings.HasPrefix(s.Uses, "actions/upload-artifact@") })
+	i := indexOf2(workflowSteps(t, dir), func(s step) bool {
+		return strings.HasPrefix(s.Uses, "actions/upload-artifact@") && s.With["name"] == "go-tops-${{ matrix.leg }}"
+	})
 	if i < 0 {
 		t.Fatal("no upload step")
 	}
@@ -179,6 +181,14 @@ func ifRuns(t *testing.T, expr, event, leg string) bool {
 // event has no inputs); inputs.mode may be compared like the other names.
 func ifRunsIn(t *testing.T, expr, event, leg, mode string) bool {
 	t.Helper()
+	return ifRunsCtx(t, expr, map[string]string{"matrix.leg": leg, "github.event_name": event, "inputs.mode": mode})
+}
+
+// ifRunsCtx evaluates a condition with the given values for the names it reads.
+// A name the context lacks reads as the empty string, as an output of a step that
+// did not run does; the names the template uses are listed in knownNames.
+func ifRunsCtx(t *testing.T, expr string, ctx map[string]string) bool {
+	t.Helper()
 	if strings.TrimSpace(expr) == "" {
 		return true
 	}
@@ -202,8 +212,10 @@ func ifRunsIn(t *testing.T, expr, event, leg, mode string) bool {
 		case "always()":
 			return true
 		}
-		vals := map[string]string{"matrix.leg": leg, "github.event_name": event, "inputs.mode": mode}
-		got, known := vals[tok]
+		got, known := ctx[tok]
+		if !known && knownNames[tok] {
+			known = true
+		}
 		if !known || pos+1 >= len(toks) {
 			t.Fatalf("condition %q: cannot read %q", expr, tok)
 		}
@@ -244,6 +256,10 @@ func ifRunsIn(t *testing.T, expr, event, leg, mode string) bool {
 	}
 	return v
 }
+
+// knownNames are the context names a condition may read, besides the ones a test
+// gives a value: an unset one is the empty string.
+var knownNames = map[string]bool{"steps.status.outputs.code": true, "inputs.mode": true}
 
 func workflowOn(t *testing.T, dir string) (map[string]any, int) {
 	t.Helper()
@@ -376,8 +392,8 @@ func TestBaselineStepsRunInitAndUploadTheFile(t *testing.T) {
 	}
 	steps := workflowSteps(t, dir)
 	install := indexOf2(steps, func(s step) bool { return strings.HasPrefix(s.Name, "install golangci-lint") })
-	initStep := indexOf2(steps, func(s step) bool { return strings.Contains(s.Run, "gotops baseline --init") })
-	upload := indexOf2(steps, func(s step) bool { return s.With["name"] == "go-tops-baseline" })
+	initStep := indexOf2(steps, func(s step) bool { return s.Name == "write the first ledger" })
+	upload := indexOf2(steps, func(s step) bool { return s.Name == "upload the ledger as go-tops-baseline" })
 	if install < 0 || initStep < install || upload < initStep {
 		t.Fatalf("want install (%d), then baseline --init (%d), then upload (%d)", install, initStep, upload)
 	}
