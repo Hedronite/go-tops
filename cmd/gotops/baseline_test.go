@@ -708,6 +708,7 @@ func TestRenameIsCheckedAgainstTheRealSourceTree(t *testing.T) {
 	if got := readLedgerFile(t, dir).Ledger.Functions; got["example.com/app/a.New"] != 21 {
 		t.Errorf("functions %v", got)
 	}
+	commitAll(t, dir)
 	// Same still exists: refused.
 	if code, _, stderr := baselineIn(t, dir, "--rename", "example.com/app/a.Same", "example.com/app/a.New2"); code != 1 || !strings.Contains(stderr, "still exists") {
 		t.Errorf("exit %d, stderr %q", code, stderr)
@@ -740,12 +741,17 @@ type fakeLayer struct {
 	id      string
 	outcome gate.Outcome
 	pre     error
+	needs   []string
+	ran     *bool
 }
 
-func (l fakeLayer) ID() string    { return l.id }
-func (fakeLayer) Tier() int       { return 1 }
-func (fakeLayer) Needs() []string { return nil }
+func (l fakeLayer) ID() string      { return l.id }
+func (fakeLayer) Tier() int         { return 1 }
+func (l fakeLayer) Needs() []string { return l.needs }
 func (l fakeLayer) Run(context.Context, *gate.Env) gate.Result {
+	if l.ran != nil {
+		*l.ran = true
+	}
 	return gate.Result{Outcome: l.outcome}
 }
 func (l fakeLayer) Preflight(context.Context, *gate.Env) error { return l.pre }
@@ -792,5 +798,108 @@ func TestRunLayersMapsAStartFailureToItsExitCode(t *testing.T) {
 		if !errors.As(err, &be) || be.code != c.want {
 			t.Errorf("%s: err %v, want exit %d", name, err, c.want)
 		}
+	}
+}
+
+// GO_TOPS.md §6.7: red thresholds do not stop --init. A package under the
+// coverage floor makes the coverage layer fail; the CRAP layer needs coverage,
+// so the gate would not reach it. The feeding run reads the figures, so it runs
+// CRAP on the profile whatever the floor said.
+func TestFeedingRunsCrapWhenCoverageFailsItsFloor(t *testing.T) {
+	dir := repoWith(t, ratchetConfig(t), "")
+	crapRan := false
+	layers := feedingOnly([]gate.Layer{
+		fakeLayer{id: "tests", outcome: gate.Pass},
+		fakeLayer{id: "coverage", outcome: gate.Fail, needs: []string{"tests"}},
+		fakeLayer{id: "crap", outcome: gate.Pass, needs: []string{"coverage"}, ran: &crapRan},
+	})
+	rep, err := runLayers(t.Context(), dir, gate.Config{Module: "example.com/app", Class: "binary-cli", Enforce: "ratchet"}, layers)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !crapRan {
+		t.Fatalf("the CRAP layer was not reached: %+v", rep.Layers)
+	}
+	for _, l := range rep.Layers {
+		if l.ID == "crap" && l.Outcome != "pass" {
+			t.Errorf("crap outcome %s, want the layer's own", l.Outcome)
+		}
+	}
+}
+
+// A write changes a ledger only from a copy that matches HEAD (§12.1 check: the
+// baseline is clean against HEAD). Otherwise a hand edit that raised an entry is
+// lowered back to a value above the committed one, with no record.
+
+// handEdited is a ratchet repo whose committed ledger holds BigUntested at 12,
+// edited in the working tree to 20, while the code now measures 14.07: below the
+// edit, above what was committed.
+func handEdited(t *testing.T, cfg string) (string, *fixture) {
+	t.Helper()
+	fx := newFixture()
+	fx.setCrap(cfn("example.com/app/a.BigUntested", 14.07))
+	fx.install(t)
+	dir := repoWith(t, cfg, "")
+	committed := baseline.Init(baseline.Measure{Build: cmdBuild, Functions: map[string]float64{"example.com/app/a.BigUntested": 12}})
+	writeFile(t, dir, ledgerRel, string(baseline.Marshal(committed)))
+	commitAll(t, dir)
+	edited := baseline.Init(baseline.Measure{Build: cmdBuild, Functions: map[string]float64{"example.com/app/a.BigUntested": 20}})
+	writeFile(t, dir, ledgerRel, string(baseline.Marshal(edited)))
+	return dir, fx
+}
+
+func TestEveryWriteRefusesALedgerThatDiffersFromHead(t *testing.T) {
+	for name, cfg := range map[string]func(*testing.T) string{
+		"ratchet": ratchetConfig,
+		"hard":    goodConfig,
+	} {
+		dir, fx := handEdited(t, cfg(t))
+		withInventory(t, "example.com/app/a.Renamed")
+		before := fileBytes(t, dir, ledgerRel)
+		for _, args := range [][]string{
+			{},
+			{"--accept-regression", "--reason", "the parser grows one arm", "--owner", "maintainer"},
+			{"--rename", "example.com/app/a.BigUntested", "example.com/app/a.Renamed"},
+		} {
+			fx.ran = 0
+			code, _, stderr := baselineIn(t, dir, args...)
+			if code != 2 || !strings.Contains(stderr, ledgerRel) || !strings.Contains(stderr, "HEAD") {
+				t.Errorf("%s %v: exit %d, stderr %q; want 2 naming %s and HEAD", name, args, code, stderr, ledgerRel)
+			}
+			if fx.ran != 0 {
+				t.Errorf("%s %v: the layers ran for a ledger that cannot be written", name, args)
+			}
+		}
+		if fileBytes(t, dir, ledgerRel) != before {
+			t.Errorf("%s: the hand-edited ledger was rewritten", name)
+		}
+	}
+}
+
+func TestEveryWriteRefusesALedgerThatIsNotTracked(t *testing.T) {
+	fx := newFixture()
+	fx.install(t)
+	dir := repoWith(t, ratchetConfig(t), "")
+	writeFile(t, dir, ledgerRel, string(baseline.Marshal(baseline.Init(baseline.Measure{Build: cmdBuild}))))
+	code, _, stderr := baselineIn(t, dir)
+	if code != 2 || !strings.Contains(stderr, "not tracked") {
+		t.Errorf("exit %d, stderr %q", code, stderr)
+	}
+}
+
+func TestACommittedLedgerIsWrittenAgain(t *testing.T) {
+	dir, fx := initialised(t)
+	fx.setCrap(cfn("example.com/app/a.Alpha", 15), cfn("example.com/app/b.Beta", 14.5))
+	if code, _, stderr := baselineIn(t, dir); code != 0 {
+		t.Fatalf("first write: exit %d: %s", code, stderr)
+	}
+	// The write is now a change against HEAD: the next one waits for a commit.
+	if code, _, _ := baselineIn(t, dir, "--accept-regression", "--reason", "the parser grows one arm", "--owner", "maintainer"); code != 2 {
+		t.Errorf("second write before a commit: exit %d, want 2", code)
+	}
+	commitAll(t, dir)
+	fx.setCrap(cfn("example.com/app/a.Alpha", 12), cfn("example.com/app/b.Beta", 14.5))
+	if code, _, stderr := baselineIn(t, dir); code != 0 {
+		t.Errorf("after a commit: exit %d: %s", code, stderr)
 	}
 }

@@ -261,6 +261,11 @@ func openBaseline(ctx context.Context, env cli.Env, a baselineArgs) (*baselineRu
 	if err := r.findLedger(); err != nil {
 		return nil, err
 	}
+	if !a.init {
+		if err := r.requireClean(); err != nil {
+			return nil, err
+		}
+	}
 	if err := r.checkLeg(ctx); err != nil {
 		return nil, err
 	}
@@ -282,6 +287,52 @@ func (r *baselineRun) findLedger() error {
 	}
 	r.old = old
 	return nil
+}
+
+// requireClean refuses a write when the ledger in the working tree is not the
+// copy at HEAD, whatever the enforcement mode: a hand edit would otherwise be
+// lowered back to a value above the committed one, with no record.
+func (r *baselineRun) requireClean() error {
+	why := ledgerProblem(r.dir, r.rel)
+	if why == "" {
+		return nil
+	}
+	return bfail(baselineCustody, "%s %s: a write changes a ledger only from the copy at HEAD, so a hand edit is never lowered or raised silently. Commit or revert it first (GO_TOPS.md §6.7)", r.rel, why)
+}
+
+// ledgerProblem says why the ledger is not the copy at HEAD, or "" when it is
+// tracked and unchanged, or when the directory is not a git repository (check
+// settles that under ratchet). It is the rule `check` applies to the baseline.
+func ledgerProblem(dir, rel string) string {
+	if gitExit(dir, "rev-parse", "--is-inside-work-tree") != 0 {
+		return ""
+	}
+	for _, s := range []struct {
+		problem string
+		args    []string
+	}{
+		{"cannot be clean: the repository has no commit", []string{"rev-parse", "--verify", "--quiet", "HEAD"}},
+		{"is not tracked by git", []string{"ls-files", "--error-unmatch", "--", rel}},
+		{"differs from HEAD", []string{"diff", "--quiet", "HEAD", "--", rel}},
+	} {
+		if gitExit(dir, s.args...) != 0 {
+			return s.problem
+		}
+	}
+	return ""
+}
+
+// gitExit runs git in dir and returns its exit code, or -1 when it did not run.
+func gitExit(dir string, args ...string) int {
+	err := exec.Command("git", append([]string{"-C", dir}, args...)...).Run()
+	var exit *exec.ExitError
+	switch {
+	case err == nil:
+		return 0
+	case errors.As(err, &exit):
+		return exit.ExitCode()
+	}
+	return -1
 }
 
 // checkLeg reads this run's build and refuses a write from any run but the ledger
@@ -402,16 +453,32 @@ func runFeedingLayers(ctx context.Context, dir string, cfg gate.Config) (report.
 	return runLayers(ctx, dir, cfg, feedingOnly(gate.Layers()))
 }
 
-// feedingOnly keeps the layers that feed the ledger (§6.7).
+// feedingOnly keeps the layers that feed the ledger (§6.7). The CRAP layer
+// loses its need of a passing coverage layer: a package under the floor makes
+// coverage fail, red thresholds do not stop the ledger, and CRAP reads the same
+// profile either way.
 func feedingOnly(all []gate.Layer) []gate.Layer {
 	var out []gate.Layer
 	for _, l := range all {
 		switch l.ID() {
-		case "hygiene", "tests", "coverage", "crap":
+		case "hygiene", "tests", "coverage":
 			out = append(out, l)
+		case crapLayerID:
+			out = append(out, floorFree{l})
 		}
 	}
 	return out
+}
+
+// crapLayerID is the CRAP layer's name in the runner.
+const crapLayerID = "crap"
+
+// floorFree is a layer that does not wait for coverage to pass.
+type floorFree struct{ gate.Layer }
+
+// Needs is the layer's own, less the coverage layer.
+func (l floorFree) Needs() []string {
+	return slices.DeleteFunc(slices.Clone(l.Layer.Needs()), func(n string) bool { return n == tests.CoverageID })
 }
 
 // runLayers runs layers through the gate's runner and returns its report. A run
