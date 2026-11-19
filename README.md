@@ -1,18 +1,116 @@
 # Go-TOPS
 
-**A protocol and drop-in kit for Go that is correct, dense, and fast.**
-A written spec, a JSON Schema, per-class profiles, a laws layer of `go/analysis` checks, and a thin orchestrator (`gotops`) for the Go tools you already run.
+<p align="center">
+  <img src="docs/brand/go-tops-banner.jpg" alt="Go-TOPS product mark and wordmark" width="720" />
+</p>
 
-[Protocol](GO_TOPS.md) · [Agent harness](AGENTS.md) · [Changelog](CHANGELOG.md)
+<p align="center"><strong>A protocol and drop-in kit for Go that is correct, dense, and fast.</strong><br/>
+A written spec, a JSON Schema, per-class profiles, and a thin orchestrator (`gotops`) for the Go tools you already run.</p>
+
+<p align="center">
+  <a href="https://go.dev"><img alt="Go 1.26 language floor" src="https://img.shields.io/badge/go-1.26-00ADD8?style=flat-square&logo=go&logoColor=white&labelColor=0A0A0A" /></a>
+  <a href="https://github.com/Hedronite"><img alt="Hedronite" src="https://img.shields.io/badge/org-Hedronite-08ACF0?style=flat-square&logo=github&logoColor=white&labelColor=0A0A0A" /></a>
+  <a href="GO_TOPS.md"><img alt="Protocol 0.4.4" src="https://img.shields.io/badge/protocol-0.4.4-08ACF0?style=flat-square&labelColor=0A0A0A" /></a>
+  <a href="LICENSE"><img alt="License: MIT OR Apache-2.0" src="https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-08ACF0?style=flat-square&labelColor=0A0A0A" /></a>
+  <a href="https://github.com/Hedronite/go-tops/actions/workflows/ci.yml"><img alt="CI workflow: ci" src="https://img.shields.io/github/actions/workflow/status/Hedronite/go-tops/ci.yml?branch=main&style=flat-square&label=ci&labelColor=0A0A0A&color=08ACF0" /></a>
+  <a href="https://github.com/Hedronite/go-tops/actions/workflows/docs.yml"><img alt="Docs workflow" src="https://img.shields.io/github/actions/workflow/status/Hedronite/go-tops/docs.yml?branch=main&style=flat-square&label=docs&labelColor=0A0A0A&color=08ACF0" /></a>
+</p>
+
+<p align="center">
+  <a href="#quick-start">Quick start</a> ·
+  <a href="#what-you-get">What you get</a> ·
+  <a href="#how-it-works">How it works</a> ·
+  <a href="#status">Status</a> ·
+  <a href="GO_TOPS.md">Protocol</a> ·
+  <a href="AGENTS.md">Harness</a> ·
+  <a href="CHANGELOG.md">Changelog</a>
+</p>
+
+<p align="center">
+  Built by <a href="https://github.com/Hedronite">Hedronite</a>. Structure adapted from <a href="https://github.com/Hedronite/rust-tops">Rust-TOPS</a>.<br/>
+  CRAP scores use the 2007 Change Risk Anti-Patterns formula. This kit did not originate that metric.
+</p>
+
+---
+
+Go-TOPS (Go Testing and Optimization Protocol Suite) is a protocol: a written spec, a JSON Schema, per-class profiles, and the `gotops` CLI that runs the Go tools you already use. This repository is the public kit for that protocol.
+
+It is for authors of Go libraries and binaries, and for the people who own their CI, who want one gate order: hygiene, tests, coverage and CRAP, then the later layers the class names once those layers land. A legacy repository can adopt it under `ratchet`, where a debt ledger holds the line and counts only fall.
+
+The package is unreleased (`0.0.0-dev`). There is no git tag and no module version to install. Run `gotops` from this tree. One public repository, [`vigil`](https://github.com/Hedronite/vigil), runs the gate beside its own CI under `ratchet`; the kit is not yet a release you can pin.
+
+## Pins
+
+| Plane | Pin | Where |
+| --- | --- | --- |
+| Protocol | 0.4.4 | [`GO_TOPS.md`](GO_TOPS.md), [`go-tops.yaml`](go-tops.yaml), [`go-tops.lock`](go-tops.lock), and the schema `protocol` constants |
+| Package | 0.0.0-dev | `gotops version`. No tag exists. A release will set this at link time |
+| Language floor | Go 1.26 | [`go.mod`](go.mod) and `toolchain.go_floor` in [`go-tops.yaml`](go-tops.yaml) |
+| Toolchain | go1.27.4 | [`go-tops.lock`](go-tops.lock) |
+| Launch classes | three | [`profiles/`](profiles/): `binary-cli`, `binary-service`, `library-core` |
+
+## Quick start
+
+From a clone of this repository:
+
+```bash
+go run ./cmd/gotops version
+go run ./cmd/gotops check
+go run ./cmd/gotops gate
+```
+
+`check` validates `go-tops.yaml` and `go-tops.lock` against their schemas, then the semantic rules. `gate` runs every enabled layer at tier 1 (hygiene, tests, coverage, CRAP) and writes `.go-tops/report.json`. This repository's CI runs `go run ./cmd/gotops gate` and then asserts the report.
+
+To adopt it in another module, `gotops init --class` accepts `binary-cli`, `binary-service`, or `library-core`, and `gotops baseline --init` writes the first `.go-tops/baseline.json` ledger for the `ratchet` mode. The `go-tops-adopt`, `go-tops-gate` and `go-tops-review` skills under [`.agents/skills/`](.agents/skills/) walk an agent through the same steps.
+
+## What you get
+
+| | `go test` and linters alone | This kit |
+| --- | --- | --- |
+| Contract | Docs and tests you arrange | Protocol 0.4.4 and JSON Schemas for the config, the gate report, and the tool lock |
+| Class floors | None | Three launch profiles |
+| Orchestrator | You sequence the commands | `gotops` `version`, `check`, `init`, `gate`, `report`, `lock`, `doctor`, `baseline` |
+| CRAP | A separate tool, if any | Native CRAP on every production function: complexity, guard-neutral coverage, exemptions |
+| Legacy code | All or nothing | `ratchet`: a debt ledger records only what is over the line, and counts only fall |
+| CI on this repo | — | One `gate` job (Linux, macOS, and the language floor), then a report assertion, plus docs CI |
+
+### What you do not get
+
+| Claim | Reality |
+| --- | --- |
+| A released module or tag | The package is `0.0.0-dev`. Nothing is published |
+| Mutation testing | Not yet. It is the next milestone (M4) |
+| A laws layer that judges this repo | Analyzer laws land at M5. Until then this repository gates itself under `advisory`, and CI asserts the gates that exist |
+| A test framework | `gotops` runs `go test` and the pinned tools; it does not replace them |
+
+## How it works
+
+Write the oracle from the contract, then the smallest production code that meets it. A test taken from the function body freezes current behavior, including bugs.
+
+`gotops gate` runs enabled layers at or below `--max-tier` (default 1), laws last. An enabled layer with no command is `not-run` and fails the gate. A layer that was not evaluated is reported as not evaluated, never as a pass. Layers end in an outcome and laws in a verdict, with one exit table in [`GO_TOPS.md`](GO_TOPS.md).
+
+| Path | Role |
+| --- | --- |
+| [`GO_TOPS.md`](GO_TOPS.md) | The protocol, 0.4.4 |
+| [`schema/`](schema/) | JSON Schemas: configuration, gate report, tool lock, and shared core definitions |
+| [`cmd/gotops/`](cmd/gotops/), [`internal/`](internal/) | The `gotops` CLI: one file per command, and the layers, CRAP, ratchet, runner, lock, report and `init` packages behind them |
+| [`go-tops.yaml`](go-tops.yaml), [`go-tops.lock`](go-tops.lock), [`tools/`](tools/) | This repository gating itself: configuration, tool pins, and module tools |
+| [`.github/workflows/ci.yml`](.github/workflows/ci.yml) | The one `gate` job |
+| [`profiles/`](profiles/) | Launch profiles |
+| [`calibration/`](calibration/) | The calibration records behind the CRAP caps: the 2026-11 probe and the native CRAP re-measure |
+| [`.agents/skills/`](.agents/skills/) | The adopt, gate and review skills (mirrored for other agent harnesses) |
+| [`scripts/docs/`](scripts/docs/) | The docs checker that docs CI runs |
+| [`config/AGENTS.template.md`](config/AGENTS.template.md) | The `AGENTS.md` section `gotops init` writes into an adopting repo |
+| [`AGENTS.md`](AGENTS.md) | Editing harness for this repository ([`CLAUDE.md`](CLAUDE.md) imports it) |
 
 ## Status
 
-Draft. Protocol **0.4.4**. The package is unreleased (0.0.0), and no tag exists.
+Draft. Protocol **0.4.4**. Package **0.0.0-dev**. No tag.
 
-Milestones M1, M2 and M3 are done: the `gotops` CLI (`version`, `check`, `init`, `gate`, `report`, `lock`, `doctor`, `baseline`) judges hygiene, tests, coverage and native CRAP at tier 1, and under `ratchet` it holds a legacy repo to a debt ledger, `.go-tops/baseline.json`. This repo's own CI gates it with `go run ./cmd/gotops gate`. Go-TOPS runs `advisory` on itself until its laws layer lands at M5 (§6.7), and its CI asserts the gates that exist. `vigil`, the first adopter, runs the `gate` job beside its own CI under `ratchet`, on a ledger written by the gate's own ubuntu leg (M3), and the `go-tops-adopt`, `go-tops-gate` and `go-tops-review` skills ship. The next milestone is M4: mutation. Mutation and the laws layer do not run yet, and nothing here is released or ready to copy into CI.
+Milestones M1, M2 and M3 are done. The `gotops` CLI judges hygiene, tests, coverage and native CRAP at tier 1, and under `ratchet` it holds a legacy repo to a debt ledger. This repository gates itself with `go run ./cmd/gotops gate` and runs `advisory` until the laws layer lands. [`vigil`](https://github.com/Hedronite/vigil), the first adopter, runs the gate beside its own CI under `ratchet`. Mutation and the laws layer do not run yet, and nothing here is released.
 
 | Milestone | Contents |
-|---|---|
+| --- | --- |
 | **M0, M0.5** spec | `GO_TOPS.md` 0.4.0, three schemas, profiles for three launch classes, a calibration record, docs CI |
 | **M1** CLI (done) | `init`, `check`, `gate` at tier 1 (hygiene, tests, coverage), `report`, `lock`, `doctor`, `report.json`; Go-TOPS gates itself under the advisory bootstrap rule |
 | **M2** CRAP and ratchet (done) | Native CRAP: complexity, guard-neutral coverage, exemptions; `baseline` and the ratchet judge; Go-TOPS gates itself with CRAP on |
@@ -21,57 +119,16 @@ Milestones M1, M2 and M3 are done: the `gotops` CLI (`version`, `check`, `init`,
 | M5 | Laws v0.1: 16 of 43 laws judged by analyzers; the kit switches its own gate to `hard` |
 | M6–M7 | Deep layers and the second and third adopters; the release tier and protocol 1.0 |
 
-The full roadmap is in [`GO_TOPS.md` §19](GO_TOPS.md#19-roadmap).
-
-### What 0.4.0 changed
-
-- The ratchet is a debt ledger: only what is over the line is recorded, counts only fall, and `baseline --init` writes the first ledger.
-- CRAP covers every production function on every run; the caps are 10, 10 and 8, taken from a calibration record of five repos.
-- Layers end in an outcome and laws in a verdict, with one exit table; a required law that is not judged fails.
-- One test run, one law pass with a kit-embedded configuration, and a one-job CI drop-in.
-- Schemas, launch profiles and examples are files, and docs CI keeps every example block identical to its file and valid against its schema.
-
-The full list is in [`CHANGELOG.md`](CHANGELOG.md).
-
-### What 0.3.0 changed
-
-- One CRAP cap per class, with no authorship trailer.
-- Test jobs run with cgo, because `-race` needs cgo on Linux.
-- An enabled layer with no command fails the gate, instead of being skipped.
-- The error-guard discount applies in every class, and blank error discards are caught.
-- Adopters are gated by ratchet against a baseline file.
-- No Bend2 or Lean layer; the `go/analysis` analyzers are the laws layer.
-
-## What is here
-
-| Path | What it is |
-|---|---|
-| [`GO_TOPS.md`](GO_TOPS.md) | The protocol, 0.4.4 |
-| [`schema/`](schema/) | The JSON Schemas: configuration, gate report, tool lock, and the shared core definitions |
-| [`cmd/gotops/`](cmd/gotops/), [`internal/`](internal/) | The `gotops` CLI: one file per command, and the layers, runner, lock, report and `init` packages behind them |
-| [`go-tops.yaml`](go-tops.yaml), [`go-tops.lock`](go-tops.lock), [`tools/`](tools/) | Go-TOPS gating itself: its configuration, its tool pins and its pinned module tools |
-| [`.github/workflows/ci.yml`](.github/workflows/ci.yml) | The one `gate` job: Linux, macOS and the language floor, then the report assertion |
-| [`profiles/`](profiles/) | The launch profiles: `binary-cli`, `binary-service`, `library-core` |
-| [`calibration/2026-11-probe/`](calibration/2026-11-probe/) | The calibration record behind the CRAP caps, with the probe and the script that reproduces it |
-| [`scripts/docs/`](scripts/docs/) | The docs checker that docs CI runs |
-| [`config/AGENTS.template.md`](config/AGENTS.template.md) | The `AGENTS.md` that `gotops init` will write into an adopting repo |
-| [`AGENTS.md`](AGENTS.md) | Standing orders for agents working on this repo ([`CLAUDE.md`](CLAUDE.md) imports it) |
+The full roadmap is in [`GO_TOPS.md` §19](GO_TOPS.md#19-roadmap). Version history is in [`CHANGELOG.md`](CHANGELOG.md).
 
 ## Contributing
 
-Read `GO_TOPS.md` and `AGENTS.md` first. Work on a branch and open a PR ready for review when the step is complete. A change to laws, schema, profiles, thresholds or normative spec text is a protocol change: it carries the `protocol-change` label, a changelog entry, and a protocol version bump.
+Read [`GO_TOPS.md`](GO_TOPS.md) and [`AGENTS.md`](AGENTS.md) first. Work on a branch and open a PR ready for review when the step is complete. A change to laws, schema, profiles, thresholds or normative spec text is a protocol change: it carries the `protocol-change` label, a changelog entry, and a protocol version bump.
 
-## Credits
+## Credits and license
 
-Built by [Hedronite](https://github.com/Hedronite). Structure and many rules are adapted from [Rust-TOPS](https://github.com/Hedronite/rust-tops) (protocol 1.2.0 on `main`; latest release tag `cargo-tops` v0.3.0). CRAP scores use the 2007 Change Risk Anti-Patterns formula (Savoia and Evans); this kit did not originate that metric.
+Built by [Hedronite](https://github.com/Hedronite). Structure and many rules are adapted from [Rust-TOPS](https://github.com/Hedronite/rust-tops). CRAP scores use the 2007 Change Risk Anti-Patterns formula (Savoia and Evans); this kit did not originate that metric.
 
-## License
-
-Licensed under either of
-
-- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or <http://www.apache.org/licenses/LICENSE-2.0>)
-- MIT license ([LICENSE-MIT](LICENSE-MIT) or <http://opensource.org/licenses/MIT>)
-
-at your option.
+Licensed under MIT OR Apache-2.0, at your option. See [`LICENSE`](LICENSE), [`LICENSE-MIT`](LICENSE-MIT), and [`LICENSE-APACHE`](LICENSE-APACHE).
 
 Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in this work, as defined in the Apache-2.0 license, shall be dual licensed as above, without any additional terms or conditions.
