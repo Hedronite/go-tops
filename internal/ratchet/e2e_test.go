@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -173,8 +174,13 @@ func gateConfig(enforce string, exemptions []report.Exemption) gate.Config {
 
 func execute(t *testing.T, p *ratchetProject, cfg gate.Config, ls []gate.Layer) *gate.Run {
 	t.Helper()
+	return executeWith(t, p, cfg, ls, gate.Options{MaxTier: 1, Base: "main"})
+}
+
+func executeWith(t *testing.T, p *ratchetProject, cfg gate.Config, ls []gate.Layer, opts gate.Options) *gate.Run {
+	t.Helper()
 	d := gate.Deps{Dir: p.dir, Layers: ls, ToolVersion: "test", Ratchet: ratchet.NewJudge(ratchet.CollectMeasure(), defaultPaths)}
-	run, err := gate.Execute(context.Background(), cfg, gate.Options{MaxTier: 1, Base: "main"}, d)
+	run, err := gate.Execute(context.Background(), cfg, opts, d)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
@@ -579,5 +585,109 @@ func TestWalkThroughStep5ThroughTheReport(t *testing.T) {
 		if rep.Laws.Required != len(required) || rep.Laws.RequiredNotEvaluated != len(required) {
 			t.Errorf("laws %+v, want %d required and not evaluated until M5", rep.Laws, len(required))
 		}
+	}
+}
+
+// Through the runner, in report.json: the tests layer's shuffle seed is byte-identical
+// under ratchet, whatever the ratchet rewrites in the layers it judges.
+func TestRatchetKeepsTheSeedByteIdenticalInTheReport(t *testing.T) {
+	p := legacyProject(t)
+	p.writeFirstLedger(t)
+	ls := layers(t)
+	ls[1] = fixedLayer{id: "tests", res: gate.Result{Outcome: gate.Pass, Details: map[string]any{
+		"packages": 3, "tests": 12, "race": true, "skipped": 0, "shuffle_seed": int64(1768300000000000123),
+	}}}
+	run := runGateWith(t, p, "ratchet", ls)
+	if run.Report.Ratchet == nil || run.Report.Ratchet.Outcome != "pass" {
+		t.Fatalf("ratchet %+v\n%s", run.Report.Ratchet, run.Text)
+	}
+	raw, err := report.Marshal(run.Report)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !regexp.MustCompile(`"shuffle_seed":\s*1768300000000000123\b`).Match(raw) {
+		t.Errorf("report.json does not carry the seed byte-identical:\n%s", raw)
+	}
+}
+
+// Ruling C3e: in a partial run under ratchet the thresholds the ledger replaces are
+// not judged at all. The ledger here holds Big at 5 and no finding: against it Big at
+// 11 and five findings fail a full run, and a partial run reports them as not judged.
+func TestPartialRunUnderRatchetJudgesNothingTheLedgerReplaces(t *testing.T) {
+	p := legacyProject(t)
+	p.writeLedgerFor(t, map[string]float64{"example.com/m/low.Big": 5}, 0)
+
+	full := runGateWith(t, p, "ratchet", layers(t))
+	if full.ExitCode != 1 {
+		t.Fatalf("the full range exits %d, want 1: Big is over its entry\n%s", full.ExitCode, full.Text)
+	}
+	for _, only := range []string{"crap", "coverage", "hygiene"} {
+		ls := layers(t)
+		ls[0] = lintFailure(t, p.dir)
+		cfg := gateConfig("ratchet", nil)
+		run := executeWith(t, p, cfg, ls, gate.Options{MaxTier: 1, Base: "main", Only: only})
+		if run.ExitCode != 0 || run.Report.Ratchet != nil || contains(run.Report.Summary.Failed, "ratchet") {
+			t.Errorf("--only %s: exit %d ratchet %v failed %v, want a run with no ratchet object that fails nothing\n%s", only, run.ExitCode, run.Report.Ratchet, run.Report.Summary.Failed, run.Text)
+		}
+		for _, l := range run.Report.Layers {
+			if l.ID == only && (l.Outcome != "pass" || !strings.Contains(l.Reason, "not judged: partial run under ratchet")) {
+				t.Errorf("--only %s: layer %s %s %q, want a pass booked as not judged", only, l.ID, l.Outcome, l.Reason)
+			}
+		}
+	}
+}
+
+func contains(list []string, want string) bool { return slices.Contains(list, want) }
+
+// What the ledger does not replace stands in a partial run.
+func TestPartialRunKeepsAnUnmatchedExemptionAndANotMeasuredFunction(t *testing.T) {
+	p := legacyProject(t)
+	p.writeFirstLedger(t)
+	cfg := gateConfig("ratchet", []report.Exemption{exemptionFor("low/vanished.go")})
+	run := executeWith(t, p, cfg, layers(t), gate.Options{MaxTier: 1, Base: "main", Only: "crap"})
+	if o := outcomes(run); o["crap"] != "fail" || run.ExitCode != 1 {
+		t.Errorf("an unmatched exemption: layers %v exit %d, want crap fail\n%s", o, run.ExitCode, run.Text)
+	}
+	q := legacyProject(t)
+	q.writeFirstLedger(t)
+	big := "package low\n\nfunc OnWindows(a bool) int {\n" + strings.Repeat("\tif a {\n\t\treturn 1\n\t}\n", 11) + "\treturn 0\n}\n"
+	if err := os.WriteFile(filepath.Join(q.dir, "low", "big_windows.go"), []byte(big), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	run = executeWith(t, q, gateConfig("ratchet", nil), layers(t), gate.Options{MaxTier: 1, Base: "main", Only: "crap"})
+	if o := outcomes(run); o["crap"] != "fail" || !strings.Contains(run.Text, "example.com/m/low.OnWindows") {
+		t.Errorf("a not-measured function over the cap: layers %v\n%s", o, run.Text)
+	}
+}
+
+// Held verdicts are booked to the layer that owns them: a finding or a suppression
+// to hygiene and a package to coverage, never to the CRAP layer, which fails for
+// functions only. summary.failed names the layer that failed.
+func TestOtherLegBooksHeldVerdictsToTheirOwnLayers(t *testing.T) {
+	p := otherLegProject(t)
+	p.writeOnlyHere(t, "low", "\nfunc skipped() { //nolint:errcheck // a reason for the suppression\n}\n")
+	ls := layers(t)
+	ls[0] = lintFailureIn(t, p.dir, "errcheck", "low/only_here.go")
+	run := runGateWith(t, p, "ratchet", ls)
+	o := outcomes(run)
+	if o["hygiene"] != "fail" || o["crap"] != "pass" || o["coverage"] != "pass" || !slices.Equal(run.Report.Summary.Failed, []string{"hygiene"}) {
+		t.Errorf("layers %v failed %v, want only hygiene\n%s", o, run.Report.Summary.Failed, run.Text)
+	}
+	q := otherLegProject(t)
+	q.writeOnlyHere(t, "onlyhere", "")
+	prof := filepath.Join(q.dir, filepath.FromSlash(tests.ProfilePath))
+	f, err := os.OpenFile(prof, os.O_APPEND|os.O_WRONLY, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.WriteString("example.com/m/onlyhere/only_here.go:3.1,9.2 20 1\nexample.com/m/onlyhere/only_here.go:10.1,19.2 80 0\n"); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	pk := runGateWith(t, q, "ratchet", layers(t))
+	if o := outcomes(pk); o["coverage"] != "fail" || o["crap"] != "pass" || !slices.Equal(pk.Report.Summary.Failed, []string{"coverage"}) {
+		t.Errorf("layers %v failed %v, want only coverage\n%s", o, pk.Report.Summary.Failed, pk.Text)
 	}
 }

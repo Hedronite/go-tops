@@ -70,7 +70,15 @@ type Base struct {
 	// Ledger is the copy at the merge base; nil means there is none, so the file in
 	// the tree is a first ledger.
 	Ledger *Ledger
+	// Moved is set when the baseline path of this run's configuration is not the
+	// one the base commit's go-tops.yaml names; Ledger is then the copy at the
+	// base's own path.
+	Moved *Moved
 }
+
+// Moved is a baseline that this run's configuration keeps at another path than the
+// diff base did.
+type Moved struct{ From, To string }
 
 // Input is everything a judgment reads.
 type Input struct {
@@ -137,7 +145,7 @@ func (j *Judgment) fail(kind, key, format string, args ...any) {
 // comparison with the ledger; any other leg skips it, naming the ledger build.
 func Judge(in Input) Judgment {
 	j := Judgment{RunBuild: in.Run, LedgerBuild: in.Run}
-	j.noteBuildChange(in)
+	j.advise(in)
 	switch {
 	case in.Ledger == nil:
 		j.fail("baseline", "", "no baseline file: under ratchet a missing baseline fails, and deleting the file is not a reset")
@@ -154,6 +162,14 @@ func Judge(in Input) Judgment {
 		j.Outcome = Fail
 	}
 	return j
+}
+
+// advise adds the lines that change no verdict.
+func (j *Judgment) advise(in Input) {
+	j.noteBuildChange(in)
+	if m := in.Base.Moved; m != nil {
+		j.Advice = append(j.Advice, fmt.Sprintf("ratchet: the baseline moved from %s at the diff base to %s here; judged against the base copy, never as a first ledger\n", m.From, m.To))
+	}
 }
 
 // noteBuildChange says, without judging it, that the ledger's build is not the

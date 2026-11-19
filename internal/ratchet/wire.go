@@ -42,6 +42,9 @@ type Measurer func(ctx context.Context, env *gate.Env, in Inputs) (Measure, erro
 // ledger replaces. paths gives the configured paths of the module in dir.
 func NewJudge(measure Measurer, paths func(dir string) (Paths, error)) gate.RatchetJudge {
 	return func(ctx context.Context, env *gate.Env, layers []report.Layer) (*gate.RatchetVerdict, error) {
+		if !holdsFeeds(layers) {
+			return partialVerdict(env, layers)
+		}
 		run, err := gobuild.Resolve(env.Dir, tests.Build)
 		if err != nil {
 			return nil, err
@@ -54,7 +57,6 @@ func NewJudge(measure Measurer, paths func(dir string) (Paths, error)) gate.Ratc
 		if err != nil {
 			return refused(layers, run, in.Ledger, err), nil
 		}
-		layers = plain(layers)
 		if in.M, err = measure(ctx, env, Inputs{Build: run, Layers: layers, Paths: ps, Now: time.Now()}); err != nil {
 			// Nothing was measured, so nothing can be judged: a run whose tests or
 			// profile failed gets a failed ratchet, never a guess and never an
@@ -62,9 +64,57 @@ func NewJudge(measure Measurer, paths func(dir string) (Paths, error)) gate.Ratc
 			return refused(layers, run, in.Ledger, fmt.Errorf("the run could not be measured: %w", err)), nil
 		}
 		j := Judge(in)
-		rep := j.Report()
-		return &gate.RatchetVerdict{Report: &rep, Layers: Apply(layers, j, in.Ledger), Failed: j.Failed(), Notes: Notes(j)}, nil
+		rep, applied := j.Report(), Apply(layers, j, in.Ledger)
+		return &gate.RatchetVerdict{Report: &rep, Layers: applied, Failed: j.Outcome == Fail || uncarried(j, applied), Notes: Notes(j)}, nil
 	}
+}
+
+// feedingLayers are the layers the ledger is measured from (§6.7).
+var feedingLayers = []string{"hygiene", "tests", "coverage", "crap"}
+
+// holdsFeeds reports whether the run's range holds every feeding layer. A partial run
+// (`--only crap`, `--only tests`, `--max-tier 0`) holds fewer.
+func holdsFeeds(layers []report.Layer) bool {
+	for _, id := range feedingLayers {
+		if !slices.ContainsFunc(layers, func(l report.Layer) bool { return l.ID == id }) {
+			return false
+		}
+	}
+	return true
+}
+
+// partialVerdict is the verdict of a partial run (ruling C3e): no ratchet object, and
+// the layers as ApplyPartial gives them. The run ends partial as it would without a
+// ledger.
+func partialVerdict(env *gate.Env, layers []report.Layer) (*gate.RatchetVerdict, error) {
+	var problems []Failure
+	if len(env.Config.Exemptions) > 0 {
+		var err error
+		if problems, err = exemptionProblems(env, time.Now()); err != nil {
+			return nil, err
+		}
+	}
+	return &gate.RatchetVerdict{Layers: ApplyPartial(layers, problems)}, nil
+}
+
+// carrier is the layer that reports a held failure of a kind on a leg that is not
+// the ledger leg.
+var carrier = map[string]string{
+	"functions": "crap", "not measured": "crap", ProblemKind: "crap",
+	"findings": "hygiene", "suppressions.nolint": "hygiene", "suppressions.ack": "hygiene", "laws": "hygiene",
+	"packages": "coverage",
+}
+
+// uncarried reports whether a failure held by a leg that is not the ledger leg is
+// not carried by a failing layer, so that the run fails on the ratchet itself.
+func uncarried(j Judgment, layers []report.Layer) bool {
+	for _, f := range j.HeldToCap {
+		id := carrier[f.Kind]
+		if !slices.ContainsFunc(layers, func(l report.Layer) bool { return l.ID == id && l.Outcome == "fail" }) {
+			return true
+		}
+	}
+	return false
 }
 
 // judgeInput reads the ledger and its base copy, and on a leg that is not the ledger

@@ -182,14 +182,68 @@ func TestParseRefusesWhatTheSchemaRefuses(t *testing.T) {
 // The base copy is read at the configured path too.
 func TestBaseLedgerIsReadAtTheConfiguredPath(t *testing.T) {
 	dir := repo(t)
-	commit(t, dir, "base", map[string]string{"ledgers/main.json": ledgerFile(t, 12), baselinePath: ledgerFile(t, 99)})
+	commit(t, dir, "base", map[string]string{
+		"go-tops.yaml": "baseline: ledgers/main.json\n", "ledgers/main.json": ledgerFile(t, 12), baselinePath: ledgerFile(t, 99),
+	})
 	git(t, dir, "checkout", "-q", "-b", "feature")
 	commit(t, dir, "work", map[string]string{"a.go": "package a\n"})
 	b := ratchet.ReadBase(dir, "main", "ledgers/main.json")
 	if b.Err != nil || b.Ledger == nil || b.Ledger.Functions["example.com/m/p.F"] != 12 {
 		t.Fatalf("base %+v, want the ledger at the configured path, 12", b)
 	}
-	if none := ratchet.ReadBase(dir, "main", "ledgers/other.json"); none.Err != nil || none.Ledger != nil {
-		t.Errorf("base %+v, want no ledger at a path that has none: a first ledger", none)
+	// The base is read where the base commit keeps it, whatever path this run asks for.
+	if other := ratchet.ReadBase(dir, "main", "ledgers/other.json"); other.Err != nil || other.Ledger == nil || other.Moved == nil {
+		t.Errorf("base %+v, want the base's own copy and a move", other)
+	}
+}
+
+// The base copy is read where the base commit's own go-tops.yaml keeps it. A run
+// whose configuration names another path judges against that copy and says so.
+func TestBaseIsReadAtThePathTheBaseCommitNames(t *testing.T) {
+	dir := repo(t)
+	commit(t, dir, "base", map[string]string{
+		"go-tops.yaml":    "protocol: \"0.4.3\"\nbaseline: old/ledger.json\n",
+		"old/ledger.json": ledgerFile(t, 12),
+	})
+	git(t, dir, "checkout", "-q", "-b", "feature")
+	commit(t, dir, "move the baseline", map[string]string{
+		"go-tops.yaml":    "protocol: \"0.4.3\"\nbaseline: new/ledger.json\n",
+		"new/ledger.json": ledgerFile(t, 99),
+	})
+	moved := ratchet.ReadBase(dir, "main", "new/ledger.json")
+	if moved.Err != nil || moved.Ledger == nil || moved.Ledger.Functions["example.com/m/p.F"] != 12 {
+		t.Fatalf("base %+v, want the copy at old/ledger.json, 12", moved)
+	}
+	if moved.Moved == nil || moved.Moved.From != "old/ledger.json" || moved.Moved.To != "new/ledger.json" {
+		t.Errorf("moved %+v, want old/ledger.json to new/ledger.json", moved.Moved)
+	}
+	same := ratchet.ReadBase(dir, "main", "old/ledger.json")
+	if same.Moved != nil || same.Err != nil {
+		t.Errorf("same path: %+v, want no move", same)
+	}
+	// A path written another way is the same path.
+	if again := ratchet.ReadBase(dir, "main", "./old//ledger.json"); again.Moved != nil {
+		t.Errorf("an equivalent path read as a move: %+v", again.Moved)
+	}
+}
+
+func TestBaseCommitWithoutAConfigurationKeepsTheLedgerAtTheDefaultPath(t *testing.T) {
+	dir := repo(t)
+	commit(t, dir, "base", map[string]string{baselinePath: ledgerFile(t, 12)})
+	git(t, dir, "checkout", "-q", "-b", "feature")
+	commit(t, dir, "adopt a path", map[string]string{"go-tops.yaml": "baseline: elsewhere.json\n", "elsewhere.json": ledgerFile(t, 50)})
+	b := ratchet.ReadBase(dir, "main", "elsewhere.json")
+	if b.Err != nil || b.Ledger == nil || b.Ledger.Functions["example.com/m/p.F"] != 12 || b.Moved == nil || b.Moved.From != baselinePath {
+		t.Errorf("base %+v moved %+v, want the default path's copy and a move from it", b, b.Moved)
+	}
+}
+
+func TestBaseConfigurationThatDoesNotParseFails(t *testing.T) {
+	dir := repo(t)
+	commit(t, dir, "base", map[string]string{"go-tops.yaml": "baseline: [unclosed\n", baselinePath: ledgerFile(t, 12)})
+	git(t, dir, "checkout", "-q", "-b", "feature")
+	commit(t, dir, "work", map[string]string{"a.go": "package a\n"})
+	if b := ratchet.ReadBase(dir, "main", baselinePath); b.Err == nil {
+		t.Error("a base go-tops.yaml that does not parse was read as naming the default path")
 	}
 }

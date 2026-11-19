@@ -312,6 +312,82 @@ func TestApplyOtherLegFailsTheLayersForHeldSources(t *testing.T) {
 	if out := find2(t, ratchet.Apply([]report.Layer{coverageLayer()}, j, l), "coverage"); out.Outcome != "fail" || !strings.Contains(out.Reason, "example.com/m/darwin") {
 		t.Errorf("coverage %s: %s", out.Outcome, out.Reason)
 	}
+	// The CRAP layer fails for functions only: a finding and a package are not its.
+	if out := find2(t, ratchet.Apply([]report.Layer{crapLayer()}, j, l), "crap"); out.Outcome != "pass" {
+		t.Errorf("crap %s: %s, want a pass: the held verdicts are hygiene's and coverage's", out.Outcome, out.Reason)
+	}
+}
+
+// A suppression or a law count in a file the ledger build does not compile is
+// hygiene's verdict, on a leg that is not the ledger leg.
+func TestApplyBooksHeldCountsToHygiene(t *testing.T) {
+	m := legacy()
+	m.Nolint = ratchet.Counts{"errcheck": {"p/d_darwin.go": 1}}
+	m.Laws = ratchet.Counts{"G-11": {"p/d_darwin.go": 2}}
+	l := initLedger(legacy(), linux)
+	j := ratchet.Judge(otherLegInput(l, based(l), m, compiledAll(m)))
+	clean := report.Layer{ID: "hygiene", Tier: 1, Outcome: "pass", Details: map[string]any{"golangci_lint": "v2.15.0", "findings": 0}}
+	out := find2(t, ratchet.Apply([]report.Layer{clean}, j, l), "hygiene")
+	if out.Outcome != "fail" || !strings.Contains(out.Reason, "errcheck p/d_darwin.go") || !strings.Contains(out.Reason, "G-11 p/d_darwin.go") {
+		t.Errorf("hygiene %s: %s", out.Outcome, out.Reason)
+	}
+	if got := find2(t, ratchet.Apply([]report.Layer{crapLayer()}, j, l), "crap"); got.Outcome != "pass" {
+		t.Errorf("crap %s: %s, want a pass", got.Outcome, got.Reason)
+	}
+	// On the ledger leg the same counts are the ratchet's own failures, not hygiene's.
+	lj := ratchet.Judge(input(m, l, based(l)))
+	if got := find2(t, ratchet.Apply([]report.Layer{clean}, lj, l), "hygiene"); got.Outcome != "pass" {
+		t.Errorf("ledger leg: hygiene %s: %s", got.Outcome, got.Reason)
+	}
+}
+
+// Ruling C3e, the layers of a partial run under ratchet: what the ledger replaces is
+// not judged, and what it does not replace stands.
+func TestApplyPartialDoesNotJudgeWhatTheLedgerReplaces(t *testing.T) {
+	out := ratchet.ApplyPartial([]report.Layer{crapLayer(), coverageLayer(), hygieneLayer(5, nil)}, nil)
+	for _, id := range []string{"crap", "coverage", "hygiene"} {
+		got := find2(t, out, id)
+		if got.Outcome != "pass" || !strings.Contains(got.Reason, "not judged: partial run under ratchet") {
+			t.Errorf("%s %s: %q, want a pass booked as not judged", id, got.Outcome, got.Reason)
+		}
+	}
+	// Reported, not judged: the rows and the findings are still in the details.
+	rows := list(t, find2(t, out, "crap").Details["violations"])
+	if len(rows) != 8 {
+		t.Errorf("crap rows %d, want the 8 legacy rows kept", len(rows))
+	}
+	if lint := mapOf(t, find2(t, out, "hygiene").Details["lint"]); num(lint["findings"]) != 5 || lint["outcome"] != "pass" {
+		t.Errorf("lint %v", lint)
+	}
+}
+
+func TestApplyPartialKeepsWhatTheLedgerDoesNotReplace(t *testing.T) {
+	// A function that is not measured and over the cap, and an exemption that matches
+	// nothing, still fail the CRAP layer.
+	rows := append(crapRows(), map[string]any{"func": "example.com/m.Win", "file": "w_windows.go", "cc": 12, "cov_pct": nil, "crap": nil, "baseline": nil})
+	layer := report.Layer{ID: "crap", Tier: 1, Outcome: "fail", Reason: "x", Details: map[string]any{"cap": 10.0, "violations": rows, "not_measured": 1}}
+	got := find2(t, ratchet.ApplyPartial([]report.Layer{layer}, nil), "crap")
+	if got.Outcome != "fail" || !strings.Contains(got.Reason, "example.com/m.Win") {
+		t.Errorf("crap %s: %s, want the not-measured function to stand", got.Outcome, got.Reason)
+	}
+	problem := []ratchet.Failure{{Kind: ratchet.ProblemKind, Key: "p/gone.go", Why: "matches no production file"}}
+	got = find2(t, ratchet.ApplyPartial([]report.Layer{crapLayer()}, problem), "crap")
+	if got.Outcome != "fail" || !strings.Contains(got.Reason, "p/gone.go") {
+		t.Errorf("crap %s: %s, want the unmatched exemption to stand", got.Outcome, got.Reason)
+	}
+	// Another hygiene check that failed stands, and the lint findings are not judged.
+	h := hygieneLayer(5, func(d map[string]any) {
+		d["format"] = map[string]any{"outcome": "fail", "message": "1 file(s) need formatting", "files": []any{"a.go"}}
+	})
+	hy := find2(t, ratchet.ApplyPartial([]report.Layer{h}, nil), "hygiene")
+	if hy.Outcome != "fail" || !strings.Contains(hy.Reason, "format: 1 file(s) need formatting") || strings.Contains(hy.Reason, "lint") {
+		t.Errorf("hygiene %s: %s", hy.Outcome, hy.Reason)
+	}
+	// A coverage layer that failed for another reason stays failed.
+	broken := report.Layer{ID: "coverage", Tier: 1, Outcome: "fail", Details: map[string]any{"error": "the coverage profile does not exist"}}
+	if cov := find2(t, ratchet.ApplyPartial([]report.Layer{broken}, nil), "coverage"); cov.Outcome != "fail" {
+		t.Errorf("coverage %s, want fail", cov.Outcome)
+	}
 }
 
 // The messages say what happened: a judged_laws that fell is not "raised", and an

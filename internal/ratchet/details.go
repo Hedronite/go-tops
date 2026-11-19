@@ -1,6 +1,7 @@
 package ratchet
 
 import (
+	"bytes"
 	"encoding/json"
 
 	"github.com/Hedronite/go-tops/internal/report"
@@ -10,12 +11,18 @@ import (
 // []any, or as a stored report gives them back, with float64 and []any: and a
 // layer is free to build a typed slice of rows. Reading a value by a type
 // assertion on one of those forms reads the other as nothing, so every reader works
-// on layers that have been through the JSON round trip, which makes every number a
-// float64, every list a []any and every row a map[string]any.
+// on a copy of the layers that has been through the JSON round trip, decoded with
+// UseNumber: every number a json.Number, which keeps its digits whatever its size,
+// every list a []any and every row a map[string]any.
+//
+// The copy is for reading only. The layers a run reports are the layers it ran: Apply
+// changes their outcome, their reason and the keys of the details it judges, and no
+// other number in a report passes through a float64 (the tests layer's shuffle seed
+// is an int64 of 19 digits).
 
-// plain returns the layers with their details as a JSON round trip makes them. A
-// layer whose details cannot be marshalled keeps them: the readers then find
-// nothing in them and the layer is left as it ran.
+// plain returns a copy of the layers, for reading, with their details as a JSON
+// round trip makes them. A layer whose details cannot be marshalled keeps them: the
+// readers then find nothing in them and the layer is left as it ran.
 func plain(layers []report.Layer) []report.Layer {
 	out := make([]report.Layer, len(layers))
 	copy(out, layers)
@@ -35,20 +42,31 @@ func roundTrip(details map[string]any) (map[string]any, bool) {
 	if err != nil {
 		return nil, false
 	}
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.UseNumber()
 	var out map[string]any
-	if err := json.Unmarshal(raw, &out); err != nil {
+	if err := dec.Decode(&out); err != nil {
 		return nil, false
 	}
 	return out, true
 }
 
-// number is v as an int, or 0 when it is not a number.
+// number is v as an int, or 0 when it is not a number. It reads a json.Number, a
+// float64 and an int, so it reads a layer's details in any form.
 func number(v any) int {
-	f, ok := v.(float64)
-	if !ok {
-		return 0
+	switch n := v.(type) {
+	case json.Number:
+		f, err := n.Float64()
+		if err != nil {
+			return 0
+		}
+		return int(f)
+	case float64:
+		return int(n)
+	case int:
+		return n
 	}
-	return int(f)
+	return 0
 }
 
 // text is v as a string, or "" when it is not one.

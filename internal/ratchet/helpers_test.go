@@ -1,6 +1,7 @@
 package ratchet_test
 
 import (
+	"encoding/json"
 	"fmt"
 	"math"
 	"testing"
@@ -186,6 +187,12 @@ func num(v any) float64 {
 		return float64(n)
 	case float64:
 		return n
+	case json.Number:
+		f, err := n.Float64()
+		if err != nil {
+			return -1
+		}
+		return f
 	}
 	return -1
 }

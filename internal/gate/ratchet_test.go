@@ -211,57 +211,27 @@ func TestRatchetWithNoHookReportsNothing(t *testing.T) {
 	}
 }
 
-// A partial run holds fewer layers than the ledger is measured from, so it cannot be
-// judged against it: the ratchet is left out of the report and the run ends partial
-// as it would without a ledger, never failed for what the range left out.
-func TestRatchetIsNotJudgedOnAPartialRun(t *testing.T) {
+// A partial run holds fewer layers than the ledger is measured from. The runner asks
+// the judge as for any run under ratchet, and a verdict with no ratchet object leaves
+// the report without one: the run ends partial as it would without a ledger.
+func TestRatchetVerdictWithNoObjectLeavesTheReportWithoutOne(t *testing.T) {
 	for _, o := range []Options{
 		{MaxTier: 1, Only: "crap"},
-		{MaxTier: 1, Only: "tests"},
 		{MaxTier: 1, Only: "coverage"},
 		{MaxTier: 1, Only: "hygiene"},
 	} {
-		s := &spy{verdict: passVerdict(nil)}
+		s := &spy{}
 		d := deps(gateLayers(nil, nil))
-		d.Ratchet = s.judge
+		d.Ratchet = func(ctx context.Context, env *Env, layers []report.Layer) (*RatchetVerdict, error) {
+			s.verdict = &RatchetVerdict{Layers: layers}
+			return s.judge(ctx, env, layers)
+		}
 		r := mustRun(t, ratchetConfig("ratchet"), o, d)
-		if s.called || r.Report.Ratchet != nil {
-			t.Errorf("--only %s: judged %v, ratchet %v; want neither", o.Only, s.called, r.Report.Ratchet)
+		if !s.called {
+			t.Errorf("--only %s: the judge was not asked", o.Only)
 		}
-		if contains(r.Report.Summary.Failed, "ratchet") {
-			t.Errorf("--only %s: the run failed on the ratchet: %v", o.Only, r.Report.Summary.Failed)
+		if r.Report.Ratchet != nil || contains(r.Report.Summary.Failed, "ratchet") {
+			t.Errorf("--only %s: ratchet %v failed %v, want no object and no ratchet failure", o.Only, r.Report.Ratchet, r.Report.Summary.Failed)
 		}
-	}
-	// The same gate with the whole range judges.
-	s := &spy{}
-	d := deps(gateLayers(nil, nil))
-	d.Ratchet = func(ctx context.Context, env *Env, layers []report.Layer) (*RatchetVerdict, error) {
-		s.verdict = passVerdict(layers)
-		return s.judge(ctx, env, layers)
-	}
-	mustRun(t, ratchetConfig("ratchet"), opts(), d)
-	if !s.called {
-		t.Error("the full range was not judged")
-	}
-}
-
-func TestHoldsFeedsNeedsEveryFeedingLayer(t *testing.T) {
-	all := []report.Layer{{ID: "hygiene"}, {ID: "tests"}, {ID: "coverage"}, {ID: "crap"}, {ID: "mutation"}}
-	if !holdsFeeds(all) {
-		t.Error("the full set was refused")
-	}
-	for _, drop := range []string{"hygiene", "tests", "coverage", "crap"} {
-		var some []report.Layer
-		for _, l := range all {
-			if l.ID != drop {
-				some = append(some, l)
-			}
-		}
-		if holdsFeeds(some) {
-			t.Errorf("a run without %s was judged", drop)
-		}
-	}
-	if holdsFeeds(nil) {
-		t.Error("a run with no layers was judged")
 	}
 }

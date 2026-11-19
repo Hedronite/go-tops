@@ -3,7 +3,6 @@ package gate
 import (
 	"context"
 	"fmt"
-	"slices"
 	"strings"
 
 	"github.com/Hedronite/go-tops/internal/report"
@@ -36,16 +35,16 @@ var DefaultRatchet RatchetJudge
 
 // ratchetStage asks the judge about a run that reached its layers, under enforce:
 // ratchet, and returns the verdict with the layers the run reports. It returns
-// the layers unchanged and no verdict under any other mode, with no judge, when
-// the run stopped before its layers ran, and when the run's range does not hold
-// the layers the ledger is measured from. A judge that cannot judge fails the
-// run: nothing is guessed, and the layers still report.
+// the layers unchanged and no verdict under any other mode, with no judge, and
+// when the run stopped before its layers ran. A partial run is the judge's to
+// handle: it holds fewer layers than the ledger is measured from. A judge that
+// cannot judge fails the run: nothing is guessed, and the layers still report.
 func (d Deps) ratchetStage(ctx context.Context, cfg Config, env *Env, layers []report.Layer, stopped bool) (*RatchetVerdict, []report.Layer) {
 	judge := d.Ratchet
 	if judge == nil {
 		judge = DefaultRatchet
 	}
-	if cfg.Enforce != "ratchet" || judge == nil || stopped || !holdsFeeds(layers) {
+	if cfg.Enforce != "ratchet" || judge == nil || stopped {
 		return nil, layers
 	}
 	v, err := judge(ctx, env, layers)
@@ -77,21 +76,4 @@ func (rv *RatchetVerdict) text(rendered string) string {
 		return rendered
 	}
 	return rendered + strings.Join(rv.Notes, "")
-}
-
-// feedingLayers are the layers the ledger is measured from (§6.7): a run judged
-// against the ledger must have run all four.
-var feedingLayers = []string{"hygiene", "tests", "coverage", "crap"}
-
-// holdsFeeds reports whether the run's range holds every feeding layer. A partial
-// run (`--only crap`, `--only tests`, `--max-tier 0`) holds fewer, and the ratchet
-// is then left out of the report, never failed for what the range left out: the run
-// ends partial as it would without a ledger.
-func holdsFeeds(layers []report.Layer) bool {
-	for _, id := range feedingLayers {
-		if !slices.ContainsFunc(layers, func(l report.Layer) bool { return l.ID == id }) {
-			return false
-		}
-	}
-	return true
 }

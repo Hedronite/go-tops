@@ -7,8 +7,11 @@ import (
 	"io/fs"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"strings"
+
+	"go.yaml.in/yaml/v3"
 )
 
 // LedgerPath is where the baseline lives unless go-tops.yaml names another path,
@@ -27,7 +30,40 @@ func ReadBase(dir, base, rel string) Base {
 	if err != nil {
 		return Base{Err: err}
 	}
-	return ledgerAt(dir, mb, rel)
+	baseRel, err := baselinePathAt(dir, mb)
+	if err != nil {
+		return Base{Err: err}
+	}
+	b := ledgerAt(dir, mb, baseRel)
+	if path.Clean(baseRel) != path.Clean(rel) {
+		b.Moved = &Moved{From: baseRel, To: rel}
+	}
+	return b
+}
+
+// baselinePathAt is the path the go-tops.yaml of commit rev names for the baseline,
+// or LedgerPath when the commit has no go-tops.yaml or names none. The copy at the
+// diff base is read where the base itself kept it, never where this run's
+// configuration says: a branch that moves the baseline must not turn the base's
+// ledger into a first ledger.
+func baselinePathAt(dir, rev string) (string, error) {
+	out, code, err := git(dir, "show", rev+":go-tops.yaml")
+	if err != nil {
+		return "", err
+	}
+	if code != 0 {
+		return LedgerPath, nil
+	}
+	var doc struct {
+		Baseline string `yaml:"baseline"`
+	}
+	if err := yaml.Unmarshal([]byte(out), &doc); err != nil {
+		return "", fmt.Errorf("go-tops.yaml at the diff base: %w", err)
+	}
+	if doc.Baseline == "" {
+		return LedgerPath, nil
+	}
+	return doc.Baseline, nil
 }
 
 // notShallow fails for a shallow clone: its history may hide the merge base.
