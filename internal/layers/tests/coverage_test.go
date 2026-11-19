@@ -133,3 +133,28 @@ func TestIntegrationEnabledFailsBecauseTheMergeIsNotImplemented(t *testing.T) {
 		t.Fatalf("with integration off the same profile passes: %s", r.Outcome)
 	}
 }
+
+// A profile path that cannot be read for a reason other than being absent is a
+// failure that says so, not a pass.
+func TestAnUnreadableProfileFails(t *testing.T) {
+	env := profileEnv(t, "-", 70)
+	if err := os.MkdirAll(filepath.Join(env.Dir, ".go-tops", "cover.out"), 0o755); err != nil { // a directory where the file should be
+		t.Fatal(err)
+	}
+	r := Coverage{}.Run(context.Background(), env)
+	if r.Outcome != gate.Fail || !strings.Contains(r.Reason, "cannot read") {
+		t.Errorf("outcome %s, reason %q", r.Outcome, r.Reason)
+	}
+}
+
+// The message names five packages and counts the rest.
+func TestManyWeakPackagesAreCounted(t *testing.T) {
+	prof := "mode: atomic\n"
+	for _, p := range []string{"a", "b", "c", "d", "e", "f"} {
+		prof += "m/" + p + "/x.go:1.1,9.2 10 0\n"
+	}
+	r := Coverage{}.Run(context.Background(), profileEnv(t, prof, 70))
+	if r.Outcome != gate.Fail || !strings.Contains(r.Reason, "6 package(s) below") || !strings.Contains(r.Reason, "and 1 more") {
+		t.Errorf("outcome %s, reason %q", r.Outcome, r.Reason)
+	}
+}
