@@ -594,9 +594,16 @@ func ChecksOf(details map[string]any) []Check {
 		if !ok {
 			continue
 		}
-		outcome, _ := entry["outcome"].(string)
-		message, _ := entry["message"].(string)
-		out = append(out, Check{Name: names[key], Outcome: gate.Outcome(outcome), Message: message})
+		out = append(out, Check{Name: names[key], Outcome: gate.Outcome(asString(entry["outcome"])), Message: asString(entry["message"])})
 	}
 	return out
+}
+
+// asString is v as a string, or "" when it is not one.
+func asString(v any) string {
+	s, ok := v.(string)
+	if !ok {
+		return ""
+	}
+	return s
 }
