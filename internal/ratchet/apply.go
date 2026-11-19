@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/Hedronite/go-tops/internal/layers/hygiene"
 	"github.com/Hedronite/go-tops/internal/report"
 )
 
@@ -114,7 +115,8 @@ func judgeLint(l report.Layer, j Judgment) report.Layer {
 	}
 	details["lint"] = entry
 	l.Details = details
-	l.Outcome, l.Reason = hygieneOutcome(details)
+	outcome, reason := hygiene.Fold(hygiene.ChecksOf(details))
+	l.Outcome, l.Reason = string(outcome), reason
 	return l
 }
 
@@ -130,34 +132,6 @@ func lintVerdict(j Judgment) string {
 		return ""
 	}
 	return fmt.Sprintf("%d finding count(s) over the ledger: %s", len(failures), summary(failures))
-}
-
-// hygieneOutcome folds the checks back into the layer's outcome and reason, as
-// the hygiene layer does.
-func hygieneOutcome(details map[string]any) (string, string) {
-	var bad, absent []string
-	total := 0
-	for _, key := range []string{"tidy", "verify", "toolchain", "format", "lint", "vulnerabilities", "licenses", "depguard"} {
-		check, ok := details[key].(map[string]any)
-		if !ok {
-			continue
-		}
-		total++
-		msg := text(check["message"])
-		switch check["outcome"] {
-		case "fail":
-			bad = append(bad, key+": "+msg)
-		case "tool-missing":
-			absent = append(absent, key+": "+msg)
-		}
-	}
-	switch {
-	case len(absent) > 0:
-		return "tool-missing", fmt.Sprintf("%d check(s) lack a tool: %s", len(absent), strings.Join(absent, "; "))
-	case len(bad) > 0:
-		return "fail", fmt.Sprintf("%d of %d checks failed: %s", len(bad), total, strings.Join(bad, "; "))
-	}
-	return "pass", ""
 }
 
 // ProblemKind is the kind of a failure for a crap exemption that matches nothing.

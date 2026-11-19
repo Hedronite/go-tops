@@ -471,3 +471,67 @@ func TestCollectCountsOnlyTheExemptionsInForce(t *testing.T) {
 		t.Errorf("exemptions %d, want 2", got.Exemptions)
 	}
 }
+
+// A partial range (--only coverage, --only hygiene) holds fewer layers than the
+// ledger is measured from, and Collect refuses it. The per-kind readers read what
+// one layer measured, so the ratchet's partial path and the ledger read the same
+// figures from the same files, with one set of rules for naming and flooring.
+func TestPackagesReadsTheCoverageLayerAlone(t *testing.T) {
+	f := newFeeds(t)
+	whole, err := baseline.Collect(f.in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	only := f.in
+	only.Report = report.Report{Layers: []report.Layer{{ID: "coverage", Outcome: "fail", Details: map[string]any{"statements_pct": 62.5, "floor": 90.0, "profile_bytes": 1}}}}
+	got, err := only.Packages()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(got, whole.Packages) || len(got) == 0 {
+		t.Errorf("Packages %v, the whole read %v", got, whole.Packages)
+	}
+}
+
+func TestFindingsReadsTheHygieneLayerAlone(t *testing.T) {
+	f := newFeeds(t)
+	abs := filepath.Join(f.dir, "b", "b.go")
+	f.write(".go-tops/lint-style.json", `{"Issues":[
+ {"FromLinter":"revive","Text":"x","Pos":{"Filename":"./a/a.go","Line":3}},
+ {"FromLinter":"revive","Text":"y","Pos":{"Filename":"`+filepath.ToSlash(abs)+`","Line":9}},
+ {"FromLinter":"errcheck","Text":"z","Pos":{"Filename":"","Line":1}}
+]}`)
+	whole, err := baseline.Collect(f.in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	only := f.in
+	only.Report = report.Report{Layers: []report.Layer{{ID: "hygiene", Outcome: "fail"}}}
+	got, err := only.Findings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := baseline.Counts{"revive": {"a/a.go": 1, "b/b.go": 1}, "errcheck": {"(no file)": 1}}
+	if !reflect.DeepEqual(got, want) || !reflect.DeepEqual(got, whole.Findings) {
+		t.Errorf("Findings %v, want %v, the whole read %v", got, want, whole.Findings)
+	}
+}
+
+func TestTheReadersRefuseWhatTheirLayerDidNotMeasure(t *testing.T) {
+	f := newFeeds(t)
+	empty := f.in
+	empty.Report = report.Report{}
+	notRun := f.in
+	notRun.Report = report.Report{Layers: []report.Layer{{ID: "coverage", Outcome: "not-reached"}, {ID: "hygiene", Outcome: "not-run"}}}
+	for name, feeds := range map[string]baseline.Feeds{"no layers": empty, "layers that did not run": notRun} {
+		for read, fn := range map[string]func() error{
+			"Packages": func() error { _, err := feeds.Packages(); return err },
+			"Findings": func() error { _, err := feeds.Findings(); return err },
+		} {
+			var ref *baseline.RefusalError
+			if err := fn(); !errors.As(err, &ref) {
+				t.Errorf("%s, %s: err %v, want a refusal", name, read, err)
+			}
+		}
+	}
+}

@@ -48,12 +48,12 @@ func Collect(f Feeds) (Measure, error) {
 	if err := f.requireTests(); err != nil {
 		return m, err
 	}
-	pkgs, err := f.packages()
+	pkgs, err := f.Packages()
 	if err != nil {
 		return m, err
 	}
 	m.Packages = pkgs
-	if m.Findings, err = f.findings(); err != nil {
+	if m.Findings, err = f.Findings(); err != nil {
 		return m, err
 	}
 	if m.Functions, err = f.functions(); err != nil {
@@ -139,8 +139,11 @@ func (f Feeds) readFeed(rel, what, missing string) ([]byte, error) {
 	return raw, nil
 }
 
-// packages reads the coverage profile and lists the packages under the floor.
-func (f Feeds) packages() (map[string]Package, error) {
+// Packages reads the coverage profile and lists the packages under the floor, with
+// their percentage and uncovered statements. It needs only the coverage layer, so a
+// partial range can call it; Collect calls it with the rest. A coverage layer that
+// did not run, or whose profile is missing or empty, is a refusal.
+func (f Feeds) Packages() (map[string]Package, error) {
 	l, err := f.ranLayer(tests.CoverageID)
 	if err != nil {
 		return nil, err
@@ -192,10 +195,12 @@ type lintIssue struct {
 	Pos        struct{ Filename string }
 }
 
-// findings reads the adopter-style lint output the hygiene layer saved and
-// counts the findings per linter and file. No law maps a finding before M5, so
-// every finding is a `findings` entry.
-func (f Feeds) findings() (Counts, error) {
+// Findings reads the adopter-style lint output the hygiene layer saved and counts
+// the findings per linter and file, the file as a module-relative slash path. No
+// law maps a finding before M5, so every finding is a `findings` entry. It needs
+// only the hygiene layer, so a partial range can call it; Collect calls it with the
+// rest.
+func (f Feeds) Findings() (Counts, error) {
 	if _, err := f.ranLayer(hygiene.ID); err != nil {
 		return nil, err
 	}

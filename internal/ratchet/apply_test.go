@@ -224,7 +224,7 @@ func TestApplyHygieneKeepsTheOtherChecks(t *testing.T) {
 		d["format"] = map[string]any{"outcome": "fail", "message": "1 file(s) need formatting", "files": []any{"a.go"}}
 	})
 	out := find2(t, ratchet.Apply([]report.Layer{in}, j, l), "hygiene")
-	if out.Outcome != "fail" || !strings.Contains(out.Reason, "format: 1 file(s) need formatting") || strings.Contains(out.Reason, "lint") {
+	if out.Outcome != "fail" || !strings.Contains(out.Reason, "golangci-lint fmt --diff: 1 file(s) need formatting") || strings.Contains(out.Reason, "golangci-lint run") {
 		t.Errorf("hygiene %s: %s", out.Outcome, out.Reason)
 	}
 }
@@ -380,7 +380,7 @@ func TestApplyPartialKeepsWhatTheLedgerDoesNotReplace(t *testing.T) {
 		d["format"] = map[string]any{"outcome": "fail", "message": "1 file(s) need formatting", "files": []any{"a.go"}}
 	})
 	hy := find2(t, ratchet.ApplyPartial([]report.Layer{h}, ratchet.Partial{Cap: 10, Ledger: initLedger(legacy(), linux)}), "hygiene")
-	if hy.Outcome != "fail" || !strings.Contains(hy.Reason, "format: 1 file(s) need formatting") || strings.Contains(hy.Reason, "lint") {
+	if hy.Outcome != "fail" || !strings.Contains(hy.Reason, "golangci-lint fmt --diff: 1 file(s) need formatting") || strings.Contains(hy.Reason, "golangci-lint run") {
 		t.Errorf("hygiene %s: %s", hy.Outcome, hy.Reason)
 	}
 	// A coverage layer that failed for another reason stays failed.
