@@ -141,3 +141,32 @@ func TestEverySkillStatesHowToRunItAndWhatAMissingNuMeans(t *testing.T) {
 		})
 	}
 }
+
+// No skill sends an adopter to the manual workflow run for a first ledger: that
+// route is closed until the workflow is on the default branch (F2). The route is the
+// pull-request run, and the manual run applies after the merge.
+func TestNoSkillSendsTheAdopterToTheManualRunFirst(t *testing.T) {
+	for _, name := range skillNames {
+		for _, file := range []string{"SKILL.md", name + ".nu"} {
+			b, err := os.ReadFile(path.Join(".agents/skills", name, file))
+			if err != nil {
+				t.Fatal(err)
+			}
+			text := string(b)
+			for _, old := range []string{"by hand with mode init", "by hand with `mode` `init`", "workflow by hand"} {
+				if strings.Contains(text, old) {
+					t.Errorf("%s/%s says %q", name, file, old)
+				}
+			}
+		}
+	}
+	b, err := os.ReadFile(".agents/skills/go-tops-adopt/SKILL.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"pull-request run", "go-tops-baseline", "after the workflow is on the default branch"} {
+		if !strings.Contains(string(b), want) {
+			t.Errorf("go-tops-adopt SKILL.md lacks %q", want)
+		}
+	}
+}

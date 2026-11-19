@@ -75,7 +75,7 @@ def ledger-problem [ledger: record, allow_host: bool] {
   if $allow_host or ($ledger.on_ledger_leg_build? | default false) { return "" }
   let b = ($ledger.build? | default null)
   let host = if $b == null { "an unknown build" } else { $"($b.goos)/($b.goarch), cgo ($b.cgo_enabled)" }
-  $"the ledger was written on ($host), not the ledger leg's linux/amd64 with cgo: do not commit it. Run the drop-in workflow by hand with mode init on its ubuntu leg and commit that file. Pass --allow-host-ledger for a dry run that commits nothing."
+  $"the ledger was written on ($host), not the ledger leg's linux/amd64 with cgo: do not commit it. The first ledger comes from the pull-request run on the ledger leg: open the pull request, download the go-tops-baseline artifact of that run and commit .go-tops/baseline.json unchanged. The manual run, workflow_dispatch with mode init or refresh, applies only after the workflow is on the default branch. Pass --allow-host-ledger for a dry run that commits nothing."
 }
 
 # The first check of an adoption. Under ratchet `check` reads only a ledger that is

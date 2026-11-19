@@ -590,3 +590,23 @@ func asStr(v any) string {
 	}
 	return s
 }
+
+// The first ledger comes from the pull-request run on the ledger leg (friction F2:
+// the manual run needs the workflow on the default branch, which the adoption
+// pull request is what adds). The error for a ledger on another build says so.
+func TestAdoptSkillSaysWhereTheFirstLedgerComesFrom(t *testing.T) {
+	f := newFake(t)
+	f.set("FAKE_LEDGER=" + f.file(t, "ledger.json", []byte(ledgerDarwin)))
+	got := runSkill(t, "go-tops-adopt", t.TempDir(), f.env, "adopt", "--class", "binary-cli", "--owner", "acme", "--gotops", f.argv)
+	if got.OK {
+		t.Fatal("a ledger from a Mac was accepted")
+	}
+	for _, want := range []string{"pull-request run", "go-tops-baseline", "unchanged", "after the workflow is on the default branch"} {
+		if !strings.Contains(got.Error, want) {
+			t.Errorf("the error lacks %q:\n%s", want, got.Error)
+		}
+	}
+	if strings.Contains(got.Error, "by hand with mode init") {
+		t.Errorf("the error sends the adopter to the manual run first, which cannot start before the workflow is on the default branch:\n%s", got.Error)
+	}
+}
