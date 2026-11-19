@@ -205,7 +205,7 @@ func TestVersionDisagreementFails(t *testing.T) {
 		{"header-dev", "GO_TOPS.md", "0.4.0 (fixture) \u00b7", "0.4.0-dev (fixture) \u00b7", `says "0.4.0-dev"`},
 		{"section-2-row", "GO_TOPS.md", "**0.4.0** (fixture)", "**0.3.0** (fixture)", `section 2 row says "0.3.0"`},
 		{"go-tops-schema", "schema/go-tops.schema.json", `"0.4.0"`, `"0.5.0"`, `schema/go-tops.schema.json protocol const says "0.5.0"`},
-		{"lock-schema", "schema/lock.schema.json", `"0.4.0"`, `"0.4.4"`, `schema/lock.schema.json protocol const says "0.4.4"`},
+		{"lock-schema", "schema/lock.schema.json", `"0.4.0"`, `"0.9.9"`, `schema/lock.schema.json protocol const says "0.9.9"`},
 		{"gate-report-schema", "schema/gate-report.schema.json", `"0.4.0"`, `"0.3.0"`, `schema/gate-report.schema.json protocol const says "0.3.0"`},
 	}
 	for _, c := range cases {
