@@ -1,6 +1,13 @@
-# Style only (GO_TOPS.md §8.1): no Go-TOPS law reads this file. The errcheck
-# settings match the law pass, so the editor and the gate agree.
+# The lint config of the kit's hygiene layer (GO_TOPS.md §4.1, §8.1), read through
+# gates.hygiene.golangci_lint.config. The repository's own .golangci.yml is not
+# read by the gate and is never written or changed by gotops init: the gate counts
+# findings under these rules, and the repository's own lint job keeps its own. The
+# errcheck settings match the law pass. Paths in the findings are relative to the
+# directory the gate runs in, whatever the directory of this file.
 version: "2"
+
+run:
+  relative-path-mode: wd
 
 linters:
   default: standard

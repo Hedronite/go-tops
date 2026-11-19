@@ -1,9 +1,6 @@
 package initcmd
 
-import (
-	"strconv"
-	"strings"
-)
+import "strings"
 
 // The kit's embedded pins. init writes them into go-tops.lock and
 // tools/go.mod, so the first gate run is already pinned (GO_TOPS.md §10).
@@ -63,9 +60,4 @@ func goCurrent() string {
 	v := strings.TrimPrefix(toolchain, "go")
 	parts := strings.SplitN(v, ".", 3)
 	return parts[0] + "." + parts[1]
-}
-
-// goCurrentMinor is the minor release of the pinned toolchain.
-func goCurrentMinor() (int, error) {
-	return strconv.Atoi(strings.Split(goCurrent(), ".")[1])
 }

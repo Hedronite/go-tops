@@ -3,6 +3,7 @@ package initcmd
 import (
 	"bufio"
 	"fmt"
+	"go/version"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -46,12 +47,25 @@ type inputs struct {
 	owner    string
 	kitTool  bool // gotops goes into tools/go.mod
 	warnings []string
+
+	goCurrent     string // go_current of go-tops.yaml
+	ownerFromPath bool   // the CODEOWNERS owner came from the module path, not --owner
+	toolsText     string // the new tools/go.mod: the existing one with the kit's pins added
+	pinned        string // the gotops version tools/go.mod pins, "" when it pins none
 }
 
 func (in *inputs) notes() []string {
 	notes := append([]string(nil), in.warnings...)
-	return append(notes, "add .go-tops/bin/ and .go-tops/report.json to .gitignore: neither is tracked")
+	if in.ownerFromPath {
+		notes = append(notes, "the CODEOWNERS owner "+in.owner+" comes from the module path: a bare organisation is not a valid owner, only a user or @org/team is; pass --owner with one, and check .github/CODEOWNERS on the default branch with gh api repos/<owner>/<repo>/codeowners/errors")
+	}
+	return append(notes, lintBinaryNote)
 }
+
+// lintBinaryNote is the F6 advice: the gate finds golangci-lint in .go-tops/bin
+// or on PATH (GO_TOPS.md §10), and a test that walks the module tree reads the
+// binary in .go-tops/bin as source.
+const lintBinaryNote = "golangci-lint is found in .go-tops/bin or on PATH: a repository whose tests walk the module tree (a name guard, a scrub) keeps the binary outside the tree, on PATH, because a walk reads the files of .go-tops/bin too; install the pinned release into a directory outside the checkout, as the workflow's install step does"
 
 func gatherInputs(o Options) (*inputs, error) {
 	if !contains(launchClasses, o.Class) {
@@ -72,6 +86,9 @@ func gatherInputs(o Options) (*inputs, error) {
 		return nil, err
 	}
 	in.resolveKit()
+	if err := in.resolveToolsMod(); err != nil {
+		return nil, err
+	}
 	return in, nil
 }
 
@@ -122,7 +139,7 @@ func (in *inputs) readGoMod() error {
 			if floorMinor, err = strconv.Atoi(m[2]); err != nil {
 				return err
 			}
-			in.goFloor = m[1] + "." + m[2]
+			in.goFloor = m[1] + "." + m[2] + m[3]
 		}
 	}
 	if err := sc.Err(); err != nil {
@@ -138,12 +155,15 @@ func (in *inputs) checkFloor(minor int) error {
 	if !strings.HasPrefix(in.goFloor, "1.") || minor < protocolFloorMinor {
 		return refuse("the go line of go.mod says %s; the protocol floor is 1.%d (§2)", in.goFloor, protocolFloorMinor)
 	}
-	cur, err := goCurrentMinor()
-	if err != nil {
-		return err
-	}
-	if minor > cur {
+	if version.Compare("go"+in.goFloor, toolchain) > 0 {
 		return refuse("the go line of go.mod says %s, above the pinned toolchain %s", in.goFloor, toolchain)
+	}
+	in.goCurrent = goCurrent()
+	if strings.Count(in.goFloor, ".") == 2 {
+		// A floor that names a release is compared with go_current in Go's order, in
+		// which the language version 1.27 sorts below the release 1.27.0: go_current
+		// then names the pinned release.
+		in.goCurrent = strings.TrimPrefix(toolchain, "go")
 	}
 	return nil
 }
@@ -161,6 +181,7 @@ func (in *inputs) resolveOwner() error {
 			return refuse("the module %s is not on github.com: pass --owner <handle> for CODEOWNERS", in.module)
 		}
 		in.owner = "@" + m[1]
+		in.ownerFromPath = true
 	}
 	return nil
 }
@@ -169,7 +190,24 @@ func (in *inputs) resolveOwner() error {
 // release version can be.
 func (in *inputs) resolveKit() {
 	in.kitTool = releaseRe.MatchString(in.o.KitVersion) && !strings.HasSuffix(in.o.KitVersion, "-dev")
-	if !in.kitTool {
+}
+
+// resolveToolsMod builds the new tools/go.mod: the existing one with the kit's
+// missing pins added, or a fresh one. The record reads the gotops pin from the
+// result, so it names what the file pins and not what this build is.
+func (in *inputs) resolveToolsMod() error {
+	existing, found, err := existingToolsMod(in.o.Dir)
+	if err != nil {
+		return err
+	}
+	in.toolsText = in.freshToolsMod()
+	if found {
+		if in.toolsText, err = in.mergeToolsMod(existing); err != nil {
+			return err
+		}
+	}
+	if in.pinned = pinnedKit(in.toolsText); in.pinned == "" {
 		in.warnings = append(in.warnings, "this gotops build is not a release: gotops is not in tools/go.mod; add it with go get -tool -modfile=tools/go.mod "+gotopsPackage+"@<version>")
 	}
+	return nil
 }

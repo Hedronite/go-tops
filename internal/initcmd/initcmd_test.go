@@ -105,7 +105,7 @@ func listing(t *testing.T, dir string) []string {
 // The file set of §12.1 and §4.1, for every launch class, and no baseline.
 func TestInitWritesTheDropInSet(t *testing.T) {
 	want := []string{
-		".github/CODEOWNERS", ".github/workflows/go-tops.yml", ".golangci.yml", "AGENTS.md", "GO-TOPS.md",
+		".github/CODEOWNERS", ".github/workflows/go-tops.yml", ".gitignore", ".go-tops/golangci.yml", "AGENTS.md", "GO-TOPS.md",
 		"go-tops.lock", "go-tops.yaml", "go.mod", "justfile", "tools/go.mod",
 	}
 	for _, class := range launchClasses {
@@ -127,7 +127,7 @@ func TestInitNeverWritesABaseline(t *testing.T) {
 		t.Fatal(errs)
 	}
 	for _, f := range listing(t, dir) {
-		if strings.Contains(f, "baseline") || strings.HasPrefix(f, ".go-tops/") {
+		if strings.Contains(f, "baseline") || strings.HasPrefix(f, ".go-tops/") && f != ".go-tops/golangci.yml" {
 			t.Errorf("init wrote %s", f)
 		}
 	}
@@ -225,8 +225,8 @@ func TestConfigValidatesAndCarriesTheProfile(t *testing.T) {
 				t.Errorf("header keys wrong: %v", cfg)
 			}
 			tc := asMap(t, cfg["toolchain"])
-			if tc["go_floor"] != "1.26" || tc["go_current"] != "1.27" {
-				t.Errorf("toolchain %v: the floor is the minor of the go line, current is the pin", tc)
+			if tc["go_floor"] != "1.26.4" || tc["go_current"] != "1.27.4" {
+				t.Errorf("toolchain %v: the floor is the release the go line names, current is the pin", tc)
 			}
 		})
 	}
@@ -272,7 +272,7 @@ func TestCrapIsOnAndMutationIsOffWithReasonAndExpiry(t *testing.T) {
 // An existing file is never overwritten without --force, and a refusal writes
 // nothing at all (§12.1).
 func TestExistingFilesAreRefusedWithoutForce(t *testing.T) {
-	for _, victim := range []string{"go-tops.yaml", "go-tops.lock", "tools/go.mod", ".golangci.yml", ".github/workflows/go-tops.yml", ".github/CODEOWNERS", "justfile", "GO-TOPS.md"} {
+	for _, victim := range []string{"go-tops.yaml", "go-tops.lock", ".go-tops/golangci.yml", ".github/workflows/go-tops.yml", ".github/CODEOWNERS", "justfile", "GO-TOPS.md"} {
 		t.Run(victim, func(t *testing.T) {
 			dir := newModule(t, "github.com/acme/demo", "1.26")
 			write(t, dir, victim, "mine\n")
@@ -376,7 +376,7 @@ func TestCodeownersCoversTheGateFiles(t *testing.T) {
 		t.Fatal(errs)
 	}
 	co := read(t, dir, ".github/CODEOWNERS")
-	for _, p := range []string{"/go-tops.yaml", "/go-tops.lock", "/.golangci.yml", "/.go-tops/", "/tools/", "/.github/workflows/go-tops.yml"} {
+	for _, p := range []string{"/go-tops.yaml", "/go-tops.lock", "/.go-tops/", "/tools/", "/.github/workflows/go-tops.yml"} {
 		if !regexp.MustCompile(`(?m)^` + regexp.QuoteMeta(p) + `\s+@acme$`).MatchString(co) {
 			t.Errorf("CODEOWNERS has no line for %s with owner @acme:\n%s", p, co)
 		}
@@ -431,7 +431,7 @@ func TestToolsModPinsTheModuleTools(t *testing.T) {
 	}
 	mod := read(t, dir, "tools/go.mod")
 	for _, want := range []string{
-		"module github.com/acme/demo/tools", "go 1.26\n",
+		"module github.com/acme/demo/tools", "go 1.26.4\n",
 		"\tgotest.tools/gotestsum\n", "gotest.tools/gotestsum v1.13.0",
 		"\tgolang.org/x/vuln/cmd/govulncheck\n", "golang.org/x/vuln v1.9.0",
 		"\tgithub.com/google/go-licenses/v2\n", "github.com/google/go-licenses/v2 v2.0.1",

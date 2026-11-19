@@ -79,7 +79,7 @@ func TestInitWritesIntoTheCurrentModule(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit %d\n%s%s", code, stdout, stderr)
 	}
-	for _, f := range []string{"go-tops.yaml", "go-tops.lock", "tools/go.mod", ".golangci.yml", "AGENTS.md", "GO-TOPS.md", "justfile"} {
+	for _, f := range []string{"go-tops.yaml", "go-tops.lock", "tools/go.mod", ".go-tops/golangci.yml", ".gitignore", "AGENTS.md", "GO-TOPS.md", "justfile"} {
 		if _, err := os.Stat(filepath.Join(dir, filepath.FromSlash(f))); err != nil {
 			t.Errorf("init did not write %s: %v", f, err)
 		}

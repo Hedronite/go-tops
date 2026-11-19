@@ -17,9 +17,6 @@ go tool -modfile=tools/go.mod gotops check
 # Run the merge gate (tier ≤ 1)
 go tool -modfile=tools/go.mod gotops gate
 
-# Run laws only
-go tool -modfile=tools/go.mod gotops laws run
-
 # Full reports
 go tool -modfile=tools/go.mod gotops report --format text
 ```
