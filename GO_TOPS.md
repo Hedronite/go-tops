@@ -790,6 +790,10 @@ build equals the recorded one is the **ledger leg**.
   the ledger leg only; on any other leg `baseline` refuses with exit 1, naming the ledger build.
 - **Which files the ledger leg compiles** is found by loading with the recorded build, so any
   leg knows the set without being the ledger leg.
+- **One named ledger leg.** A repo under `ratchet` names exactly one CI leg as its ledger leg, and
+  CI fails when that leg reports a `ratchet` outcome of `skip` (§12.3): a build that matches no
+  leg would otherwise leave every leg skipping and the ratchet never judged. `baseline --init` is
+  run on that leg's build. The drop-in names its `ubuntu-latest` leg at the current toolchain.
 
 **Writing the baseline.** Only `gotops baseline` writes the file (§12.1).
 
@@ -1449,7 +1453,8 @@ CI rules (carried from Rust-TOPS's lessons):
   for any other build it wants measured. The kit ships no Windows leg, so a `_windows.go` function
   is not measured in any report: it is counted on every run and held only to the complexity
   ceiling of §6.2. Under `ratchet` one of the builds is the ledger leg (§6.7): the other legs run
-  and report, and their ratchet judgment is `skip`.
+  and report, and their ratchet judgment is `skip`. The drop-in names its `ubuntu-latest` leg at
+  `{GO_CURRENT}` as the ledger leg, and its CI fails when that leg's `ratchet.outcome` is `skip`.
 - **No `law-diff` job in the adopter drop-in.** An adopter has no law files to diff. The risk on
   the adopter's side is an edit to the files that set the gate, so the drop-in ships a CODEOWNERS
   fragment covering `go-tops.yaml`, `.golangci.yml`, `.go-tops/`, `go-tops.lock`, `tools/` and
@@ -1476,7 +1481,7 @@ CI rules (carried from Rust-TOPS's lessons):
 |---|---|
 | `init --class <c>` | Writes `go-tops.yaml`, `go-tops.lock`, `tools/go.mod` with its pins, the adopter's `.golangci.yml` (style only), the workflow, the CODEOWNERS fragment, `justfile` and the adoption record `GO-TOPS.md`. It writes no laws config: the kit embeds it. Where `AGENTS.md` exists it writes only between `<!-- go-tops:begin -->` and `<!-- go-tops:end -->`, replacing the block on a re-run and appending the pair when absent; one marker without the other is a configuration error. Where `AGENTS.md` is absent it creates the file with the block. Refuses to overwrite any other existing file without `--force`. |
 | `check` | Validates `go-tops.yaml` against the **JSON Schema** (full validation, an improvement over Rust-TOPS's partial checks), plus semantic checks: protocol id, non-empty version, module name, language floor ≤ current, `gates.crap.cap` not above the class column of §5.2 and `gates.coverage.statements_floor` not below it (a class with no column takes the cap 8 and the floor 90% of §5.2), an `enabled: false` without a `reason`, a disabled `gates.crap` or `gates.mutation` without an `expires` that has not passed, an `enabled` key on `gates.hygiene`, `gates.tests` or `gates.coverage`, every `laws.required` ID in the catalog, applying to the class, with a reader and at tier 1 or below, every exemption well formed and unexpired (§6.8), every entry of `.go-tops/survivors.yaml` valid against `survivorEntry` and every entry of `.go-tops/acks.yaml` valid against `ackEntry` in `schema/core.schema.json` (§6.4, §3.3), `go-tops.lock` valid against `schema/lock.schema.json` (§10), `enforce: advisory` carrying the `advisory` key (reason, owner, an `expires` that has not passed), and under `ratchet` the baseline file exists and is clean against `HEAD`. |
-| `baseline` | Writes `.go-tops/baseline.json` (§6.7), the only command that does. `--init` measures and writes the first ledger, with the build it ran under, when the tests are green and every feeding layer produced non-empty output (thresholds may be red); `--init --kind survivors` records the tier 2 survivor counts the same way. A plain `baseline` only lowers entries and removes paid ones. `--accept-regression --reason <text> --owner <handle>` is the one way to raise an entry or lower `judged_laws` (the PR carries the `protocol-change` label). `--rename <old-key> <new-key>` moves one key. Refused under `advisory`, and `--init` is refused when a ledger exists. Every write after `--init` runs on the ledger leg, the run whose build equals the `build` the file records (§6.7); on any other leg it exits 1 and names the ledger build. |
+| `baseline` | Writes `.go-tops/baseline.json` (§6.7), the only command that does. `--init` measures and writes the first ledger, with the build it ran under, when the tests are green and every feeding layer produced non-empty output (thresholds may be red); `--init --kind survivors` records the tier 2 survivor counts the same way. A plain `baseline` only lowers entries and removes paid ones. `--accept-regression --reason <text> --owner <handle>` is the one way to raise an entry or lower `judged_laws` (the PR carries the `protocol-change` label). `--rename <old-key> <new-key>` moves one key. Refused under `advisory`, and `--init` is refused when a ledger exists. Every write after `--init` runs on the ledger leg, the run whose build equals the `build` the file records (§6.7); on any other leg it exits 1 and names the ledger build. `--init` is run on the build of the leg the repo names as its ledger leg. |
 | `gate` | Runs every enabled layer at or below `--max-tier` (default 1), in order, each judged (§3.5), laws last. Options: `--max-tier N`, `--fail-fast`, `--dry-run` (refused in CI), `--base <ref>`, `--json`, `--only <layer>` (a range that leaves a required law out ends `partial` and is refused in CI). A mapped tool that is missing is `tool-missing` and exits 1. Under `ratchet` the judgment against the ledger is made on the ledger leg only and is `skip` elsewhere (§6.7). Exit codes: §12.2. |
 | `laws [list \| run \| explain G-NN]` | Lists the catalog with readers, runs the laws layer alone, explains a law. |
 | `report [--format text \| json \| junit \| sarif]` | Renders the last report. |
@@ -1795,7 +1800,7 @@ wrong; the config wins.
 33. **Strict YAML:** the files `check` reads are strict YAML, so one text has one meaning in every reader. (§9) *New in 0.4.2.*
 34. **Hygiene details are typed:** the hygiene layer reports `golangci_lint`, `findings` and one object per check of gate 1 (`tidy`, `verify`, `toolchain`, `format`, `lint`, `vulnerabilities`, `licenses`), each with its `outcome`, or `{error}` when it measured nothing. (§12.3) *New in 0.4.2.*
 35. **Files outside the run's build are not measured, never passed:** the CRAP layer scores the production functions in files the run compiles, counts the rest in the report (`not_measured`) and still holds each to the complexity ceiling. Identity stays computed over every `.go` file. (§6.2, §12.3) *New in 0.4.3.*
-36. **The ledger leg:** the baseline records its build, only the run with that build writes it or judges the ratchet, every entry of a first ledger is measured there, and the other legs report the ratchet judgment as `skip`, never `pass`. A function the ledger leg does not compile has no entry and takes a `crap` exemption. (§6.7, §12.1, §12.3) *New in 0.4.3.*
+36. **The ledger leg:** the baseline records its build, only the run with that build writes it or judges the ratchet, every entry of a first ledger is measured there, and the other legs report the ratchet judgment as `skip`, never `pass`. A function the ledger leg does not compile has no entry and takes a `crap` exemption. A repo under `ratchet` names exactly one CI leg as its ledger leg, and CI fails when that leg's ratchet outcome is `skip`. (§6.7, §11, §12.1, §12.3) *New in 0.4.3.*
 
 ---
 
