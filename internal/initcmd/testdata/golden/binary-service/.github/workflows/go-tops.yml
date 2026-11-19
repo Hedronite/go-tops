@@ -103,8 +103,8 @@ jobs:
           exit 0
       # Judge the gate on every gate leg. Exit 0 passes. Exit 1 passes only when
       # tier 0 to 1 hold and the only failed item is the required laws, all of them
-      # reported not evaluated (ruling C9: the laws are judged from M5). Any other
-      # exit code is a failure. The ratchet is judged on the ledger leg only
+      # reported not evaluated, with no law judged and none refused (ruling C9: the
+      # laws are judged from M5). Any other exit code is a failure. The ratchet is judged on the ledger leg only
       # (GO_TOPS.md §6.7); this repository's ledger leg is the ubuntu leg, so it
       # must report pass, and the other gate legs pass or skip. If the ledger leg
       # reports skip, the baseline was recorded under a build no leg runs and the
@@ -143,6 +143,8 @@ jobs:
               and .summary.failed == ["laws"]
               and .laws.required > 0
               and .laws.required == .laws.required_not_evaluated
+              and .laws.judged == 0
+              and ([.laws.results[] | select(.verdict == "refuse")] | length) == 0
             ' "$report" > /dev/null || fail "the gate exited 1 for more than the required laws, which are reported not evaluated until they are judged"
           fi
       # The floor leg builds and tests on the floor toolchain. The gate itself
@@ -183,7 +185,11 @@ jobs:
         if: github.event_name == 'workflow_dispatch' && matrix.leg == 'ubuntu' && inputs.mode == 'refresh'
         env:
           GOTOOLCHAIN: local
-        run: go tool -modfile=tools/go.mod gotops baseline
+        run: |
+          go tool -modfile=tools/go.mod gotops baseline
+          if git diff --quiet -- .go-tops/baseline.json; then
+            echo "unchanged: same ledger uploaded"
+          fi
       - name: upload the ledger as go-tops-baseline
         if: github.event_name == 'workflow_dispatch' && matrix.leg == 'ubuntu'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

@@ -102,6 +102,8 @@ type gateDoc struct {
 	layers            map[string]string
 	failed            []string
 	required, notEval int
+	judged            int
+	refused           []string // ids of laws with verdict refuse, required or not
 }
 
 func (g gateDoc) json(t *testing.T) string {
@@ -121,7 +123,7 @@ func (g gateDoc) json(t *testing.T) string {
 		"enforce": g.enforce,
 		"layers":  layers,
 		"summary": map[string]any{"failed": append([]string{}, g.failed...)},
-		"laws":    map[string]any{"required": g.required, "required_not_evaluated": g.notEval},
+		"laws":    map[string]any{"required": g.required, "required_not_evaluated": g.notEval, "judged": g.judged, "results": g.results()},
 	}
 	switch g.ratchet {
 	case "":
@@ -135,6 +137,15 @@ func (g gateDoc) json(t *testing.T) string {
 		t.Fatal(err)
 	}
 	return string(b)
+}
+
+// results lists one not-evaluated result and a refuse for each refused id.
+func (g gateDoc) results() []map[string]string {
+	rs := []map[string]string{{"id": "G-02", "verdict": "not-evaluated"}}
+	for _, id := range g.refused {
+		rs = append(rs, map[string]string{"id": id, "verdict": "refuse"})
+	}
+	return rs
 }
 
 // c9 is a gate report of the passing state at M2: the ratchet passes and the
@@ -191,6 +202,14 @@ func TestTheJudgeAppliesC9OnEveryLegAndFailsClosed(t *testing.T) {
 		{"a failed item besides the laws", "macos", "1", c9().with(func(g *gateDoc) { g.failed = []string{"coverage", "laws"} }), true},
 		{"nothing failed but the gate exited 1", "ubuntu", "1", c9().with(func(g *gateDoc) { g.failed = nil }), true},
 		{"a required law was evaluated", "ubuntu", "1", c9().with(func(g *gateDoc) { g.notEval = 15 }), true},
+		// ruling C9 allows the required laws not evaluated and nothing else: a law that
+		// is refused, required or not, is not that, whatever else the report says
+		{"an advisory law refused", "ubuntu", "1", c9().with(func(g *gateDoc) { g.refused = []string{"G-30"} }), true},
+		{"G-41 refused", "macos", "1", c9().with(func(g *gateDoc) { g.refused = []string{"G-41"} }), true},
+		{"a required law refused", "ubuntu", "1", c9().with(func(g *gateDoc) { g.refused = []string{"G-01"} }), true},
+		{"a law was judged", "ubuntu", "1", c9().with(func(g *gateDoc) { g.judged = 1 }), true},
+		{"a law was judged and refused", "ubuntu", "1", c9().with(func(g *gateDoc) { g.judged, g.refused = 1, []string{"G-41"} }), true},
+		{"exit 0 with a refused law is the gate's verdict, not this step's", "ubuntu", "0", clean.with(func(g *gateDoc) { g.refused = []string{"G-41"} }), false},
 		{"no required laws, so exit 1 is something else", "ubuntu", "1", c9().with(func(g *gateDoc) { g.required, g.notEval = 0, 0 }), true},
 		// any other exit code fails directly, whatever the report says
 		{"exit 2", "ubuntu", "2", c9(), true},
@@ -231,6 +250,8 @@ func TestTheJudgeFailsClosedOnAMissingOrBrokenReport(t *testing.T) {
 		{"an object with no enforce mode", ptr("{}")},
 		{"no layers", ptr(`{"enforce":"ratchet","ratchet":{"outcome":"pass"},"summary":{"failed":["laws"]},"laws":{"required":16,"required_not_evaluated":16}}`)},
 		{"no laws object", ptr(`{"enforce":"ratchet","ratchet":{"outcome":"pass"},"layers":[],"summary":{"failed":["laws"]}}`)},
+		{"no law results", ptr(`{"enforce":"ratchet","ratchet":{"outcome":"pass"},"layers":[],"summary":{"failed":["laws"]},"laws":{"required":16,"required_not_evaluated":16,"judged":0}}`)},
+		{"no judged count", ptr(`{"enforce":"ratchet","ratchet":{"outcome":"pass"},"layers":[],"summary":{"failed":["laws"]},"laws":{"required":16,"required_not_evaluated":16,"results":[]}}`)},
 	} {
 		for _, code := range []string{"0", "1"} {
 			dir := t.TempDir()
@@ -244,7 +265,7 @@ func TestTheJudgeFailsClosedOnAMissingOrBrokenReport(t *testing.T) {
 			}
 			// exit 0 needs only a readable report; "no layers" and "no laws" matter at exit 1
 			fails := true
-			if code == "0" && (c.name == "no layers" || c.name == "no laws object") {
+			if code == "0" && (c.name == "no layers" || strings.HasPrefix(c.name, "no law") || c.name == "no judged count") {
 				fails = false
 			}
 			judged(t, c.name+" at exit "+code, judge, dir, "ubuntu", code, fails)
@@ -268,5 +289,61 @@ func judged(t *testing.T, name string, judge step, dir, leg, code string, fails 
 	}
 	if fails && !strings.Contains(string(out), "::error::") {
 		t.Errorf("%s: it failed without an error annotation\n%s", name, out)
+	}
+}
+
+// A refresh that changes nothing says so in one line: the same ledger is
+// uploaded. A refresh that writes the file prints nothing of its own.
+func TestRefreshSaysWhenNothingChanged(t *testing.T) {
+	needTools(t)
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git is not installed")
+	}
+	dir := newModule(t, "github.com/acme/demo", "1.26")
+	if code, _, errs := run(opts(dir, "binary-cli")); code != ExitOK {
+		t.Fatal(errs)
+	}
+	steps := workflowSteps(t, dir)
+	i := indexOf2(steps, func(s step) bool { return s.Name == "refresh the ledger" })
+	if i < 0 {
+		t.Fatal("no refresh step")
+	}
+	for _, c := range []struct {
+		name, fake string
+		line       bool
+	}{
+		{"nothing to lower", "exit 0", true},
+		{"an entry lowered", `echo lowered >> .go-tops/baseline.json`, false},
+	} {
+		repo := t.TempDir()
+		bin := filepath.Join(repo, "bin")
+		for _, d := range []string{bin, filepath.Join(repo, ".go-tops")} {
+			if err := os.MkdirAll(d, 0o755); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := os.WriteFile(filepath.Join(bin, "go"), []byte("#!/bin/sh\n"+c.fake+"\n"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(repo, ".go-tops", "baseline.json"), []byte("{}\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		for _, args := range [][]string{{"init", "-q"}, {"add", "-A"}, {"-c", "user.name=t", "-c", "user.email=t@example.com", "-c", "commit.gpgsign=false", "commit", "-q", "-m", "ledger"}} {
+			cmd := exec.Command("git", args...)
+			cmd.Dir = repo
+			if out, err := cmd.CombinedOutput(); err != nil {
+				t.Fatalf("git %v: %v\n%s", args, err, out)
+			}
+		}
+		cmd := exec.Command("bash", "-e", "-c", steps[i].Run)
+		cmd.Dir = repo
+		cmd.Env = append(os.Environ(), "PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Errorf("%s: the step failed: %v\n%s", c.name, err, out)
+		}
+		if got := strings.Contains(string(out), "unchanged: same ledger uploaded"); got != c.line {
+			t.Errorf("%s: prints the unchanged line = %v, want %v\n%s", c.name, got, c.line, out)
+		}
 	}
 }

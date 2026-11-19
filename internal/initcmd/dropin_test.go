@@ -386,7 +386,7 @@ func TestBaselineStepsRunInitAndUploadTheFile(t *testing.T) {
 	}
 	// refresh is the plain lowering write, and --accept-regression is never run in CI.
 	refresh := indexOf2(steps, func(s step) bool { return s.Name == "refresh the ledger" })
-	if refresh < install || refresh > upload || steps[refresh].Run != "go tool -modfile=tools/go.mod gotops baseline" || steps[refresh].Env["GOTOOLCHAIN"] != "local" {
+	if refresh < install || refresh > upload || !strings.HasPrefix(steps[refresh].Run, "go tool -modfile=tools/go.mod gotops baseline\n") || steps[refresh].Env["GOTOOLCHAIN"] != "local" {
 		t.Errorf("the refresh step is the plain baseline write between the install and the upload: %d %+v", refresh, steps[refresh])
 	}
 	for _, s := range steps {

@@ -554,7 +554,7 @@ func TestAdoptionRecordItem6NamesTheLedgerLeg(t *testing.T) {
 	for _, want := range []string{
 		".go-tops/baseline.json", "only `gotops baseline` writes it", "ledger leg", "`ubuntu` leg",
 		"`skip`", "gotops baseline --init", "workflow_dispatch", "go-tops-baseline", "gotops baseline`",
-		"`init`", "`refresh`", "only on the ledger leg's build", "linux/amd64", "golang:1.", "--accept-regression", "is manual", ".go-tops/survivors.yaml", ".go-tops/acks.yaml",
+		"`init`", "`refresh`", "only on the ledger leg's build", "linux/amd64", "golang:1.", "git config --global --add safe.directory /repo", "needs network", "vulnerability database", "--accept-regression", "is manual", ".go-tops/survivors.yaml", ".go-tops/acks.yaml",
 	} {
 		if !strings.Contains(item, want) {
 			t.Errorf("item 6 lacks %q:\n%s", want, item)
