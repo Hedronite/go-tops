@@ -56,12 +56,12 @@ exemptions:
   - path: internal/gate/run.go
     symbol: Execute
     layer: crap
-    reason: the run assembly is changed by the ratchet hook now and reworked by the laws layer at M5, so it is split once, then
+    reason: already over the cap; split with the M5 laws work
     owner: maintainer
     expires: "2027-03-31"
   - path: internal/gate/run.go
     symbol: assemble
     layer: crap
-    reason: the report assembly gains the ratchet object now and the laws verdict at M5, so it is split once, then
+    reason: already over the cap; split with the M5 laws work
     owner: maintainer
     expires: "2027-03-31"
