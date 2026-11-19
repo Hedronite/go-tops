@@ -14,7 +14,8 @@ name: ci
 # A weekly schedule, or a manual dispatch, runs only the `adoption` job: the end
 # to end test of the adoption path (GO_TOPS.md section 6.7), which needs the
 # network and takes minutes, so it does not belong on every push. Every job says
-# which events it runs on.
+# which events it runs on. The `skills` job runs the tests of the agent skills,
+# which need Nushell, on both platforms of every push and pull request.
 
 on:
   pull_request:
@@ -194,6 +195,77 @@ jobs:
           fi
           echo "report assertion: ok"
 
+  # The agent skills (.agents/skills, build tag `skills`): each is a Nushell script
+  # that wraps gotops and prints one JSON object. The tests run them against a
+  # stand-in gotops and doctored reports, and hold the go-tops-gate skill to the
+  # drop-in's judge. They need Nushell and fail without it, so the plain
+  # `go test ./...` of every other job needs none. Nushell is the release archive
+  # of the version the Rust-TOPS skills are pinned to, checked against its SHA-256
+  # (the value in the release's SHA256SUMS).
+  skills:
+    name: skills (${{ matrix.name }})
+    if: ${{ github.event_name == 'pull_request' || github.event_name == 'push' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: ubuntu
+            os: ubuntu-latest
+            nu_target: x86_64-unknown-linux-gnu
+          - name: macos
+            os: macos-latest
+            nu_target: aarch64-apple-darwin
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version: ${{ env.CURRENT_GO }}
+          cache-dependency-path: |
+            go.sum
+            tools/go.sum
+      - name: install Nushell 0.108.0
+        env:
+          VERSION: 0.108.0
+          TARGET: ${{ matrix.nu_target }}
+        run: |
+          set -euo pipefail
+          case "${TARGET}" in
+            x86_64-unknown-linux-gnu) sha=f0daaa0256b0f7dd5f4d9925b4d5522d8de5e947ed9ad64a43526e5cffeb05df ;;
+            aarch64-apple-darwin)     sha=21a11b4eb804f4bb7ce67bb18d90d227824d271e19e9f88da15733691888b916 ;;
+            *) echo "::error::no pinned hash for ${TARGET}"; exit 1 ;;
+          esac
+          archive="${RUNNER_TEMP}/nu.tar.gz"
+          curl --fail --silent --show-error --location --output "${archive}" \
+            "https://github.com/nushell/nushell/releases/download/${VERSION}/nu-${VERSION}-${TARGET}.tar.gz"
+          echo "${sha}  ${archive}" | shasum -a 256 -c -
+          mkdir -p "${RUNNER_TEMP}/nu"
+          tar -xzf "${archive}" --strip-components=1 -C "${RUNNER_TEMP}/nu"
+          echo "${RUNNER_TEMP}/nu" >> "${GITHUB_PATH}"
+      - name: tool versions
+        run: |
+          set -euo pipefail
+          test "$(nu --version)" = "0.108.0"
+          jq --version
+          git --version
+      # The log must show the tests that matter passing: a run that found none, or
+      # one that skipped them, is a failure and not a pass.
+      - name: skill tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          log="${RUNNER_TEMP}/skills.log"
+          go test -v -tags skills -count=1 -timeout 15m . ./internal/initcmd 2>&1 | tee "${log}"
+          for name in TestGateSkillJudgesTheReportUnderC9 TestAdoptSkillRunsInitBaselineAndCheck TestReviewDiffListsEachTouchedFunctionWithItsRatchetState TestTheGateSkillAndTheDropInJudgeAgreeOnEveryCase TestSkillMirrorsAreByteIdentical; do
+            if ! grep -q -- "--- PASS: ${name} " "${log}"; then
+              echo "::error::no '--- PASS' line for ${name}: the test did not run, or it was skipped"
+              exit 1
+            fi
+          done
+
   ci:
     name: ci
     # Runs even when a dependency failed, was skipped or was cancelled, and
@@ -201,7 +273,7 @@ jobs:
     # runs on the events the gate runs on; a scheduled or dispatched run has no
     # gate to wait for.
     if: ${{ always() && (github.event_name == 'pull_request' || github.event_name == 'push') }}
-    needs: [gate]
+    needs: [gate, skills]
     runs-on: ubuntu-latest
     steps:
       - name: every ci job succeeded
