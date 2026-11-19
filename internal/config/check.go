@@ -263,29 +263,42 @@ func (c *checker) lawsRequired() error {
 // them and never loosen them. The cap and the floor are held by limits; this
 // holds the laws the profile requires and the benchmark threshold.
 func (c *checker) tighten() error {
-	cfg := c.cfg
-	p, err := ProfileFor(cfg.Class)
+	p, err := ProfileFor(c.cfg.Class)
 	if errors.Is(err, ErrNoProfile) {
 		return nil
 	}
 	if err != nil {
 		return err
 	}
-	if cfg.Laws.Required != nil {
-		var missing []string
-		for _, id := range p.Laws.Required {
-			if !slices.Contains(cfg.Laws.Required, id) {
-				missing = append(missing, id)
-			}
-		}
-		if len(missing) > 0 {
-			c.add("loosens-profile", "/laws/required", "removes %s, which the %s profile requires; go-tops.yaml may add laws and never remove one (§3.3)", strings.Join(missing, ", "), cfg.Class)
-		}
-	}
-	if cur, base := cfg.Layers.Bench.RegressionPct, p.Layers.Bench.RegressionPct; cur != nil && base != nil && *cur > *base {
-		c.add("loosens-profile", "/layers/bench/regression_pct", "regression_pct %v is looser than the %v of the %s profile", *cur, *base, cfg.Class)
-	}
+	c.keepProfileLaws(p)
+	c.keepBenchThreshold(p)
 	return nil
+}
+
+// keepProfileLaws: a configuration that lists its required laws lists every law
+// the class profile requires, and may add more (§3.3).
+func (c *checker) keepProfileLaws(p *Config) {
+	if c.cfg.Laws.Required == nil {
+		return
+	}
+	var missing []string
+	for _, id := range p.Laws.Required {
+		if !slices.Contains(c.cfg.Laws.Required, id) {
+			missing = append(missing, id)
+		}
+	}
+	if len(missing) > 0 {
+		c.add("loosens-profile", "/laws/required", "removes %s, which the %s profile requires; go-tops.yaml may add laws and never remove one (§3.3)", strings.Join(missing, ", "), c.cfg.Class)
+	}
+}
+
+// keepBenchThreshold: the benchmark regression threshold may be tightened and
+// never loosened.
+func (c *checker) keepBenchThreshold(p *Config) {
+	cur, base := c.cfg.Layers.Bench.RegressionPct, p.Layers.Bench.RegressionPct
+	if cur != nil && base != nil && *cur > *base {
+		c.add("loosens-profile", "/layers/bench/regression_pct", "regression_pct %v is looser than the %v of the %s profile", *cur, *base, c.cfg.Class)
+	}
 }
 
 // exemptions: every record has a valid path glob and a date that has not

@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-const goodLock = `protocol: "0.4.3"
+const goodLockTemplate = `protocol: "@PROTOCOL@"
 toolchain: go1.27.4
 trust:
   mode: checksum
@@ -31,13 +31,15 @@ binaries:
       linux/arm64: 14680d7674eb1fed0405446670e15dcffb74e979ef0dcd41f998c088fd6babfb
 `
 
+var goodLock = strings.Replace(goodLockTemplate, "@PROTOCOL@", protocolID, 1)
+
 // §10: the example lock of the protocol loads into the types the gate reads.
 func TestLoadTheExampleLock(t *testing.T) {
 	l, err := Load(filepath.Join("..", "..", "config", "go-tops.example.lock"))
 	if err != nil {
 		t.Fatalf("the protocol's own example lock does not load: %v", err)
 	}
-	if l.Protocol != "0.4.3" || l.Toolchain != "go1.27.4" || l.Trust.Mode != "checksum" || l.Trust.Note == "" {
+	if l.Protocol != protocolID || l.Toolchain != "go1.27.4" || l.Trust.Mode != "checksum" || l.Trust.Note == "" {
 		t.Errorf("header %+v", l)
 	}
 	b, ok := l.Binary("golangci-lint")
@@ -94,7 +96,7 @@ func TestSchemaBreaksAreRefusedWithAPointer(t *testing.T) {
 		{"version with v", `version: "2.15.0"`, `version: "v2.15.0"`, "/binaries/0/version"},
 		{"http url", "url: https://example.com", "url: http://example.com", "/binaries/0/url"},
 		{"unknown placeholder", "{os}-{arch}.tar.gz", "{platform}.tar.gz", "/binaries/0/url"},
-		{"protocol", `protocol: "0.4.3"`, `protocol: "0.4.1"`, "/protocol"},
+		{"protocol", "protocol: \"" + protocolID + "\"", `protocol: "0.4.1"`, "/protocol"},
 		{"short executable sha", "e04962742507a5f37a4002a7a8b2b549f6864f17807eb5d534d947f6311a051f", "e0496274", "/binaries/0/executable_sha256/darwin~1amd64"},
 		{"executable sha with no extract", "    extract: golangci-lint-{version}-{os}-{arch}/golangci-lint\n", "", "/binaries/0"},
 		{"upper-case name", "name: golangci-lint", "name: GolangciLint", "/binaries/0/name"},

@@ -981,3 +981,64 @@ func TestRefreshDoesNotAskToAcceptAPackageTheRatchetWouldPass(t *testing.T) {
 		t.Errorf("stdout %q should offer --accept-regression when the package rule would fail", stdout)
 	}
 }
+
+// The module need not sit at the root of the repository. git reads "rev:path" from
+// the root, so a ledger deleted from the tree of a module in a subdirectory was
+// not found at HEAD, and --init was allowed to write a fresh one over the debt.
+func TestDeletingTheLedgerIsNotAResetInASubdirectoryModule(t *testing.T) {
+	for _, sub := range []string{"mod", filepath.Join("services", "api")} {
+		t.Run(sub, func(t *testing.T) {
+			fx := newFixture()
+			fx.install(t)
+			root := t.TempDir()
+			mod := filepath.Join(root, sub)
+			for rel, data := range map[string]string{"go.mod": "module example.com/app\n\ngo 1.26\n", "go-tops.lock": goodLock(t), "go-tops.yaml": ratchetConfig(t)} {
+				writeFile(t, mod, rel, data)
+			}
+			writeFile(t, mod, ledgerRel, string(baseline.Marshal(baseline.Init(baseline.Measure{Build: cmdBuild}))))
+			for _, args := range [][]string{{"init", "-q"}, {"add", "-A"}, {"-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-q", "-m", "x"}} {
+				cmd := exec.CommandContext(t.Context(), "git", args...)
+				cmd.Dir = root
+				if out, err := cmd.CombinedOutput(); err != nil {
+					t.Fatalf("git %v: %v\n%s", args, err, out)
+				}
+			}
+			if err := os.Remove(filepath.Join(mod, ledgerRel)); err != nil {
+				t.Fatal(err)
+			}
+			if code, _, stderr := baselineIn(t, mod, "--init"); code != 1 || !strings.Contains(stderr, "HEAD") {
+				t.Errorf("--init: exit %d, stderr %q; want 1 naming HEAD", code, stderr)
+			}
+			if _, err := os.Stat(filepath.Join(mod, ledgerRel)); err == nil {
+				t.Error("a ledger was written over a deleted one")
+			}
+		})
+	}
+}
+
+// The accept line says how many records this write recorded, not how many the file
+// holds: after a second accept one record is the earlier one's, possibly under
+// another owner.
+func TestAcceptCountsOnlyTheRecordsItWrote(t *testing.T) {
+	dir, fx := initialised(t)
+	fx.setCrap(cfn("example.com/app/a.Alpha", 25), cfn("example.com/app/b.Beta", 14.5))
+	if code, _, stderr := baselineIn(t, dir, "--accept-regression", "--reason", "the parser grows one arm", "--owner", "maintainer"); code != 0 {
+		t.Fatalf("first accept: exit %d: %s", code, stderr)
+	}
+	commitAll(t, dir)
+	fx.setCrap(cfn("example.com/app/a.Alpha", 25), cfn("example.com/app/b.Beta", 20))
+	code, stdout, stderr := baselineIn(t, dir, "--accept-regression", "--reason", "the formats grow too", "--owner", "platform")
+	if code != 0 {
+		t.Fatalf("second accept: exit %d: %s", code, stderr)
+	}
+	if !strings.Contains(stdout, "1 regression(s) recorded by this write under owner platform") || !strings.Contains(stdout, "2 record(s) in the file") {
+		t.Errorf("stdout %q should count what this write recorded, and the file separately", stdout)
+	}
+}
+
+// The usage says what a plain write does to a record: it follows its entry down.
+func TestUsageSaysARecordFollowsItsEntryDown(t *testing.T) {
+	if !strings.Contains(baselineUsage, "record") || !strings.Contains(baselineUsage, "follows") {
+		t.Errorf("the usage does not say that a plain write lowers a record with its entry:\n%s", baselineUsage)
+	}
+}

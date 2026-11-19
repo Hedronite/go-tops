@@ -5,11 +5,14 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/Hedronite/go-tops/internal/cli"
 )
 
 // runIn runs the gotops process in dir with extra environment variables.
@@ -88,7 +91,7 @@ func TestReportWithoutAReportOrWithABadOneExitsTwo(t *testing.T) {
 	if code, _, stderr := runIn(t, dir, nil, "report"); code != 2 || !strings.Contains(stderr, "run gotops gate first") {
 		t.Errorf("no report: exit %d, %q", code, stderr)
 	}
-	writeFile(t, dir, ".go-tops/report.json", `{"protocol": "0.4.3"}`)
+	writeFile(t, dir, ".go-tops/report.json", fmt.Sprintf(`{"protocol": %q}`, protocolID))
 	if code, _, stderr := runIn(t, dir, nil, "report"); code != 2 || !strings.Contains(stderr, "not a valid gate report") {
 		t.Errorf("bad report: exit %d, %q", code, stderr)
 	}
@@ -126,7 +129,7 @@ func lockRepo(t *testing.T, content string) string {
 	sum := sha256.Sum256([]byte(content))
 	h := hex.EncodeToString(sum[:])
 	dir := t.TempDir()
-	writeFile(t, dir, "go-tops.lock", "protocol: \"0.4.3\"\ntoolchain: "+goVersion(t)+"\ntrust:\n  mode: checksum\n  note: copied from the release checksum file\nbinaries:\n"+
+	writeFile(t, dir, "go-tops.lock", "protocol: \""+protocolID+"\"\ntoolchain: "+goVersion(t)+"\ntrust:\n  mode: checksum\n  note: copied from the release checksum file\nbinaries:\n"+
 		"  - name: gotools\n    version: \"1.0.0\"\n    url: https://example.com/{version}/{os}-{arch}\n    sha256:\n"+
 		"      darwin/arm64: "+h+"\n      darwin/amd64: "+h+"\n      linux/amd64: "+h+"\n      linux/arm64: "+h+"\n")
 	return dir
@@ -253,7 +256,7 @@ func TestVersionListsThePinnedTools(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit %d: %s", code, stderr)
 	}
-	for _, want := range []string{"protocol 0.4.3\npackage 0.0.0-dev\n", "toolchain " + goVersion(t) + " (go-tops.lock)\n", "tool gotools 1.0.0 (go-tops.lock)\n", "tool gotestsum v1.13.0 (tools/go.mod)\n"} {
+	for _, want := range []string{"protocol " + protocolID + "\npackage 0.0.0-dev\n", "toolchain " + goVersion(t) + " (go-tops.lock)\n", "tool gotools 1.0.0 (go-tops.lock)\n", "tool gotestsum v1.13.0 (tools/go.mod)\n"} {
 		if !strings.Contains(stdout, want) {
 			t.Errorf("version lacks %q:\n%s", want, stdout)
 		}
@@ -283,11 +286,59 @@ func TestLockUpdateExitCodes(t *testing.T) {
 	if err != nil || string(after) != refused {
 		t.Errorf("a failed download changed the lock: %v", err)
 	}
-	writeFile(t, dir, "go-tops.lock", "protocol: \"0.4.3\"\nbogus_key: 1\n")
+	writeFile(t, dir, "go-tops.lock", "protocol: \""+protocolID+"\"\nbogus_key: 1\n")
 	if code, _, stderr := runIn(t, dir, nil, "lock", "--update"); code != 2 {
 		t.Errorf("an invalid lock: exit %d, %q", code, stderr)
 	}
 	if code, _, _ := runIn(t, t.TempDir(), nil, "lock", "--update"); code != 2 {
 		t.Errorf("no lock: exit %d, want 2", code)
+	}
+}
+
+// updateIn runs `gotops lock --update` in dir, in this process, with every
+// download answered by body, so the command runs end to end without the network.
+func updateIn(t *testing.T, dir, body string, args ...string) (code int, stdout, stderr string) {
+	t.Helper()
+	old := fetchLock
+	t.Cleanup(func() { fetchLock = old })
+	fetchLock = func(string) ([]byte, error) { return []byte(body), nil }
+	t.Setenv("CI", "") // --update is refused under CI; the gate's own test run sets it
+	t.Chdir(dir)
+	var o, e bytes.Buffer
+	code = runLock(cli.NewEnv(&o, &e), append([]string{"--update"}, args...))
+	return code, o.String(), e.String()
+}
+
+// A lock whose downloads hash as pinned is left alone, and the command says so.
+func TestLockUpdateSaysWhenTheLockIsCurrent(t *testing.T) {
+	dir := lockRepo(t, "x")
+	before := fileBytes(t, dir, "go-tops.lock")
+	code, stdout, stderr := updateIn(t, dir, "x")
+	if code != 0 || !strings.Contains(stdout, "is current") {
+		t.Fatalf("exit %d, stdout %q, stderr %q", code, stdout, stderr)
+	}
+	if fileBytes(t, dir, "go-tops.lock") != before {
+		t.Error("a current lock was rewritten")
+	}
+}
+
+// A download that hashes differently rewrites the lock and prints each hash that
+// moved, then how many.
+func TestLockUpdatePrintsEachHashItChanged(t *testing.T) {
+	dir := lockRepo(t, "x")
+	code, stdout, stderr := updateIn(t, dir, "a different download")
+	if code != 0 || !strings.Contains(stdout, "gotools") || !strings.Contains(stdout, "->") || !strings.Contains(stdout, "hashes changed") {
+		t.Fatalf("exit %d, stdout %q, stderr %q", code, stdout, stderr)
+	}
+	if !strings.Contains(fileBytes(t, dir, "go-tops.lock"), "tofu") {
+		t.Error("the lock was not rewritten with the trust mode tofu")
+	}
+}
+
+// A pin to raise must be name@version.
+func TestLockUpdateRefusesAPinThatIsNotNameAtVersion(t *testing.T) {
+	code, _, stderr := updateIn(t, lockRepo(t, "x"), "x", "gotools")
+	if code != 2 || !strings.Contains(stderr, "name@version") {
+		t.Errorf("exit %d, stderr %q", code, stderr)
 	}
 }

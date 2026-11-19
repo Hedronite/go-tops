@@ -224,7 +224,7 @@ func TestApplyHygieneKeepsTheOtherChecks(t *testing.T) {
 		d["format"] = map[string]any{"outcome": "fail", "message": "1 file(s) need formatting", "files": []any{"a.go"}}
 	})
 	out := find2(t, ratchet.Apply([]report.Layer{in}, j, l), "hygiene")
-	if out.Outcome != "fail" || !strings.Contains(out.Reason, "format: 1 file(s) need formatting") || strings.Contains(out.Reason, "lint") {
+	if out.Outcome != "fail" || !strings.Contains(out.Reason, "golangci-lint fmt --diff: 1 file(s) need formatting") || strings.Contains(out.Reason, "golangci-lint run") {
 		t.Errorf("hygiene %s: %s", out.Outcome, out.Reason)
 	}
 }
@@ -379,8 +379,11 @@ func TestApplyPartialKeepsWhatTheLedgerDoesNotReplace(t *testing.T) {
 	h := hygieneLayer(5, func(d map[string]any) {
 		d["format"] = map[string]any{"outcome": "fail", "message": "1 file(s) need formatting", "files": []any{"a.go"}}
 	})
-	hy := find2(t, ratchet.ApplyPartial([]report.Layer{h}, ratchet.Partial{Cap: 10, Ledger: initLedger(legacy(), linux)}), "hygiene")
-	if hy.Outcome != "fail" || !strings.Contains(hy.Reason, "format: 1 file(s) need formatting") || strings.Contains(hy.Reason, "lint") {
+	// The findings were read and the ledger holds them, so they are the ledger's.
+	held := legacy()
+	held.Findings = ratchet.Counts{"revive": {"x.go": 5}}
+	hy := find2(t, ratchet.ApplyPartial([]report.Layer{h}, ratchet.Partial{Cap: 10, Ledger: initLedger(held, linux), Findings: held.Findings}), "hygiene")
+	if hy.Outcome != "fail" || !strings.Contains(hy.Reason, "golangci-lint fmt --diff: 1 file(s) need formatting") || strings.Contains(hy.Reason, "golangci-lint run") {
 		t.Errorf("hygiene %s: %s", hy.Outcome, hy.Reason)
 	}
 	// A coverage layer that failed for another reason stays failed.
@@ -505,5 +508,23 @@ func TestApplyPartialDoesNotJudgeAFunctionUnderTheCap(t *testing.T) {
 	layer := report.Layer{ID: "crap", Tier: 1, Outcome: "fail", Reason: "x", Details: map[string]any{"cap": 10.0, "violations": rows, "not_measured": 0}}
 	if got := find2(t, ratchet.ApplyPartial([]report.Layer{layer}, ratchet.Partial{Cap: 10}), "crap"); got.Outcome != "pass" {
 		t.Errorf("crap %s: %s, want a pass: the function is under the cap", got.Outcome, got.Reason)
+	}
+}
+
+// A partial run judges the lint findings from the saved lint output. When that output
+// cannot be read, nothing says the findings are within the ledger, so a layer that
+// failed on findings stays failed: it is never turned into "not judged".
+func TestApplyPartialKeepsLintFailedWhenTheFindingsCannotBeRead(t *testing.T) {
+	in := hygieneLayer(3, nil)
+	got := find2(t, ratchet.ApplyPartial([]report.Layer{in}, ratchet.Partial{Cap: 10, Ledger: initLedger(legacy(), linux)}), "hygiene")
+	if got.Outcome != "fail" {
+		t.Errorf("hygiene %s (%s): findings that could not be read were not judged, so the layer stays failed", got.Outcome, got.Reason)
+	}
+	// With the findings read and covered by the ledger, the same layer is not judged.
+	m := legacy()
+	m.Findings = ratchet.Counts{"revive": {"x.go": 3}}
+	covered := ratchet.Partial{Cap: 10, Ledger: initLedger(m, linux), Findings: ratchet.Counts{"revive": {"x.go": 3}}}
+	if got := find2(t, ratchet.ApplyPartial([]report.Layer{in}, covered), "hygiene"); got.Outcome != "pass" {
+		t.Errorf("hygiene %s (%s): read findings within the ledger are not judged", got.Outcome, got.Reason)
 	}
 }

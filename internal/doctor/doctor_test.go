@@ -98,7 +98,7 @@ func TestGoVersionAgainstTheFloor(t *testing.T) {
 
 func writeLock(t *testing.T, dir, toolchain string) {
 	t.Helper()
-	doc := "protocol: \"0.4.3\"\ntoolchain: " + toolchain + "\ntrust:\n  mode: checksum\n  note: copied from the release checksum file\nbinaries:\n" +
+	doc := "protocol: \"" + protocolID + "\"\ntoolchain: " + toolchain + "\ntrust:\n  mode: checksum\n  note: copied from the release checksum file\nbinaries:\n" +
 		"  - name: golangci-lint\n    version: \"2.15.0\"\n    url: https://example.com/{version}/{os}-{arch}\n    sha256:\n" +
 		"      darwin/arm64: " + strings.Repeat("a", 64) + "\n      darwin/amd64: " + strings.Repeat("b", 64) + "\n" +
 		"      linux/amd64: " + strings.Repeat("c", 64) + "\n      linux/arm64: " + strings.Repeat("d", 64) + "\n"

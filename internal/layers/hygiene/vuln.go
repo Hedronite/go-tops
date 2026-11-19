@@ -40,16 +40,23 @@ func (v *vulnReport) extras(failOn string) map[string]any {
 
 // message is one object of govulncheck's -json stream.
 type message struct {
-	Config *struct {
-		DBLastModified string `json:"db_last_modified"`
-	} `json:"config"`
-	Finding *struct {
-		OSV          string `json:"osv"`
-		FixedVersion string `json:"fixed_version"`
-		Trace        []struct {
-			Function string `json:"function"`
-		} `json:"trace"`
-	} `json:"finding"`
+	Config  *vulnConfig  `json:"config"`
+	Finding *vulnFinding `json:"finding"`
+}
+
+// vulnConfig is the config message: the database the scan read.
+type vulnConfig struct {
+	DBLastModified string `json:"db_last_modified"`
+}
+
+// vulnFinding is one finding: an OSV entry, the version that fixes it, and the
+// trace that reaches it. A trace that starts in a function is one the code calls.
+type vulnFinding struct {
+	OSV          string `json:"osv"`
+	FixedVersion string `json:"fixed_version"`
+	Trace        []struct {
+		Function string `json:"function"`
+	} `json:"trace"`
 }
 
 // parseVulns reads govulncheck's -json stream. The stream must hold a config
@@ -59,39 +66,69 @@ func parseVulns(stream []byte) (*vulnReport, error) {
 	if len(bytes.TrimSpace(stream)) == 0 {
 		return nil, fmt.Errorf("no output: nothing was scanned")
 	}
-	v := &vulnReport{fixed: map[string]string{}}
-	reach := map[string]bool{}
-	seen := map[string]bool{}
+	s := &vulnScan{v: &vulnReport{fixed: map[string]string{}}, reach: map[string]bool{}, seen: map[string]bool{}}
+	if err := s.read(stream); err != nil {
+		return nil, err
+	}
+	return s.finish()
+}
+
+// vulnScan holds what the messages of one stream add up to.
+type vulnScan struct {
+	v     *vulnReport
+	reach map[string]bool // OSV IDs with a finding in a function the code calls
+	seen  map[string]bool // every OSV ID found
+}
+
+// read decodes the stream message by message.
+func (s *vulnScan) read(stream []byte) error {
 	dec := json.NewDecoder(bytes.NewReader(stream))
 	for {
 		var m message
-		if err := dec.Decode(&m); err == io.EOF {
-			break
-		} else if err != nil {
-			return nil, fmt.Errorf("output is not govulncheck JSON: %w", err)
+		err := dec.Decode(&m)
+		if err == io.EOF {
+			return nil
 		}
-		if m.Config != nil && m.Config.DBLastModified != "" {
-			v.dbLastModified = m.Config.DBLastModified
+		if err != nil {
+			return fmt.Errorf("output is not govulncheck JSON: %w", err)
 		}
-		if f := m.Finding; f != nil {
-			seen[f.OSV] = true
-			if len(f.Trace) > 0 && f.Trace[0].Function != "" {
-				reach[f.OSV] = true
-				v.fixed[f.OSV] = f.FixedVersion
-			}
-		}
+		s.config(m.Config)
+		s.finding(m.Finding)
 	}
+}
+
+func (s *vulnScan) config(c *vulnConfig) {
+	if c != nil && c.DBLastModified != "" {
+		s.v.dbLastModified = c.DBLastModified
+	}
+}
+
+func (s *vulnScan) finding(f *vulnFinding) {
+	if f == nil {
+		return
+	}
+	s.seen[f.OSV] = true
+	if len(f.Trace) > 0 && f.Trace[0].Function != "" {
+		s.reach[f.OSV] = true
+		s.v.fixed[f.OSV] = f.FixedVersion
+	}
+}
+
+// finish checks that the database timestamp was recorded and is one, and lists
+// what was found.
+func (s *vulnScan) finish() (*vulnReport, error) {
+	v := s.v
 	if v.dbLastModified == "" {
 		return nil, fmt.Errorf("no config message with db_last_modified: the database timestamp cannot be recorded")
 	}
 	if _, err := time.Parse(time.RFC3339, v.dbLastModified); err != nil {
 		return nil, fmt.Errorf("db_last_modified %q is not a timestamp", v.dbLastModified)
 	}
-	for id := range reach {
+	for id := range s.reach {
 		v.reachable = append(v.reachable, id)
 	}
 	sort.Strings(v.reachable)
-	v.other = len(seen) - len(reach)
+	v.other = len(s.seen) - len(s.reach)
 	return v, nil
 }
 

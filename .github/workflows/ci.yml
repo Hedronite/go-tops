@@ -9,18 +9,30 @@ name: ci
 # The kit runs `enforce: advisory` until the laws layer lands at M5 (§6.7), so the
 # gate exits 0 whatever it finds. The step "assert the report" is what holds the
 # kit to the bar until then: see go-tops.yaml.
+#
+# Two kinds of run. A push or a pull request runs the gate and the aggregate `ci`.
+# A weekly schedule, or a manual dispatch, runs only the `adoption` job: the end
+# to end test of the adoption path (GO_TOPS.md section 6.7), which needs the
+# network and takes minutes, so it does not belong on every push. Every job says
+# which events it runs on.
 
 on:
   pull_request:
   push:
     branches: [main]
+  schedule:
+    - cron: "17 5 * * 1" # Mondays, 05:17 UTC
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+# A push or a pull request supersedes an older run of its own kind. A scheduled
+# or dispatched run has a group of its own, and is never cancelled: it would
+# otherwise share the group of a push to main and be cancelled by it.
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.workflow }}-${{ github.event_name == 'schedule' && 'schedule' || github.event_name == 'workflow_dispatch' && 'dispatch' || github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'push' }}
 
 env:
   # The exact release go-tops.lock pins: the gate compares `go env GOVERSION` with
@@ -33,6 +45,7 @@ env:
 jobs:
   gate:
     name: gate (${{ matrix.name }})
+    if: ${{ github.event_name == 'pull_request' || github.event_name == 'push' }}
     strategy:
       fail-fast: false
       matrix:
@@ -140,8 +153,8 @@ jobs:
           retention-days: 14
       # The bootstrap rule of GO_TOPS.md §6.7 and §17: the gate exits 0 under
       # advisory, so this step reads the report and fails unless
-      #   - hygiene, tests and coverage are `pass`;
-      #   - crap and mutation are `skip` with an `expires` that has not passed;
+      #   - hygiene, tests, coverage and crap are `pass`;
+      #   - mutation is `skip` with an `expires` that has not passed;
       #   - every required law is `not-evaluated` for `no_reader`, and none was judged;
       #   - the run is reported as not enforced, and every enabled layer ran.
       # To plant a failure locally, change .go-tops/report.json and run this step's
@@ -155,11 +168,11 @@ jobs:
           problems="$(jq -r --arg today "$(date -u +%F)" '
             def layer($id): [.layers[] | select(.id == $id)] | if length == 1 then .[0] else null end;
             [
-              ( ("hygiene", "tests", "coverage") as $id
+              ( ("hygiene", "tests", "coverage", "crap") as $id
                 | layer($id) as $l
                 | select($l == null or $l.outcome != "pass")
                 | "\($id): outcome \($l.outcome // "absent"), want pass" ),
-              ( ("crap", "mutation") as $id
+              ( "mutation" as $id
                 | layer($id) as $l
                 | select($l == null or $l.outcome != "skip" or (($l.expires // "") <= $today))
                 | "\($id): want skip with an expires after \($today), got \($l.outcome // "absent") expires \($l.expires // "none")" ),
@@ -184,8 +197,10 @@ jobs:
   ci:
     name: ci
     # Runs even when a dependency failed, was skipped or was cancelled, and
-    # fails unless every one of them succeeded: a skipped job must not pass.
-    if: ${{ always() }}
+    # fails unless every one of them succeeded: a skipped job must not pass. It
+    # runs on the events the gate runs on; a scheduled or dispatched run has no
+    # gate to wait for.
+    if: ${{ always() && (github.event_name == 'pull_request' || github.event_name == 'push') }}
     needs: [gate]
     runs-on: ubuntu-latest
     steps:
@@ -197,6 +212,71 @@ jobs:
           for r in ${RESULTS}; do
             if [ "${r}" != "success" ]; then
               echo "::error::a ci job ended ${r}, not success"
+              exit 1
+            fi
+          done
+
+  # The adoption path, end to end, with the real binary (cmd/gotops/adoption_test.go,
+  # build tag `adoption`): init into a legacy module, baseline --init, check, the
+  # ratchet judging the first ledger, then a change that raises a function and one
+  # that lowers it, for a module at the root of the repository and in a
+  # subdirectory. It reads the network (init tidies tools/go.mod, the hygiene layer
+  # reads the vulnerability database), so it runs weekly and on demand, never on a
+  # push. A failure here is a regression in what an adopter does first.
+  #
+  # Owner: maintainer. GitHub turns a scheduled workflow off after 60 days with no
+  # activity in the repository; a quiet repo must run this job by hand
+  # (workflow_dispatch), or push, to switch the schedule back on. It fails closed:
+  # it needs the log to show both layouts passing, so a skipped test (no linter on
+  # PATH) or a run that found no test is a failure, never a pass.
+  adoption:
+    name: adoption
+    if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency:
+      group: adoption-${{ github.workflow }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version: ${{ env.CURRENT_GO }}
+          cache-dependency-path: |
+            go.sum
+            tools/go.sum
+      # The same pinned linter as the gate job, checked against the same SHA-256.
+      - name: install golangci-lint v2.15.0
+        env:
+          VERSION: 2.15.0
+        run: |
+          set -euo pipefail
+          sha=9b7fe6a6bf6334b98decf8d86b11415ea7889afdabdd1959fdce23af2a9ebcea
+          archive="${RUNNER_TEMP}/golangci-lint.tar.gz"
+          curl --fail --silent --show-error --location --output "${archive}" \
+            "https://github.com/golangci/golangci-lint/releases/download/v${VERSION}/golangci-lint-${VERSION}-linux-amd64.tar.gz"
+          echo "${sha}  ${archive}" | shasum -a 256 -c -
+          mkdir -p "${RUNNER_TEMP}/golangci-lint"
+          tar -xzf "${archive}" --strip-components=1 -C "${RUNNER_TEMP}/golangci-lint"
+          echo "${RUNNER_TEMP}/golangci-lint" >> "${GITHUB_PATH}"
+      # The drop-in's judging step, which the test runs on each real report, reads
+      # it with jq.
+      - name: jq version
+        run: jq --version
+      - name: adoption end to end
+        env:
+          CGO_ENABLED: "1"
+        shell: bash
+        run: |
+          set -euo pipefail
+          log="${RUNNER_TEMP}/adoption.log"
+          go test -v -tags adoption -run TestAdoption -timeout 20m -count=1 ./cmd/gotops 2>&1 | tee "${log}"
+          for layout in module_at_the_root module_in_mod; do
+            if ! grep -q -- "--- PASS: TestAdoptionOfALegacyRepo/${layout}" "${log}"; then
+              echo "::error::no '--- PASS' line for TestAdoptionOfALegacyRepo/${layout}: the test did not run, or it was skipped"
               exit 1
             fi
           done

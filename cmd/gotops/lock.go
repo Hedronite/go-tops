@@ -88,7 +88,7 @@ func updateLock(env cli.Env, dir string, args []string, ci bool) int {
 	if err != nil {
 		return usageError(env, "lock", lockUsage, err)
 	}
-	changes, err := lock.Update(lock.UpdateOptions{Dir: dir, Set: set, Fetch: fetchBody})
+	changes, err := lock.Update(lock.UpdateOptions{Dir: dir, Set: set, Fetch: fetchLock})
 	if err != nil {
 		env.Stderr.Printf("gotops lock: %v\n", err)
 		return updateExit(err)
@@ -132,6 +132,10 @@ func parseSet(args []string) (map[string]string, error) {
 
 // maxDownload bounds one download: the largest pinned archive is a few tens of megabytes.
 const maxDownload = 512 << 20
+
+// fetchLock is how `lock --update` downloads; a test replaces it so the command
+// runs without the network.
+var fetchLock lock.Fetcher = fetchBody
 
 // fetchBody downloads url and returns the body.
 func fetchBody(url string) ([]byte, error) {

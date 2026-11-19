@@ -50,96 +50,159 @@ func Parse(stream []byte) (*Result, error) {
 	if len(bytes.TrimSpace(stream)) == 0 {
 		return nil, errors.New("no output: go test printed nothing")
 	}
-	res := &Result{}
-	pkgSeed := map[string]int64{}
-	var seedOrder, failedOrder []string
-	results := map[string]map[string]string{} // package, test: pass, fail or skip
-	failedTest := map[string]bool{}
-	sawJSON := false
-
-	sc := bufio.NewScanner(bytes.NewReader(stream))
-	sc.Buffer(make([]byte, 64*1024), 16*1024*1024)
-	for sc.Scan() {
-		line := sc.Bytes()
-		if len(bytes.TrimSpace(line)) == 0 {
-			continue
-		}
-		var e event
-		if err := json.Unmarshal(line, &e); err != nil {
-			if res.Stray == "" {
-				res.Stray = strings.TrimSpace(string(line))
-			}
-			continue
-		}
-		sawJSON = true
-		switch e.Action {
-		case "build-output":
-			if t := strings.TrimSpace(e.Output); t != "" && !strings.HasPrefix(t, "#") {
-				res.BuildErrors = append(res.BuildErrors, t)
-			}
-		case "output":
-			if m := seedRE.FindStringSubmatch(strings.TrimSpace(e.Output)); m != nil {
-				if _, ok := pkgSeed[e.Package]; !ok {
-					n, err := strconv.ParseInt(m[1], 10, 64)
-					if err != nil {
-						return nil, fmt.Errorf("shuffle seed %q: %w", m[1], err)
-					}
-					pkgSeed[e.Package] = n
-					seedOrder = append(seedOrder, e.Package)
-				}
-			}
-		case "pass", "fail", "skip":
-			if e.Test == "" {
-				if e.Action == "fail" {
-					failedOrder = append(failedOrder, e.Package)
-				}
-				continue
-			}
-			if results[e.Package] == nil {
-				results[e.Package] = map[string]string{}
-			}
-			results[e.Package][e.Test] = e.Action
-			if name := e.Package + "." + e.Test; e.Action == "fail" && !failedTest[name] {
-				failedTest[name] = true
-				res.FailedTests = append(res.FailedTests, name)
-			}
-		}
+	p := &parser{
+		res:        &Result{},
+		pkgSeed:    map[string]int64{},
+		results:    map[string]map[string]string{},
+		failedTest: map[string]bool{},
 	}
-	if err := sc.Err(); err != nil {
+	sawJSON, err := p.scan(stream)
+	if err != nil {
 		return nil, err
 	}
 	if !sawJSON {
-		return nil, fmt.Errorf("output is not go test JSON: %q", res.Stray)
+		return nil, fmt.Errorf("output is not go test JSON: %q", p.res.Stray)
 	}
-	for _, tests := range results {
-		leaves := countLeaves(tests, res)
-		if leaves > 0 {
-			res.Packages++
+	p.countPackages()
+	p.collectFailedPackages()
+	p.chooseSeed()
+	return p.res, nil
+}
+
+// parser holds what the events of one stream add up to. Each action of an event
+// has a method of its own, and each figure the Result derives from them has one.
+type parser struct {
+	res         *Result
+	pkgSeed     map[string]int64
+	seedOrder   []string
+	failedOrder []string
+	results     map[string]map[string]string // package, test: pass, fail or skip
+	failedTest  map[string]bool
+}
+
+// scan applies every line of the stream and reports whether any was JSON.
+func (p *parser) scan(stream []byte) (bool, error) {
+	sc := bufio.NewScanner(bytes.NewReader(stream))
+	sc.Buffer(make([]byte, 64*1024), 16*1024*1024)
+	sawJSON := false
+	for sc.Scan() {
+		isJSON, err := p.line(sc.Bytes())
+		if err != nil {
+			return false, err
+		}
+		sawJSON = sawJSON || isJSON
+	}
+	return sawJSON, sc.Err()
+}
+
+// line applies one line. A blank line is nothing; a line that is not JSON is
+// kept, the first of them, as the stray text of a stream that is not go test's.
+func (p *parser) line(raw []byte) (isJSON bool, err error) {
+	if len(bytes.TrimSpace(raw)) == 0 {
+		return false, nil
+	}
+	var e event
+	if err := json.Unmarshal(raw, &e); err != nil {
+		if p.res.Stray == "" {
+			p.res.Stray = strings.TrimSpace(string(raw))
+		}
+		return false, nil
+	}
+	return true, p.apply(e)
+}
+
+func (p *parser) apply(e event) error {
+	switch e.Action {
+	case "build-output":
+		p.buildOutput(e)
+	case "output":
+		return p.shuffleLine(e)
+	case "pass", "fail", "skip":
+		p.result(e)
+	}
+	return nil
+}
+
+// buildOutput keeps a compiler line, without the "# package" header lines.
+func (p *parser) buildOutput(e event) {
+	if t := strings.TrimSpace(e.Output); t != "" && !strings.HasPrefix(t, "#") {
+		p.res.BuildErrors = append(p.res.BuildErrors, t)
+	}
+}
+
+// shuffleLine records the first seed a package prints.
+func (p *parser) shuffleLine(e event) error {
+	m := seedRE.FindStringSubmatch(strings.TrimSpace(e.Output))
+	if m == nil {
+		return nil
+	}
+	if _, ok := p.pkgSeed[e.Package]; ok {
+		return nil
+	}
+	n, err := strconv.ParseInt(m[1], 10, 64)
+	if err != nil {
+		return fmt.Errorf("shuffle seed %q: %w", m[1], err)
+	}
+	p.pkgSeed[e.Package] = n
+	p.seedOrder = append(p.seedOrder, e.Package)
+	return nil
+}
+
+// result records the outcome of a test, or of a whole package when the event has
+// no test name.
+func (p *parser) result(e event) {
+	if e.Test == "" {
+		if e.Action == "fail" {
+			p.failedOrder = append(p.failedOrder, e.Package)
+		}
+		return
+	}
+	if p.results[e.Package] == nil {
+		p.results[e.Package] = map[string]string{}
+	}
+	p.results[e.Package][e.Test] = e.Action
+	if name := e.Package + "." + e.Test; e.Action == "fail" && !p.failedTest[name] {
+		p.failedTest[name] = true
+		p.res.FailedTests = append(p.res.FailedTests, name)
+	}
+}
+
+// countPackages counts the packages that had at least one leaf test.
+func (p *parser) countPackages() {
+	for _, tests := range p.results {
+		if countLeaves(tests, p.res) > 0 {
+			p.res.Packages++
 		}
 	}
+}
 
+// collectFailedPackages lists the packages that failed with no failing test of
+// their own, once each, in the order they failed.
+func (p *parser) collectFailedPackages() {
 	seen := map[string]bool{}
-	for _, p := range failedOrder {
-		if seen[p] {
+	for _, pkg := range p.failedOrder {
+		if seen[pkg] {
 			continue
 		}
-		seen[p] = true
-		if !hasFailedTest(res.FailedTests, p) {
-			res.FailedPackages = append(res.FailedPackages, p)
+		seen[pkg] = true
+		if !hasFailedTest(p.res.FailedTests, pkg) {
+			p.res.FailedPackages = append(p.res.FailedPackages, pkg)
 		}
 	}
+}
 
-	// The seed: the first failed package that printed one, else the first to print one.
-	for _, p := range failedOrder {
-		if s, ok := pkgSeed[p]; ok {
-			res.Seed, res.HasSeed = s, true
-			break
+// chooseSeed takes the first failed package that printed a seed, else the first
+// package to print one.
+func (p *parser) chooseSeed() {
+	for _, pkg := range p.failedOrder {
+		if s, ok := p.pkgSeed[pkg]; ok {
+			p.res.Seed, p.res.HasSeed = s, true
+			return
 		}
 	}
-	if !res.HasSeed && len(seedOrder) > 0 {
-		res.Seed, res.HasSeed = pkgSeed[seedOrder[0]], true
+	if len(p.seedOrder) > 0 {
+		p.res.Seed, p.res.HasSeed = p.pkgSeed[p.seedOrder[0]], true
 	}
-	return res, nil
 }
 
 // hasFailedTest reports whether one of the failed tests belongs to package pkg.
