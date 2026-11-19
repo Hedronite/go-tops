@@ -255,8 +255,8 @@ func TestOneLintRunAndNoVet(t *testing.T) {
 		}
 	}
 	for _, c := range f.calls {
-		if strings.HasPrefix(strings.Join(c, " "), "golangci-lint run") && !strings.Contains(strings.Join(c, " "), "--output.json.path=.go-tops/lint-style.json") {
-			t.Errorf("the lint run does not save its JSON to .go-tops/lint-style.json: %v", c)
+		if strings.HasPrefix(strings.Join(c, " "), "golangci-lint run") && !strings.Contains(strings.Join(c, " "), "--output.json.path="+filepath.Join(f.dir, ".go-tops", "lint-style.json")) {
+			t.Errorf("the lint run does not save its JSON to .go-tops/lint-style.json, by its absolute path: %v", c)
 		}
 	}
 }

@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -361,7 +362,9 @@ func (h *run) runLint(argv []string) (lintResult, gate.Output, *step) {
 	// linter, and which files survive varies from run to run, so a ledger written
 	// from one run would disagree with the gate on identical code.
 	args = append(args, "--max-issues-per-linter=0", "--max-same-issues=0")
-	out, err := h.exec(append(args, "--output.json.path="+LintJSON, "./...")...)
+	// The result path is absolute: the linter resolves a relative one against the
+	// directory of the config it reads, which may be .go-tops/ and not the module.
+	out, err := h.exec(append(args, "--output.json.path="+path, "./...")...)
 	if err != nil {
 		return fail(cantStart(lintName, err))
 	}
@@ -372,6 +375,9 @@ func (h *run) runLint(argv []string) (lintResult, gate.Output, *step) {
 	res, err := parseLint(doc)
 	if err != nil {
 		return fail(failed(lintName, "%s: %v", LintJSON, err))
+	}
+	for i := range res.Issues {
+		res.Issues[i].Pos.Filename = ModuleRel(h.env.Dir, h.env.Config.Hygiene.LintConfig, res.Issues[i].Pos.Filename)
 	}
 	return res, out, nil
 }
@@ -480,6 +486,41 @@ func (h *run) depguard() step {
 }
 
 const defaultLintConfig = ".golangci.yml"
+
+// ModuleRel makes a file name from golangci-lint a module-relative slash path. The
+// linter names a file relative to the directory its config says (the config file's
+// own directory by default, run.relative-path-mode) or absolutely, so a config under
+// .go-tops/ gives "../a/a.go" for the module's a/a.go. A relative name that is a file
+// of the module stays as it is; one that is not is tried against the config's
+// directory; an absolute one is made relative to the module.
+func ModuleRel(dir, lintConfig, name string) string {
+	if !filepath.IsAbs(name) {
+		name = fromConfigDir(dir, lintConfig, name)
+	}
+	if filepath.IsAbs(name) {
+		if rel, err := filepath.Rel(dir, name); err == nil && !strings.HasPrefix(rel, "..") {
+			name = rel
+		}
+	}
+	return path.Clean(filepath.ToSlash(name))
+}
+
+// fromConfigDir resolves a relative name against the config's directory when the
+// module has no such file and the config's directory does.
+func fromConfigDir(dir, lintConfig, name string) string {
+	if isFile(filepath.Join(dir, name)) || lintConfig == "" {
+		return name
+	}
+	if p := filepath.Join(dir, filepath.Dir(lintConfig), name); isFile(p) {
+		return p
+	}
+	return name
+}
+
+func isFile(p string) bool {
+	st, err := os.Stat(p)
+	return err == nil && !st.IsDir()
+}
 
 func firstNonEmpty(a, b string) string {
 	if a != "" {
