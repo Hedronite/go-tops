@@ -105,8 +105,9 @@ func goModTidy(dir string) error {
 }
 
 type file struct {
-	path string
-	data []byte
+	path   string
+	data   []byte
+	merged bool // init adds to the existing file and never replaces it: no --force needed
 }
 
 // plan is everything init will write, built and checked before any write.
@@ -121,7 +122,7 @@ const agentsFile = "AGENTS.md"
 // nextStep is what follows init (GO_TOPS.md §6.7, §12.1): the first ledger is
 // measured on the ledger leg's build, then committed. Under ratchet the gate
 // fails until it exists.
-const nextStep = "run gotops baseline --init on the ledger leg's build (run the workflow by hand: its ubuntu leg does it and uploads the file as go-tops-baseline), then commit .go-tops/baseline.json"
+const nextStep = "open the pull request: its ubuntu leg is the ledger leg, so it runs gotops baseline --init on its own build, uploads the file as the go-tops-baseline artifact and fails the run; download it and commit .go-tops/baseline.json unchanged, never a ledger written on another build (once the workflow is on the default branch you can also run it by hand, workflow_dispatch)"
 
 func buildPlan(o Options) (*plan, error) {
 	in, err := gatherInputs(o)
@@ -150,6 +151,9 @@ func checkConflicts(o Options, files []file) error {
 	}
 	var existing []string
 	for _, f := range files {
+		if f.merged {
+			continue
+		}
 		if _, err := os.Lstat(filepath.Join(o.Dir, filepath.FromSlash(f.path))); err == nil {
 			existing = append(existing, f.path)
 		}
@@ -162,7 +166,7 @@ func checkConflicts(o Options, files []file) error {
 }
 
 func (p *plan) write(dir string) error {
-	all := append([]file{{agentsFile, p.agents}}, p.files...)
+	all := append([]file{{path: agentsFile, data: p.agents}}, p.files...)
 	for _, f := range all {
 		path := filepath.Join(dir, filepath.FromSlash(f.path))
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {

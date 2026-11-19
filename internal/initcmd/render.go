@@ -18,7 +18,7 @@ var templates embed.FS
 // templateFiles maps each written path to its template.
 var templateFiles = []struct{ path, template string }{
 	{"go-tops.yaml", "go-tops.yaml"},
-	{".golangci.yml", "golangci.yml"},
+	{".go-tops/golangci.yml", "golangci.yml"},
 	{".github/workflows/go-tops.yml", "workflow.yml"},
 	{".github/CODEOWNERS", "codeowners"},
 	{"justfile", "justfile"},
@@ -36,7 +36,7 @@ func (in *inputs) values() map[string]string {
 		"{COVERAGE_FLOOR}":            number(in.profile.Gates.Coverage.Floor),
 		"{CRAP_CAP}":                  number(in.profile.Gates.Crap.Cap),
 		"{GO_FLOOR}":                  in.goFloor,
-		"{GO_CURRENT}":                goCurrent(),
+		"{GO_CURRENT}":                in.goCurrent,
 		"{TOOLCHAIN}":                 toolchain,
 		"{TOOLCHAIN_NUM}":             strings.TrimPrefix(toolchain, "go"),
 		"{OWNER}":                     in.owner,
@@ -79,9 +79,17 @@ func renderFiles(in *inputs) ([]file, error) {
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", tf.path, err)
 		}
-		out = append(out, file{tf.path, []byte(text)})
+		out = append(out, file{path: tf.path, data: []byte(text)})
 	}
-	return append(out, file{"go-tops.lock", []byte(lockText(in.protocol))}, file{"tools/go.mod", []byte(in.toolsMod())}), nil
+	ignore, err := renderGitignore(in.o.Dir)
+	if err != nil {
+		return nil, err
+	}
+	return append(out,
+		file{path: "go-tops.lock", data: []byte(lockText(in.protocol))},
+		file{path: "tools/go.mod", data: []byte(in.toolsText), merged: true},
+		file{path: gitignoreFile, data: ignore, merged: true},
+	), nil
 }
 
 // layersYAML writes the class layers init leaves off: they run at tier 2, which
@@ -105,8 +113,8 @@ func (in *inputs) layersYAML() string {
 }
 
 func (in *inputs) kitVersionText() string {
-	if in.kitTool {
-		return in.o.KitVersion
+	if in.pinned != "" {
+		return in.pinned + " (pinned in tools/go.mod)"
 	}
 	return "not pinned (this init ran from a development build)"
 }
@@ -150,14 +158,11 @@ func lockText(protocol string) string {
 	return b.String()
 }
 
-// toolsMod is tools/go.mod: the tool lines and their pinned versions (§10).
-// go -C tools mod tidy fills the indirect requirements and tools/go.sum.
-func (in *inputs) toolsMod() string {
-	tools := append([]moduleTool(nil), moduleTools...)
-	if in.kitTool {
-		tools = append(tools, moduleTool{gotopsPackage, gotopsModule, in.o.KitVersion})
-	}
-	sort.Slice(tools, func(i, j int) bool { return tools[i].Package < tools[j].Package })
+// freshToolsMod is tools/go.mod for a module that has none: the tool lines and
+// their pinned versions (§10). go -C tools mod tidy fills the indirect
+// requirements and tools/go.sum.
+func (in *inputs) freshToolsMod() string {
+	tools := in.wantedTools()
 	var b strings.Builder
 	fmt.Fprintf(&b, "module %s/tools\n\ngo %s\n\ntool (\n", in.module, in.goFloor)
 	for _, t := range tools {

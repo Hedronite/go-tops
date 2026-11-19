@@ -31,6 +31,7 @@ jobs:
   gate:
     name: gate (${{ matrix.leg }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -88,11 +89,80 @@ jobs:
             go{GO_FLOOR}|go{GO_FLOOR}.*) ;;
             *) echo "::error::the floor leg runs ${got}, not a go{GO_FLOOR} release"; exit 1 ;;
           esac
+      # The first ledger (GO_TOPS.md section 6.7). A repository adopting Go-TOPS has no
+      # ledger on its default branch and cannot run the workflow by hand until the
+      # workflow is on that branch, so the ubuntu leg, the ledger leg, writes the first
+      # ledger on a pull request. `baseline --status` prints one JSON line and exits 0
+      # for first-ledger-due (enforce is ratchet and neither the base nor this tree has a
+      # ledger), 1 for present, deleted or not-ratchet (enforce is advisory or hard), and
+      # 2 with state error when it cannot tell. The
+      # step reads the state from that line and acts only on a code and a state that
+      # agree: due writes the ledger on this leg's own build, uploads it as
+      # go-tops-baseline and fails the run until that file is committed, unchanged;
+      # proceed runs the gate and its judge; anything else, a missing or unknown state
+      # included, fails the run on the ubuntu leg. The macOS leg asks too, and while a
+      # first ledger is due it runs no gate, which would only fail on the missing ledger:
+      # the ubuntu leg fails the run. The step records the exit code with set +e, so
+      # bash -e does not abort on the status exit 1 or 2. The status reads the base that
+      # go-tops.yaml configures, as the gate does, so both answer for the same diff.
+      - name: is a first ledger due (baseline --status)
+        id: status
+        if: matrix.leg != 'floor' && github.event_name == 'pull_request'
+        env:
+          GOTOOLCHAIN: local
+        run: |
+          set +e
+          line="$(go tool -modfile=tools/go.mod gotops baseline --status)"
+          code=$?  # 0 due, 1 not due, 2 cannot tell: read before any later command
+          echo "$line"
+          state="$(printf '%s\n' "$line" | jq -e -r .state 2>/dev/null)" || state=""
+          case "$code:$state" in
+            0:first-ledger-due) action=due ;;
+            1:present | 1:deleted | 1:not-ratchet) action=proceed ;;
+            *) action=stop ;;
+          esac
+          {
+            echo "code=$code"
+            echo "state=$state"
+            echo "action=$action"
+          } >> "$GITHUB_OUTPUT"
+          exit 0
+      - name: baseline --status could not tell
+        if: matrix.leg == 'ubuntu' && github.event_name == 'pull_request' && steps.status.outputs.action != 'due' && steps.status.outputs.action != 'proceed'
+        env:
+          STATUS_CODE: ${{ steps.status.outputs.code }}
+          STATUS_STATE: ${{ steps.status.outputs.state }}
+        run: |
+          echo "::error::gotops baseline --status exited '$STATUS_CODE' with the state '$STATUS_STATE': it could not tell whether a first ledger is due, so the run fails closed"
+          exit 1
+      - name: write the first ledger on the ledger leg
+        if: matrix.leg == 'ubuntu' && steps.status.outputs.action == 'due'
+        env:
+          GOTOOLCHAIN: local
+        run: go tool -modfile=tools/go.mod gotops baseline --init
+      - name: upload the first ledger as go-tops-baseline
+        if: matrix.leg == 'ubuntu' && steps.status.outputs.action == 'due'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: go-tops-baseline
+          # .go-tops is a hidden directory, which the action skips by default.
+          path: .go-tops/baseline.json
+          include-hidden-files: true
+          if-no-files-found: error
+      - name: a first ledger is due, and the ubuntu leg writes it
+        if: matrix.leg == 'macos' && steps.status.outputs.action == 'due'
+        run: |
+          echo "::notice::this repository has no ledger yet: the ubuntu leg writes the first one and fails the run until it is committed, so this leg runs no gate"
+      - name: the first ledger is written, not committed
+        if: matrix.leg == 'ubuntu' && steps.status.outputs.action == 'due'
+        run: |
+          echo "::error::this repository has no ledger. The ledger leg wrote one and uploaded it as the go-tops-baseline artifact of this run: download it, commit .go-tops/baseline.json unchanged and push. The run fails until that file is committed."
+          exit 1
       # The gate leg: gotops runs every layer. The step records the exit code and
       # does not fail on it; the next step judges it (ruling C9).
       - name: gate
         id: gate
-        if: matrix.leg != 'floor' && github.event_name != 'workflow_dispatch'
+        if: matrix.leg != 'floor' && github.event_name != 'workflow_dispatch' && steps.status.outputs.action != 'due'
         env:
           GOTOOLCHAIN: local
         run: |
@@ -101,21 +171,26 @@ jobs:
           code=$?
           echo "code=${code}" >> "$GITHUB_OUTPUT"
           exit 0
-      # Judge the gate on every gate leg. Exit 0 passes. Exit 1 passes only when
-      # tier 0 to 1 hold and the only failed item is the required laws, all of them
-      # reported not evaluated, with no law judged and none refused (ruling C9: the
-      # laws are judged from M5). Any other exit code is a failure. The ratchet is judged on the ledger leg only
-      # (GO_TOPS.md §6.7); this repository's ledger leg is the ubuntu leg, so it
-      # must report pass, and the other gate legs pass or skip. If the ledger leg
-      # reports skip, the baseline was recorded under a build no leg runs and the
-      # ratchet would never be judged. The step fails closed: a missing exit code
-      # (a step before the gate failed), a missing report, a report that is not
+      # Judge the gate on every gate leg, from the report and the exit code (GO_TOPS.md
+      # section 3.3, ruling C9). Exit 0 and exit 1 are both read against the report:
+      # every layer in range ran and is pass or skip, the run is not partial, and the
+      # only failed item, if any, is the required laws, all reported not evaluated,
+      # with no law judged and none refused (the laws are judged from M5). An exit 0
+      # with a failed layer (an advisory run) or from a partial run is not a pass. Any
+      # other exit code is a failure. The ratchet is judged on the ledger leg only
+      # (GO_TOPS.md section 6.7); this repository's ledger leg is the ubuntu leg, so
+      # it must report pass, and the other gate legs pass or skip, a skip only when
+      # the run's build differs from the ledger's (ruling C3b): a skip on the ledger's
+      # own build judged nothing. If the ledger leg reports skip, the baseline was
+      # recorded under a build no leg runs. The step fails closed: a missing exit
+      # code (a step before the gate failed), a missing report, a report that is not
       # JSON and a missing field are failures.
       - name: judge the gate (ruling C9) and the ratchet on the ledger leg
-        if: always() && matrix.leg != 'floor' && github.event_name != 'workflow_dispatch'
+        if: always() && matrix.leg != 'floor' && github.event_name != 'workflow_dispatch' && steps.status.outputs.action != 'due'
         env:
           GATE_EXIT: ${{ steps.gate.outputs.code }}
           LEG: ${{ matrix.leg }}
+          STATUS_STATE: ${{ steps.status.outputs.state }}
         run: |
           set -uo pipefail
           report=.go-tops/report.json
@@ -123,30 +198,47 @@ jobs:
           case "${GATE_EXIT:-}" in
             0|1) ;;
             "") fail "the gate step recorded no exit code: a step before it failed, so the gate did not run" ;;
-            *) fail "the gate exited $GATE_EXIT: a usage, configuration or environment error, not a verdict" ;;
+            *)
+              case "$GATE_EXIT:${STATUS_STATE:-}" in
+                2:deleted) fail "the gate exited 2 and the ledger was deleted: deleting the ledger is not a reset: restore .go-tops/baseline.json from the base or HEAD, because a ledger changes only through gotops baseline." ;;
+                2:*) fail "the gate exited 2: a configuration or custody error: go-tops.yaml or go-tops.lock is invalid, a pinned tool does not match the lock, or the ledger is missing or differs from HEAD. The log above names it; gotops check and gotops lock --verify show it locally." ;;
+                3:*) fail "the gate exited 3: an environment error: the repository or a tool could not be read, or no C compiler is available for cgo. The log above names it." ;;
+                4:*) fail "the gate exited 4: refused in CI: a dry run or a range that leaves a required law out is not run in CI." ;;
+                *) fail "the gate exited $GATE_EXIT, which the protocol gives no meaning: not a verdict" ;;
+              esac ;;
           esac
           test -f "$report" || fail "the gate wrote no ${report}"
           jq -e 'type == "object"' "$report" > /dev/null 2>&1 || fail "${report} is not a JSON report"
           enforce="$(jq -e -r .enforce "$report")" || fail "the report names no enforce mode"
+          outcome=""
           if [ "$enforce" = ratchet ]; then
             outcome="$(jq -e -r .ratchet.outcome "$report")" || fail "the report has no ratchet outcome under enforce: ratchet"
             case "$LEG:$outcome" in
               ubuntu:pass|macos:pass|macos:skip) ;;
               ubuntu:fail) fail "the ratchet fails: a function is over its ledger entry" ;;
-              ubuntu:*) fail "the ubuntu leg is the ledger leg but reports a ratchet outcome of $outcome: the baseline was recorded under another build. Run the workflow by hand with mode init or refresh, which writes it on this leg, and commit the file." ;;
+              ubuntu:*) fail "the ubuntu leg is the ledger leg but reports a ratchet outcome of $outcome: the baseline was recorded under another build. The first ledger comes from the pull-request run of this leg, which writes it on this leg's own build when none exists. To replace a ledger recorded under another build, run the workflow by hand with mode init or refresh after the workflow is on the default branch, and commit the file it uploads." ;;
               *) fail "the ratchet outcome is $outcome on the $LEG leg" ;;
             esac
           fi
-          if [ "$GATE_EXIT" = 1 ]; then
-            jq -e '
-              ([.layers[] | select(.outcome != "pass" and .outcome != "skip")] | length) == 0
-              and .summary.failed == ["laws"]
-              and .laws.required > 0
-              and .laws.required == .laws.required_not_evaluated
-              and .laws.judged == 0
-              and ([.laws.results[] | select(.verdict == "refuse")] | length) == 0
-            ' "$report" > /dev/null || fail "the gate exited 1 for more than the required laws, which are reported not evaluated until they are judged"
+          if [ "$outcome" = skip ]; then
+            jq -e '(.ratchet.ledger_build | .tags |= sort) != (.ratchet.run_build | .tags |= sort)' "$report" > /dev/null \
+              || fail "the ratchet was skipped on the ledger's own build, or the report names no builds, so it judged nothing (C3b)"
           fi
+          jq -e --argjson code "$GATE_EXIT" '
+            ([.layers[] | select(.outcome != "pass" and .outcome != "skip")] | length) == 0
+            and .summary.outcome != "partial"
+            and (.layer_counts.ran | type) == "number"
+            and .layer_counts.ran == .layer_counts.enabled_in_range
+            and ((.summary.failed - ["laws"]) | length) == 0
+            and .summary.exit_code == $code
+            and ($code == 0 or (.summary.failed | length) > 0)
+            and (if (.summary.failed | any(. == "laws")) then
+                   .laws.required > 0
+                   and .laws.required == .laws.required_not_evaluated
+                   and .laws.judged == 0
+                   and ([.laws.results[] | select(.verdict == "refuse")] | length) == 0
+                 else true end)
+          ' "$report" > /dev/null || fail "the gate report is not a pass under ruling C9: the gate exited $GATE_EXIT and its report says another exit code, a layer failed or did not run, the run was partial, or something besides the required laws (all reported not evaluated, none judged, none refused) failed"
       # The floor leg builds and tests on the floor toolchain. The gate itself
       # runs on the other legs: a narrowed gate run leaves laws out of range.
       - name: build and test on the floor

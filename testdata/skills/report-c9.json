@@ -1,0 +1,272 @@
+{
+  "protocol": "0.4.3",
+  "tool_version": "0.0.0-dev",
+  "module": "github.com/example/fx",
+  "class": "binary-cli",
+  "enforce": "ratchet",
+  "git": {
+    "head": "7e52e671ab639d6a16480789d3eefd6b4d718737",
+    "base": "origin/main",
+    "dirty": false
+  },
+  "max_tier": 1,
+  "started_at": "2026-11-19T14:00:17Z",
+  "duration_ms": 4603,
+  "vuln_db_timestamp": "2026-11-11T02:51:11Z",
+  "layer_counts": {
+    "enabled_in_range": 4,
+    "ran": 4
+  },
+  "ratchet": {
+    "outcome": "pass",
+    "ledger_build": {
+      "goos": "darwin",
+      "goarch": "arm64",
+      "tags": [],
+      "cgo_enabled": true
+    },
+    "run_build": {
+      "goos": "darwin",
+      "goarch": "arm64",
+      "tags": [],
+      "cgo_enabled": true
+    }
+  },
+  "exemptions": [],
+  "layers": [
+    {
+      "id": "hygiene",
+      "tier": 1,
+      "outcome": "pass",
+      "details": {
+        "depguard": {
+          "outcome": "pass"
+        },
+        "findings": 0,
+        "format": {
+          "outcome": "pass"
+        },
+        "golangci_lint": "v2.15.0",
+        "licenses": {
+          "allowed": [
+            "MIT",
+            "Apache-2.0",
+            "BSD-3-Clause",
+            "BSD-2-Clause",
+            "ISC"
+          ],
+          "outcome": "pass"
+        },
+        "lint": {
+          "by_linter": {},
+          "findings": 0,
+          "outcome": "pass"
+        },
+        "tidy": {
+          "outcome": "pass"
+        },
+        "toolchain": {
+          "go_version": "go1.27.4",
+          "outcome": "pass",
+          "pinned": "go1.27.4"
+        },
+        "verify": {
+          "outcome": "pass"
+        },
+        "vulnerabilities": {
+          "db_last_modified": "2026-11-11T02:51:11Z",
+          "fail_on": "reachable",
+          "other": 0,
+          "outcome": "pass",
+          "reachable": [],
+          "time_dependent": true
+        }
+      }
+    },
+    {
+      "id": "tests",
+      "tier": 1,
+      "outcome": "pass",
+      "details": {
+        "packages": 1,
+        "race": true,
+        "shuffle_seed": 1795096820966889000,
+        "skipped": 0,
+        "tests": 1
+      }
+    },
+    {
+      "id": "coverage",
+      "tier": 1,
+      "outcome": "pass",
+      "reason": "under enforce ratchet the packages judgment replaces the floor verdict",
+      "details": {
+        "floor": 70,
+        "profile_bytes": 321,
+        "statements_pct": 50
+      }
+    },
+    {
+      "id": "crap",
+      "tier": 1,
+      "outcome": "pass",
+      "details": {
+        "cap": 10,
+        "not_measured": 0,
+        "violations": []
+      }
+    },
+    {
+      "id": "mutation",
+      "tier": 1,
+      "outcome": "skip",
+      "reason": "mutation lands at M4 of the kit",
+      "expires": "2027-03-01"
+    },
+    {
+      "id": "allocs",
+      "tier": 1,
+      "outcome": "skip",
+      "reason": "binary-cli does not gate benchmarks"
+    }
+  ],
+  "laws": {
+    "catalog": 43,
+    "judged": 0,
+    "not_evaluated": 42,
+    "applicable": 19,
+    "applicable_judged": 0,
+    "required": 16,
+    "required_not_evaluated": 16,
+    "not_evaluated_by_reason": {
+      "no_reader": 19,
+      "config_off": 0,
+      "input_missing": 0
+    },
+    "out_of_range": [],
+    "results": [
+      {
+        "id": "G-02",
+        "verdict": "not-evaluated",
+        "reason": "no_reader",
+        "reader": "tool"
+      },
+      {
+        "id": "G-07",
+        "verdict": "not-evaluated",
+        "reason": "no_reader",
+        "reader": "tool"
+      },
+      {
+        "id": "G-08",
+        "verdict": "not-evaluated",
+        "reason": "no_reader",
+        "reader": "analyzer"
+      },
+      {
+        "id": "G-11",
+        "verdict": "not-evaluated",
+        "reason": "no_reader",
+        "reader": "tool"
+      },
+      {
+        "id": "G-12",
+        "verdict": "not-evaluated",
+        "reason": "no_reader",
+        "reader": "tool"
+      },
+      {
+        "id": "G-16",
+        "verdict": "not-evaluated",
+        "reason": "no_reader",
+        "reader": "tool"
+      },
+      {
+        "id": "G-17",
+        "verdict": "not-evaluated",
+        "reason": "no_reader",
+        "reader": "analyzer"
+      },
+      {
+        "id": "G-18",
+        "verdict": "not-evaluated",
+        "reason": "no_reader",
+        "reader": "tool"
+      },
+      {
+        "id": "G-19",
+        "verdict": "not-evaluated",
+        "reason": "no_reader",
+        "reader": "analyzer"
+      },
+      {
+        "id": "G-25",
+        "verdict": "not-evaluated",
+        "reason": "no_reader",
+        "reader": "analyzer"
+      },
+      {
+        "id": "G-26",
+        "verdict": "not-evaluated",
+        "reason": "no_reader",
+        "reader": "analyzer"
+      },
+      {
+        "id": "G-33",
+        "verdict": "not-evaluated",
+        "reason": "no_reader",
+        "reader": "analyzer"
+      },
+      {
+        "id": "G-34",
+        "verdict": "not-evaluated",
+        "reason": "no_reader",
+        "reader": "tool"
+      },
+      {
+        "id": "G-37",
+        "verdict": "not-evaluated",
+        "reason": "no_reader",
+        "reader": "tool"
+      },
+      {
+        "id": "G-38",
+        "verdict": "not-evaluated",
+        "reason": "no_reader",
+        "reader": "analyzer"
+      },
+      {
+        "id": "G-40",
+        "verdict": "not-evaluated",
+        "reason": "no_reader",
+        "reader": "tool"
+      },
+      {
+        "id": "G-41",
+        "verdict": "not-evaluated",
+        "reason": "no_reader",
+        "reader": "attested"
+      },
+      {
+        "id": "G-42",
+        "verdict": "not-evaluated",
+        "reason": "no_reader",
+        "reader": "analyzer"
+      },
+      {
+        "id": "G-43",
+        "verdict": "not-evaluated",
+        "reason": "no_reader",
+        "reader": "analyzer"
+      }
+    ]
+  },
+  "summary": {
+    "outcome": "fail",
+    "exit_code": 1,
+    "failed": [
+      "laws"
+    ],
+    "enforced": true
+  }
+}
