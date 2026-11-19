@@ -88,7 +88,7 @@ func TestReportWithoutAReportOrWithABadOneExitsTwo(t *testing.T) {
 	if code, _, stderr := runIn(t, dir, nil, "report"); code != 2 || !strings.Contains(stderr, "run gotops gate first") {
 		t.Errorf("no report: exit %d, %q", code, stderr)
 	}
-	writeFile(t, dir, ".go-tops/report.json", `{"protocol": "0.4.2"}`)
+	writeFile(t, dir, ".go-tops/report.json", `{"protocol": "0.4.3"}`)
 	if code, _, stderr := runIn(t, dir, nil, "report"); code != 2 || !strings.Contains(stderr, "not a valid gate report") {
 		t.Errorf("bad report: exit %d, %q", code, stderr)
 	}
@@ -126,7 +126,7 @@ func lockRepo(t *testing.T, content string) string {
 	sum := sha256.Sum256([]byte(content))
 	h := hex.EncodeToString(sum[:])
 	dir := t.TempDir()
-	writeFile(t, dir, "go-tops.lock", "protocol: \"0.4.2\"\ntoolchain: "+goVersion(t)+"\ntrust:\n  mode: checksum\n  note: copied from the release checksum file\nbinaries:\n"+
+	writeFile(t, dir, "go-tops.lock", "protocol: \"0.4.3\"\ntoolchain: "+goVersion(t)+"\ntrust:\n  mode: checksum\n  note: copied from the release checksum file\nbinaries:\n"+
 		"  - name: gotools\n    version: \"1.0.0\"\n    url: https://example.com/{version}/{os}-{arch}\n    sha256:\n"+
 		"      darwin/arm64: "+h+"\n      darwin/amd64: "+h+"\n      linux/amd64: "+h+"\n      linux/arm64: "+h+"\n")
 	return dir
@@ -253,7 +253,7 @@ func TestVersionListsThePinnedTools(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit %d: %s", code, stderr)
 	}
-	for _, want := range []string{"protocol 0.4.2\npackage 0.0.0-dev\n", "toolchain " + goVersion(t) + " (go-tops.lock)\n", "tool gotools 1.0.0 (go-tops.lock)\n", "tool gotestsum v1.13.0 (tools/go.mod)\n"} {
+	for _, want := range []string{"protocol 0.4.3\npackage 0.0.0-dev\n", "toolchain " + goVersion(t) + " (go-tops.lock)\n", "tool gotools 1.0.0 (go-tops.lock)\n", "tool gotestsum v1.13.0 (tools/go.mod)\n"} {
 		if !strings.Contains(stdout, want) {
 			t.Errorf("version lacks %q:\n%s", want, stdout)
 		}
@@ -283,7 +283,7 @@ func TestLockUpdateExitCodes(t *testing.T) {
 	if err != nil || string(after) != refused {
 		t.Errorf("a failed download changed the lock: %v", err)
 	}
-	writeFile(t, dir, "go-tops.lock", "protocol: \"0.4.2\"\nbogus_key: 1\n")
+	writeFile(t, dir, "go-tops.lock", "protocol: \"0.4.3\"\nbogus_key: 1\n")
 	if code, _, stderr := runIn(t, dir, nil, "lock", "--update"); code != 2 {
 		t.Errorf("an invalid lock: exit %d, %q", code, stderr)
 	}

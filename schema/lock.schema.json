@@ -12,7 +12,7 @@
   ],
   "properties": {
     "protocol": {
-      "const": "0.4.2"
+      "const": "0.4.3"
     },
     "toolchain": {
       "description": "The exact Go release the gate runs on; go env GOVERSION must equal it (section 2).",

@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -92,6 +93,51 @@ func TestExampleReportRoundTrips(t *testing.T) {
 	}
 	if err := validate(t, out); err != nil {
 		t.Fatalf("rewritten example invalid: %v", err)
+	}
+	if r.Ratchet == nil || r.Ratchet.Outcome != "pass" || !reflect.DeepEqual(r.Ratchet.LedgerBuild, r.Ratchet.RunBuild) || r.Ratchet.RunBuild.GOOS != "linux" {
+		t.Errorf("the ratchet judgment of the example was lost: %+v", r.Ratchet)
+	}
+	if !strings.Contains(string(out), `"tags": []`) {
+		t.Errorf("an empty tag list must stay an empty array:\n%s", out)
+	}
+}
+
+// §6.7: a skipped ratchet judgment names both builds; a build with no tags
+// writes an empty array, which the schema requires; under another mode the
+// report has no ratchet object.
+func TestRatchetJudgmentMarshals(t *testing.T) {
+	r := minimal()
+	r.Enforce = "ratchet"
+	r.Ratchet = &Ratchet{
+		Outcome:     "skip",
+		LedgerBuild: Build{GOOS: "linux", GOARCH: "amd64", CgoEnabled: true},
+		RunBuild:    Build{GOOS: "darwin", GOARCH: "arm64", Tags: []string{"integration"}, CgoEnabled: true},
+	}
+	b, err := Marshal(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := validate(t, b); err != nil {
+		t.Fatalf("a skipped ratchet judgment must validate: %v\n%s", err, b)
+	}
+	if strings.Contains(string(b), `"tags": null`) {
+		t.Errorf("a build with no tags wrote null:\n%s", b)
+	}
+	h := minimal()
+	hb, err := Marshal(h)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(hb), `"ratchet"`) {
+		t.Errorf("a report that carries no judgment wrote a ratchet object:\n%s", hb)
+	}
+	h.Ratchet = r.Ratchet
+	hb, err = Marshal(h)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := validate(t, hb); err == nil {
+		t.Error("a ratchet object under enforce hard validated")
 	}
 }
 
