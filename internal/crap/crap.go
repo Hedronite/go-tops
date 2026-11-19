@@ -38,8 +38,6 @@ import (
 	"errors"
 	"slices"
 
-	"golang.org/x/tools/go/packages"
-
 	"github.com/Hedronite/go-tops/internal/complexity"
 	"github.com/Hedronite/go-tops/internal/gobuild"
 )
@@ -96,6 +94,10 @@ type NotMeasured struct {
 type Report struct {
 	Measured    []Function    // sorted by file, then source position
 	NotMeasured []NotMeasured // the same order
+	// PlatformLoads is how many times the module was loaded for another GOOS
+	// and GOARCH to type the not-measured functions: one load for each platform
+	// that compiles at least one of their files.
+	PlatformLoads int
 	// exist holds the key of every production function in any .go file of the
 	// module, whatever its build tags: the existence set.
 	exist map[string]bool
@@ -149,6 +151,7 @@ type model struct {
 	module                string
 	measured, notMeasured []*fn
 	keys                  []string // by fn.id
+	platformLoads         int
 }
 
 // analyze lists every production function of the module in dir and splits
@@ -161,7 +164,7 @@ func analyze(dir string, opt Options, cross bool) (*model, error) {
 	if err != nil {
 		return nil, err
 	}
-	module, err := modulePath(pkgs)
+	module, err := moduleOf(dir)
 	if err != nil {
 		return nil, err
 	}
@@ -169,18 +172,19 @@ func analyze(dir string, opt Options, cross bool) (*model, error) {
 	if err != nil {
 		return nil, err
 	}
-	all, err := scan(dir, module)
+	src, err := scan(dir, module)
 	if err != nil {
 		return nil, err
 	}
-	p, err := split(all, typed)
+	p, err := split(src.funcs, typed)
 	if err != nil {
 		return nil, err
 	}
+	m := &model{module: module, measured: p.measured, notMeasured: p.notMeasured, keys: identities(src.funcs)}
 	if cross {
-		typedComp(dir, opt.Build, cfg, p.notMeasured)
+		m.platformLoads = typedComp(dir, opt.Build, cfg, p.notMeasured)
 	}
-	return &model{module: module, measured: p.measured, notMeasured: p.notMeasured, keys: identities(all)}, nil
+	return m, nil
 }
 
 // Score scores the module in dir against the cover profile at profile (the
@@ -195,7 +199,7 @@ func Score(dir, profile string, opt Options) (Report, error) {
 		return Report{}, err
 	}
 	byFile := blocksByFile(blocks, m.module)
-	rep := Report{exist: map[string]bool{}}
+	rep := Report{exist: map[string]bool{}, PlatformLoads: m.platformLoads}
 	for _, k := range m.keys {
 		rep.exist[k] = true
 	}
@@ -237,11 +241,35 @@ func Compiled(dir string, build gobuild.Build) (map[string]bool, error) {
 	return keys, nil
 }
 
-func modulePath(pkgs []*packages.Package) (string, error) {
-	for _, p := range pkgs {
-		if p.Module != nil {
-			return p.Module.Path, nil
-		}
+// Existence is what exists in a module's source, whatever any build compiles.
+type Existence struct {
+	// Keys holds the identity of every production function in any .go file,
+	// sorted.
+	Keys []string
+	// Packages holds the import path of every package that has a production
+	// .go file, sorted.
+	Packages []string
+}
+
+// Exist lists the identities and the packages of the module in dir by reading
+// every production .go file, whatever its build tags. It runs no test and no
+// build, so `baseline --rename` can check that an old key has vanished and a new
+// key exists without producing a profile. It is the set Score reports as Keys.
+func Exist(dir string) (Existence, error) {
+	module, err := moduleOf(dir)
+	if err != nil {
+		return Existence{}, err
 	}
-	return "", errors.New("no package of the module compiles under this build, or the directory is not a module")
+	src, err := scan(dir, module)
+	if err != nil {
+		return Existence{}, err
+	}
+	keys := identities(src.funcs)
+	slices.Sort(keys)
+	pkgs := make([]string, 0, len(src.packages))
+	for p := range src.packages {
+		pkgs = append(pkgs, p)
+	}
+	slices.Sort(pkgs)
+	return Existence{Keys: keys, Packages: pkgs}, nil
 }

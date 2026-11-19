@@ -221,6 +221,69 @@ func TestNotMeasuredOverTheCapFails(t *testing.T) {
 	if err := validate(t, r); err != nil {
 		t.Errorf("details do not validate: %v", err)
 	}
+	list, ok := r.Details["violations"].([]any)
+	if !ok || len(list) != 1 {
+		t.Fatalf("violations %v, want the one not-measured function", r.Details["violations"])
+	}
+	row, ok := list[0].(map[string]any)
+	if !ok {
+		t.Fatalf("a violation is %T", list[0])
+	}
+	if row["func"] != module+".Tagged" || row["cc"] != 12 || row["cov_pct"] != nil || row["crap"] != nil {
+		t.Errorf("row %v: a not-measured function has its comp and null cov_pct and crap", row)
+	}
+	if r.Details["not_measured"] != 1 {
+		t.Errorf("not_measured = %v, want 1", r.Details["not_measured"])
+	}
+}
+
+// not_measured is always there, 0 included, so a reader never has to guess
+// whether an absent key means none.
+func TestNotMeasuredIsAlwaysReported(t *testing.T) {
+	env := fixture(t, map[string]string{"m.go": "package m\n\n" + ifs("Light", 2)}, line("m.go", 3, 1, 10, 2, 10, 1))
+	r := run(env)
+	if r.Outcome != gate.Pass || r.Details["not_measured"] != 0 {
+		t.Fatalf("%s: not_measured %v", r.Outcome, r.Details["not_measured"])
+	}
+	if err := validate(t, r); err != nil {
+		t.Errorf("details do not validate: %v", err)
+	}
+}
+
+// The report schema accepts a row that is measured or one that is not, never a
+// mixture: a score without coverage, or coverage without a score.
+func TestSchemaRefusesHalfMeasuredRows(t *testing.T) {
+	for _, row := range []map[string]any{
+		violation("k", "f.go", 12, 50.0, nil),
+		violation("k", "f.go", 12, nil, 12.0),
+	} {
+		r := gate.Result{Outcome: gate.Fail, Reason: "x", Details: map[string]any{"cap": 10.0, "violations": []any{row}, "not_measured": 0}}
+		if err := validate(t, r); err == nil {
+			t.Errorf("the schema accepted %v", row)
+		}
+	}
+	for _, row := range []map[string]any{
+		violation("k", "f.go", 12, 50.0, 14.5),
+		violation("k", "f.go", 12, nil, nil),
+	} {
+		r := gate.Result{Outcome: gate.Fail, Reason: "x", Details: map[string]any{"cap": 10.0, "violations": []any{row}, "not_measured": 0}}
+		if err := validate(t, r); err != nil {
+			t.Errorf("the schema refused %v: %v", row, err)
+		}
+	}
+}
+
+// The text says what typing the not-measured functions cost.
+func TestReasonSaysHowManyPlatformsWereLoaded(t *testing.T) {
+	env := fixture(t, map[string]string{
+		"m.go":         "package m\n\n" + ifs("Light", 2),
+		"x_windows.go": "package m\n\n" + ifs("Win", 2),
+	}, line("m.go", 3, 1, 10, 2, 10, 1))
+	r := run(env)
+	want := "1 production function(s) not measured on this build, typed by loading the module for 1 other platform(s)"
+	if r.Outcome != gate.Pass || r.Reason != want {
+		t.Fatalf("%s: %q, want %q", r.Outcome, r.Reason, want)
+	}
 }
 
 func TestNoProductionBlockFails(t *testing.T) {

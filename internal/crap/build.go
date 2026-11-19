@@ -88,9 +88,13 @@ var targets = []target{
 // discount on) where a platform that compiles their file also type-checks the
 // module. The others keep the comp counted without the discount, which errs
 // high. With the discount off there is nothing to type.
-func typedComp(dir string, build gobuild.Build, cfg complexity.Config, notMeasured []*fn) {
+//
+// It loads the module once for each platform that compiles at least one of
+// the not-measured files, and returns how many loads it made, so the report
+// can say what the count cost.
+func typedComp(dir string, build gobuild.Build, cfg complexity.Config, notMeasured []*fn) int {
 	if !cfg.Discount {
-		return
+		return 0
 	}
 	pending := map[string][]*fn{}
 	for _, f := range notMeasured {
@@ -100,7 +104,7 @@ func typedComp(dir string, build gobuild.Build, cfg complexity.Config, notMeasur
 	for {
 		t, ok := nextTarget(dir, pending, tried)
 		if !ok {
-			return
+			return len(tried)
 		}
 		tried[t] = true
 		typed, err := complexity.Load(dir, build.Platform(t.goos, t.goarch).LoadEnv(), "./...")
