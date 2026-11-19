@@ -104,6 +104,9 @@ type gateDoc struct {
 	required, notEval int
 	judged            int
 	refused           []string // ids of laws with verdict refuse, required or not
+	outcome           string   // summary.outcome; "" derives it from failed
+	ran               int      // layer_counts.ran; 0 means every layer in range
+	sameBuild         bool     // a ratchet skip on the ledger's own build
 }
 
 func (g gateDoc) json(t *testing.T) string {
@@ -119,24 +122,47 @@ func (g gateDoc) json(t *testing.T) string {
 		}
 		layers = append(layers, map[string]string{"id": id, "outcome": out})
 	}
+	outcome := g.outcome
+	if outcome == "" {
+		outcome = "pass"
+		if len(g.failed) > 0 {
+			outcome = "fail"
+		}
+	}
+	ran := g.ran
+	if ran == 0 {
+		ran = len(layers)
+	}
 	doc := map[string]any{
-		"enforce": g.enforce,
-		"layers":  layers,
-		"summary": map[string]any{"failed": append([]string{}, g.failed...)},
-		"laws":    map[string]any{"required": g.required, "required_not_evaluated": g.notEval, "judged": g.judged, "results": g.results()},
+		"enforce":      g.enforce,
+		"layers":       layers,
+		"layer_counts": map[string]any{"enabled_in_range": len(layers), "ran": ran},
+		"summary":      map[string]any{"failed": append([]string{}, g.failed...), "outcome": outcome, "exit_code": 1, "enforced": g.enforce != "advisory"},
+		"laws":         map[string]any{"required": g.required, "required_not_evaluated": g.notEval, "judged": g.judged, "results": g.results()},
 	}
 	switch g.ratchet {
 	case "":
 	case "-":
 		doc["ratchet"] = map[string]any{}
 	default:
-		doc["ratchet"] = map[string]any{"outcome": g.ratchet}
+		doc["ratchet"] = map[string]any{"outcome": g.ratchet, "ledger_build": linuxBuild, "run_build": g.runBuild()}
 	}
 	b, err := json.Marshal(doc)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return string(b)
+}
+
+var linuxBuild = map[string]any{"goos": "linux", "goarch": "amd64", "tags": []string{}, "cgo_enabled": true}
+
+// runBuild is the build of the run: the ledger's, except for a ratchet skip, which
+// is the report that the two differ (ruling C3b) unless the case says otherwise.
+func (g gateDoc) runBuild() map[string]any {
+	if g.ratchet == "skip" && !g.sameBuild {
+		return map[string]any{"goos": "darwin", "goarch": "arm64", "tags": []string{}, "cgo_enabled": true}
+	}
+	return linuxBuild
 }
 
 // results lists one not-evaluated result and a refuse for each refused id.
@@ -166,17 +192,19 @@ func (g gateDoc) with(f func(*gateDoc)) gateDoc {
 	return g
 }
 
-// The judging script, run against reports for each leg and exit code. Passing is
-// ruling C9; everything else fails closed with an error annotation.
-func TestTheJudgeAppliesC9OnEveryLegAndFailsClosed(t *testing.T) {
-	needTools(t)
-	_, judge := judgeSteps(t)
+// judgeCase is one report, the leg and exit code the judge runs it under, and
+// whether the judge fails it.
+type judgeCase struct {
+	name, leg, code string
+	doc             gateDoc
+	fails           bool
+}
+
+// judgeCases are the verdicts ruling C9 gives. The go-tops-gate skill judges the
+// same reports, and a test under the skills tag holds the two to each other.
+func judgeCases() []judgeCase {
 	clean := gateDoc{enforce: "ratchet", ratchet: "pass"}
-	for _, c := range []struct {
-		name, leg, code string
-		doc             gateDoc
-		fails           bool
-	}{
+	return []judgeCase{
 		// exit 0 passes, and the ledger leg must have judged the ratchet
 		{"exit 0 on the ledger leg", "ubuntu", "0", clean, false},
 		{"exit 0 on another leg, ratchet pass", "macos", "0", clean, false},
@@ -211,6 +239,17 @@ func TestTheJudgeAppliesC9OnEveryLegAndFailsClosed(t *testing.T) {
 		{"a law was judged and refused", "ubuntu", "1", c9().with(func(g *gateDoc) { g.judged, g.refused = 1, []string{"G-41"} }), true},
 		{"exit 0 with a refused law is the gate's verdict, not this step's", "ubuntu", "0", clean.with(func(g *gateDoc) { g.refused = []string{"G-41"} }), false},
 		{"no required laws, so exit 1 is something else", "ubuntu", "1", c9().with(func(g *gateDoc) { g.required, g.notEval = 0, 0 }), true},
+		// the report is read at every exit code (GO_TOPS.md section 3.3)
+		{"exit 0 from a partial run", "ubuntu", "0", clean.with(func(g *gateDoc) { g.outcome = "partial" }), true},
+		{"exit 0 with a layer that did not run", "ubuntu", "0", clean.with(func(g *gateDoc) { g.ran = 4 }), true},
+		{"advisory exit 0 with a failing layer", "ubuntu", "0", gateDoc{enforce: "advisory", layers: map[string]string{"crap": "fail"}, failed: []string{"crap"}}, true},
+		{"advisory exit 0 with the required laws alone", "ubuntu", "0", gateDoc{enforce: "advisory", failed: []string{"laws"}, required: 16, notEval: 16}, false},
+		{"advisory exit 0 with a refused law", "ubuntu", "0", gateDoc{enforce: "advisory", failed: []string{"laws"}, required: 16, notEval: 16, refused: []string{"G-41"}}, true},
+		{"exit 0 with a failed layer the report names", "macos", "0", clean.with(func(g *gateDoc) { g.layers = map[string]string{"tests": "fail"}; g.failed = []string{"tests"} }), true},
+		// a ratchet skip is judged by build (C3b)
+		{"a skip on another build", "macos", "0", clean.with(func(g *gateDoc) { g.ratchet = "skip" }), false},
+		{"a skip on the ledger's own build", "macos", "0", clean.with(func(g *gateDoc) { g.ratchet = "skip"; g.sameBuild = true }), true},
+		{"C9 with a skip on the ledger's own build", "macos", "1", c9().with(func(g *gateDoc) { g.ratchet = "skip"; g.sameBuild = true }), true},
 		// any other exit code fails directly, whatever the report says
 		{"exit 2", "ubuntu", "2", c9(), true},
 		{"exit 3", "macos", "3", clean, true},
@@ -218,7 +257,15 @@ func TestTheJudgeAppliesC9OnEveryLegAndFailsClosed(t *testing.T) {
 		{"an exit code that is not a number", "ubuntu", "x", clean, true},
 		{"no exit code: a step before the gate failed", "ubuntu", "", clean, true},
 		{"no exit code: a step before the gate failed, laws only", "macos", "", c9(), true},
-	} {
+	}
+}
+
+// The judging script, run against reports for each leg and exit code. Passing is
+// ruling C9; everything else fails closed with an error annotation.
+func TestTheJudgeAppliesC9OnEveryLegAndFailsClosed(t *testing.T) {
+	needTools(t)
+	_, judge := judgeSteps(t)
+	for _, c := range judgeCases() {
 		dir := t.TempDir()
 		if err := os.MkdirAll(filepath.Join(dir, ".go-tops"), 0o755); err != nil {
 			t.Fatal(err)
@@ -263,12 +310,8 @@ func TestTheJudgeFailsClosedOnAMissingOrBrokenReport(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			// exit 0 needs only a readable report; "no layers" and "no laws" matter at exit 1
-			fails := true
-			if code == "0" && (c.name == "no layers" || strings.HasPrefix(c.name, "no law") || c.name == "no judged count") {
-				fails = false
-			}
-			judged(t, c.name+" at exit "+code, judge, dir, "ubuntu", code, fails)
+			// the report is read at exit 0 as well as at exit 1 (GO_TOPS.md section 3.3)
+			judged(t, c.name+" at exit "+code, judge, dir, "ubuntu", code, true)
 		}
 	}
 }

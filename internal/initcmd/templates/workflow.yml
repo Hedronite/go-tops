@@ -101,15 +101,19 @@ jobs:
           code=$?
           echo "code=${code}" >> "$GITHUB_OUTPUT"
           exit 0
-      # Judge the gate on every gate leg. Exit 0 passes. Exit 1 passes only when
-      # tier 0 to 1 hold and the only failed item is the required laws, all of them
-      # reported not evaluated, with no law judged and none refused (ruling C9: the
-      # laws are judged from M5). Any other exit code is a failure. The ratchet is judged on the ledger leg only
-      # (GO_TOPS.md §6.7); this repository's ledger leg is the ubuntu leg, so it
-      # must report pass, and the other gate legs pass or skip. If the ledger leg
-      # reports skip, the baseline was recorded under a build no leg runs and the
-      # ratchet would never be judged. The step fails closed: a missing exit code
-      # (a step before the gate failed), a missing report, a report that is not
+      # Judge the gate on every gate leg, from the report and the exit code (GO_TOPS.md
+      # section 3.3, ruling C9). Exit 0 and exit 1 are both read against the report:
+      # every layer in range ran and is pass or skip, the run is not partial, and the
+      # only failed item, if any, is the required laws, all reported not evaluated,
+      # with no law judged and none refused (the laws are judged from M5). An exit 0
+      # with a failed layer (an advisory run) or from a partial run is not a pass. Any
+      # other exit code is a failure. The ratchet is judged on the ledger leg only
+      # (GO_TOPS.md section 6.7); this repository's ledger leg is the ubuntu leg, so
+      # it must report pass, and the other gate legs pass or skip, a skip only when
+      # the run's build differs from the ledger's (ruling C3b): a skip on the ledger's
+      # own build judged nothing. If the ledger leg reports skip, the baseline was
+      # recorded under a build no leg runs. The step fails closed: a missing exit
+      # code (a step before the gate failed), a missing report, a report that is not
       # JSON and a missing field are failures.
       - name: judge the gate (ruling C9) and the ratchet on the ledger leg
         if: always() && matrix.leg != 'floor' && github.event_name != 'workflow_dispatch'
@@ -128,6 +132,7 @@ jobs:
           test -f "$report" || fail "the gate wrote no ${report}"
           jq -e 'type == "object"' "$report" > /dev/null 2>&1 || fail "${report} is not a JSON report"
           enforce="$(jq -e -r .enforce "$report")" || fail "the report names no enforce mode"
+          outcome=""
           if [ "$enforce" = ratchet ]; then
             outcome="$(jq -e -r .ratchet.outcome "$report")" || fail "the report has no ratchet outcome under enforce: ratchet"
             case "$LEG:$outcome" in
@@ -137,16 +142,24 @@ jobs:
               *) fail "the ratchet outcome is $outcome on the $LEG leg" ;;
             esac
           fi
-          if [ "$GATE_EXIT" = 1 ]; then
-            jq -e '
-              ([.layers[] | select(.outcome != "pass" and .outcome != "skip")] | length) == 0
-              and .summary.failed == ["laws"]
-              and .laws.required > 0
-              and .laws.required == .laws.required_not_evaluated
-              and .laws.judged == 0
-              and ([.laws.results[] | select(.verdict == "refuse")] | length) == 0
-            ' "$report" > /dev/null || fail "the gate exited 1 for more than the required laws, which are reported not evaluated until they are judged"
+          if [ "$outcome" = skip ]; then
+            jq -e '(.ratchet.ledger_build | .tags |= sort) != (.ratchet.run_build | .tags |= sort)' "$report" > /dev/null \
+              || fail "the ratchet was skipped on the ledger's own build, or the report names no builds, so it judged nothing (C3b)"
           fi
+          jq -e --argjson code "$GATE_EXIT" '
+            ([.layers[] | select(.outcome != "pass" and .outcome != "skip")] | length) == 0
+            and .summary.outcome != "partial"
+            and (.layer_counts.ran | type) == "number"
+            and .layer_counts.ran == .layer_counts.enabled_in_range
+            and ((.summary.failed - ["laws"]) | length) == 0
+            and ($code == 0 or (.summary.failed | length) > 0)
+            and (if (.summary.failed | any(. == "laws")) then
+                   .laws.required > 0
+                   and .laws.required == .laws.required_not_evaluated
+                   and .laws.judged == 0
+                   and ([.laws.results[] | select(.verdict == "refuse")] | length) == 0
+                 else true end)
+          ' "$report" > /dev/null || fail "the gate report is not a pass under ruling C9: a layer failed or did not run, the run was partial, or something besides the required laws (all reported not evaluated, none judged, none refused) failed"
       # The floor leg builds and tests on the floor toolchain. The gate itself
       # runs on the other legs: a narrowed gate run leaves laws out of range.
       - name: build and test on the floor
