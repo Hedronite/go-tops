@@ -24,9 +24,12 @@ import (
 //
 //	go test -tags adoption -run TestAdoption -timeout 20m ./cmd/gotops
 //
-// The full gate cannot exit 0 before M5, because the required laws are not
-// evaluated until then, so the test reads the report: the ratchet outcome, and
-// the layers that feed the ledger.
+// What "the gate passes under ratchet" means at M2 (ruling C9): the report has
+// ratchet.outcome pass and every tier 0 to 1 layer (hygiene, tests, coverage,
+// CRAP) pass, and the only failing item is the class's required laws, reported as
+// required and not evaluated until M5. A class with no required laws exits 0.
+// The test asserts that from report.json, the pattern of the kit's own assertion
+// step, because the exit code is 1 on those laws until then.
 
 // branches writes n ifs on a with distinct conditions (a > 0, a > 1, ...), each
 // adding one to n: complexity grows by n, and a call with a small a runs only
@@ -121,6 +124,36 @@ func adLayer(t *testing.T, rep map[string]any, id string) string {
 	return ""
 }
 
+// adAssertPasses is ruling C9: ratchet pass, hygiene, tests, coverage and CRAP
+// pass, and nothing fails but the required laws, none of them evaluated; a class
+// with no required laws exits 0.
+func adAssertPasses(t *testing.T, code int, rep map[string]any, when string) {
+	t.Helper()
+	if got := adRatchet(t, rep); got != "pass" {
+		t.Errorf("%s: the ratchet outcome is %s, want pass", when, got)
+	}
+	for _, l := range []string{"hygiene", "tests", "coverage", "crap"} {
+		if got := adLayer(t, rep, l); got != "pass" {
+			t.Errorf("%s: layer %s is %s, want pass", when, l, got)
+		}
+	}
+	lw := object(t, rep["laws"])
+	required, notEvaluated := lw["required"], lw["required_not_evaluated"]
+	failed := failed(t, rep)
+	if required == float64(0) {
+		if code != 0 || len(failed) != 0 {
+			t.Errorf("%s: a class with no required laws exits 0 with nothing failed: exit %d, failed %v", when, code, failed)
+		}
+		return
+	}
+	if notEvaluated != required {
+		t.Errorf("%s: %v required laws, %v not evaluated: until M5 every required law is reported not evaluated", when, required, notEvaluated)
+	}
+	if len(failed) != 1 || failed[0] != "laws" || code != 1 {
+		t.Errorf("%s: exit %d, failed %v: the only failing item must be the required laws", when, code, failed)
+	}
+}
+
 func adFunctions(t *testing.T, dir string) map[string]any {
 	t.Helper()
 	b, err := os.ReadFile(filepath.Join(dir, ".go-tops", "baseline.json"))
@@ -183,23 +216,16 @@ func TestAdoptionOfALegacyRepo(t *testing.T) {
 	if code, _, stderr := gotopsEnv(t, dir, nil, "check"); code != 0 {
 		t.Fatalf("check: exit %d\n%s", code, stderr)
 	}
-	_, rep := adGate(t, dir)
-	if got := adRatchet(t, rep); got != "pass" {
-		t.Fatalf("the first ledger must pass the ratchet, got %s", got)
-	}
-	for _, l := range []string{"hygiene", "tests", "coverage"} {
-		if got := adLayer(t, rep, l); got != "pass" {
-			t.Errorf("%s: %s", l, got)
-		}
-	}
+	code, rep := adGate(t, dir)
+	adAssertPasses(t, code, rep, "the first ledger, with no source edit")
 
 	// 4. The adoption merges; a change that raises Heavy fails.
 	adGit(t, dir, "update-ref", "refs/remotes/origin/main", "HEAD")
 	adGit(t, dir, "checkout", "-q", "-b", "raise")
 	writeFile(t, dir, "legacy.go", legacy(heavyFunc("\tif a > 100 {\n\t\tn++\n\t}\n"))["legacy.go"])
 	adGit(t, dir, "commit", "-q", "-a", "-m", "raise Heavy")
-	if _, rep := adGate(t, dir); adRatchet(t, rep) != "fail" || !strings.Contains(strings.Join(failed(t, rep), ","), "crap") {
-		t.Fatalf("raising a function past its entry must fail the ratchet and CRAP: %v", rep["summary"])
+	if _, rep := adGate(t, dir); adRatchet(t, rep) != "fail" || !strings.Contains(strings.Join(failed(t, rep), ","), "ratchet") {
+		t.Fatalf("raising a function past its entry must fail the ratchet: %v", rep["summary"])
 	}
 
 	// 5. A change that lowers Heavy passes, and a refresh drops its entry.
@@ -207,10 +233,8 @@ func TestAdoptionOfALegacyRepo(t *testing.T) {
 	adGit(t, dir, "checkout", "-q", "-b", "lower", "adopt")
 	writeFile(t, dir, "legacy.go", legacy(loopedHeavy)["legacy.go"])
 	adGit(t, dir, "commit", "-q", "-a", "-m", "lower Heavy")
-	_, rep = adGate(t, dir)
-	if got := adRatchet(t, rep); got != "pass" || strings.Contains(strings.Join(failed(t, rep), ","), "crap") {
-		t.Fatalf("lowering a function must pass: ratchet %s, summary %v", got, rep["summary"])
-	}
+	code, rep = adGate(t, dir)
+	adAssertPasses(t, code, rep, "after lowering Heavy")
 	if code, stdout, stderr := gotopsEnv(t, dir, []string{"CGO_ENABLED=1"}, "baseline"); code != 0 {
 		t.Fatalf("baseline refresh: exit %d\n%s\n%s", code, stdout, stderr)
 	}
