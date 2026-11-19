@@ -121,8 +121,8 @@ func Render(r Report, f Format) ([]byte, error) {
 }
 
 // RenderText is the one text renderer: `gotops gate` prints it for a run and
-// `gotops report` for a stored one. It shows one line per layer, the laws, the
-// verdict. A partial run says PARTIAL, and an advisory run says it is not
+// `gotops report` for a stored one. It shows one line per layer, one line for
+// every exemption in force with its expiry (§6.8), the laws, the verdict. A partial run says PARTIAL, and an advisory run says it is not
 // enforced: `NOT ENFORCED (advisory, expires <date>): outcome <OUTCOME>`
 // (§3.3, §6.7).
 func RenderText(r Report) string {
@@ -137,6 +137,9 @@ func RenderText(r Report) string {
 			fmt.Fprintf(&b, "  error: %s", msg)
 		}
 		b.WriteByte('\n')
+	}
+	for _, e := range r.Exemptions {
+		fmt.Fprintf(&b, "  %s\n", e.Line())
 	}
 	if r.VulnDBTimestamp != nil {
 		fmt.Fprintf(&b, "  vulnerability database as of %s; time-dependent: the same commit can change verdict when it moves\n", *r.VulnDBTimestamp)
