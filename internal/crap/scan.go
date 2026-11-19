@@ -1,6 +1,7 @@
 package crap
 
 import (
+	"errors"
 	"fmt"
 	"go/ast"
 	"go/parser"
@@ -22,10 +23,18 @@ type fn struct {
 	typed bool // for a not-measured function: Complexity is typed
 }
 
-// scan parses every production file under dir, whatever its build tags, and
-// lists the functions of them, comp counted without type information, sorted by
-// file and then source position. module is the module path.
-func scan(dir, module string) ([]*fn, error) {
+// scanned is every production file of a module, whatever its build tags.
+type scanned struct {
+	funcs []*fn // comp counted without type information, sorted by file, then source position
+	// packages holds the import path of every directory with a production .go
+	// file, whether or not the file declares a function.
+	packages map[string]bool
+}
+
+// scan parses every production file under dir, whatever its build tags. module
+// is the module path.
+func scan(dir, module string) (*scanned, error) {
+	out := &scanned{packages: map[string]bool{}}
 	var all []*fn
 	err := filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -37,9 +46,12 @@ func scan(dir, module string) ([]*fn, error) {
 		if !productionName(d.Name()) {
 			return nil
 		}
-		funcs, err := parseFile(dir, module, p)
+		pkgPath, funcs, err := parseFile(dir, module, p)
 		if err != nil {
 			return err
+		}
+		if pkgPath != "" {
+			out.packages[pkgPath] = true
 		}
 		all = append(all, funcs...)
 		return nil
@@ -51,7 +63,8 @@ func scan(dir, module string) ([]*fn, error) {
 	for i, f := range all {
 		f.id = i
 	}
-	return all, nil
+	out.funcs = all
+	return out, nil
 }
 
 func compareFuncs(a, b *fn) int {
@@ -84,19 +97,20 @@ func productionName(name string) bool {
 	return strings.HasSuffix(name, ".go") && !strings.HasSuffix(name, "_test.go") && !strings.HasSuffix(name, ".gen.go")
 }
 
-// parseFile lists the functions of one file; a generated file has none.
-func parseFile(root, module, p string) ([]*fn, error) {
+// parseFile lists the functions of one file and the import path of its
+// package; a generated file has neither.
+func parseFile(root, module, p string) (string, []*fn, error) {
 	fset := token.NewFileSet()
 	file, err := parser.ParseFile(fset, p, nil, parser.ParseComments|parser.SkipObjectResolution)
 	if err != nil {
-		return nil, err
+		return "", nil, err
 	}
 	if ast.IsGenerated(file) {
-		return nil, nil
+		return "", nil, nil
 	}
 	rel, err := filepath.Rel(root, p)
 	if err != nil {
-		return nil, err
+		return "", nil, err
 	}
 	rel = filepath.ToSlash(rel)
 	pkgPath := module
@@ -105,11 +119,30 @@ func parseFile(root, module, p string) ([]*fn, error) {
 	}
 	funcs, err := complexity.AnalyzeSyntax(fset, file, pkgPath, rel)
 	if err != nil {
-		return nil, err
+		return "", nil, err
 	}
 	out := make([]*fn, len(funcs))
 	for i, f := range funcs {
 		out[i] = &fn{Func: f}
 	}
-	return out, nil
+	return pkgPath, out, nil
+}
+
+// moduleOf reads the module path from the go.mod in dir.
+func moduleOf(dir string) (string, error) {
+	raw, err := os.ReadFile(filepath.Join(dir, "go.mod"))
+	if err != nil {
+		return "", fmt.Errorf("read go.mod: %w", err)
+	}
+	for _, line := range strings.Split(string(raw), "\n") {
+		line, _, _ = strings.Cut(line, "//")
+		rest, ok := strings.CutPrefix(strings.TrimSpace(line), "module")
+		if !ok || !strings.HasPrefix(rest, " ") && !strings.HasPrefix(rest, "\t") {
+			continue
+		}
+		if path := strings.Trim(strings.TrimSpace(rest), "\"`"); path != "" {
+			return path, nil
+		}
+	}
+	return "", errors.New("no module line in go.mod")
 }
