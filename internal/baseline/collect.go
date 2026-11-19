@@ -223,7 +223,7 @@ func (f Feeds) functions() (map[string]float64, error) {
 		Cap        *float64
 		Violations *[]struct {
 			Func string
-			Crap float64
+			Crap *float64 // null for a function the run does not measure (§6.2)
 		}
 	}
 	if err := json.Unmarshal(raw, &d); err != nil {
@@ -240,8 +240,10 @@ func (f Feeds) functions() (map[string]float64, error) {
 		switch {
 		case v.Func == "":
 			return nil, refuse("the crap layer listed a function with no identity")
-		case math.IsNaN(v.Crap) || math.IsInf(v.Crap, 0) || v.Crap < 0:
-			return nil, refuse("the crap layer gave %s the score %v", v.Func, v.Crap)
+		case v.Crap == nil:
+			continue // not measured on this run: no score, so no entry
+		case math.IsNaN(*v.Crap) || math.IsInf(*v.Crap, 0) || *v.Crap < 0:
+			return nil, refuse("the crap layer gave %s the score %v", v.Func, *v.Crap)
 		}
 		if out == nil {
 			out = map[string]float64{}
@@ -249,7 +251,7 @@ func (f Feeds) functions() (map[string]float64, error) {
 		if _, dup := out[v.Func]; dup {
 			return nil, refuse("the crap layer listed two functions with the identity %s", v.Func)
 		}
-		out[v.Func] = v.Crap
+		out[v.Func] = *v.Crap
 	}
 	return out, nil
 }

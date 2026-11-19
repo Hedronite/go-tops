@@ -163,6 +163,24 @@ func TestCollectLeavesExemptFunctionsOutOfTheLedger(t *testing.T) {
 	}
 }
 
+// Protocol 0.4.3: a row for a function the run does not measure has null for
+// cov_pct and crap. --init records what was measured, so it writes no entry for it.
+func TestCollectWritesNoEntryForAFunctionThatWasNotMeasured(t *testing.T) {
+	f := newFeeds(t)
+	unmeasured := map[string]any{"func": "example.com/app/a.WinOnly", "file": "a/w_windows.go", "cc": 12, "cov_pct": nil, "crap": nil, "baseline": nil}
+	f.setLayer("crap", report.Layer{ID: "crap", Outcome: "fail", Details: map[string]any{
+		"cap": 10.0, "not_measured": 1,
+		"violations": fns(cf("example.com/app/a.Alpha", "a/a.go", 21.5), unmeasured),
+	}})
+	got, err := baseline.Collect(f.in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(got.Functions, map[string]float64{"example.com/app/a.Alpha": 21.5}) {
+		t.Errorf("functions %v: a function with a null score got an entry", got.Functions)
+	}
+}
+
 func TestCollectReadsDetailsThatHaveBeenThroughJSON(t *testing.T) {
 	// A layer's details are whatever it put in the map; a decoded report holds
 	// generic maps. The reader must not care which.
