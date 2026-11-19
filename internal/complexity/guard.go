@@ -221,7 +221,7 @@ func (g *guardFinder) wrapsWithVerb(call *ast.CallExpr, x types.Object) bool {
 	}
 	operands := call.Args[1:]
 	for _, i := range wrapOperands(format) {
-		if i < len(operands) && g.isObject(operands[i], x) {
+		if i >= 0 && i < len(operands) && g.isObject(operands[i], x) {
 			return true
 		}
 	}

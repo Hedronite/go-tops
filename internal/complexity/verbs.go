@@ -28,6 +28,12 @@ func wrapOperands(format string) []int {
 	return ops
 }
 
+// maxOperand bounds an operand index. A call with more operands than this is not
+// one a format can name, so an index past it, or one that overflows an int, makes
+// the format unreadable: `%[9223372036854775807]*.*w` must not wrap round to a
+// negative operand.
+const maxOperand = 1 << 16
+
 // directive is one parsed `%...verb`.
 type directive struct {
 	verb    byte
@@ -36,56 +42,73 @@ type directive struct {
 	next    int // operand index after the directive
 }
 
+// scanner reads one directive. The first thing it cannot read sets bad, and
+// nothing after that moves it.
+type scanner struct {
+	f   string
+	i   int
+	arg int
+	bad bool
+}
+
 func scanDirective(f string, i, arg int) (directive, bool) {
-	i = skipSet(f, i, "#0+- ")
-	var ok bool
-	if i, arg, ok = argIndex(f, i, arg); !ok {
+	s := &scanner{f: f, i: i, arg: arg}
+	s.skip("#0+- ")
+	s.index()
+	s.widthOrPrecision()
+	if s.at('.') {
+		s.i++
+		s.index()
+		s.widthOrPrecision()
+	}
+	s.index()
+	if s.bad || s.i >= len(f) {
 		return directive{}, false
 	}
-	i, arg = starOrDigits(f, i, arg)
-	if i < len(f) && f[i] == '.' {
-		if i, arg, ok = argIndex(f, i+1, arg); !ok {
-			return directive{}, false
-		}
-		i, arg = starOrDigits(f, i, arg)
+	if f[s.i] == '%' {
+		return directive{verb: '%', operand: -1, end: s.i, next: s.arg}, true
 	}
-	if i, arg, ok = argIndex(f, i, arg); !ok || i >= len(f) {
-		return directive{}, false
-	}
-	if f[i] == '%' {
-		return directive{verb: '%', operand: -1, end: i, next: arg}, true
-	}
-	return directive{verb: f[i], operand: arg, end: i, next: arg + 1}, true
+	return directive{verb: f[s.i], operand: s.arg, end: s.i, next: s.arg + 1}, true
 }
 
-func skipSet(f string, i int, set string) int {
-	for i < len(f) && strings.IndexByte(set, f[i]) >= 0 {
-		i++
+func (s *scanner) at(c byte) bool { return !s.bad && s.i < len(s.f) && s.f[s.i] == c }
+
+func (s *scanner) skip(set string) {
+	for s.i < len(s.f) && strings.IndexByte(set, s.f[s.i]) >= 0 {
+		s.i++
 	}
-	return i
 }
 
-// starOrDigits skips a width or precision: `*` takes an operand, digits take none.
-func starOrDigits(f string, i, arg int) (int, int) {
-	if i < len(f) && f[i] == '*' {
-		return i + 1, arg + 1
+// widthOrPrecision skips a width or precision: `*` takes an operand, digits take none.
+func (s *scanner) widthOrPrecision() {
+	if !s.at('*') {
+		s.skip("0123456789")
+		return
 	}
-	return skipSet(f, i, "0123456789"), arg
+	if s.arg >= maxOperand {
+		s.bad = true
+		return
+	}
+	s.i++
+	s.arg++
 }
 
-// argIndex reads an optional `[n]` and moves the operand index to n-1. It
-// fails on a malformed index.
-func argIndex(f string, i, arg int) (int, int, bool) {
-	if i >= len(f) || f[i] != '[' {
-		return i, arg, true
+// index reads an optional `[n]` and moves the operand index to n-1. A malformed
+// index, one below 1 and one above maxOperand make the format unreadable.
+func (s *scanner) index() {
+	if !s.at('[') {
+		return
 	}
-	end := strings.IndexByte(f[i:], ']')
+	end := strings.IndexByte(s.f[s.i:], ']')
 	if end < 0 {
-		return i, arg, false
+		s.bad = true
+		return
 	}
-	n, err := strconv.Atoi(f[i+1 : i+end])
-	if err != nil || n < 1 {
-		return i, arg, false
+	n, err := strconv.Atoi(s.f[s.i+1 : s.i+end])
+	if err != nil || n < 1 || n > maxOperand {
+		s.bad = true
+		return
 	}
-	return i + end + 1, n - 1, true
+	s.i += end + 1
+	s.arg = n - 1
 }
