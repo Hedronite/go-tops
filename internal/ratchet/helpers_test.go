@@ -54,7 +54,7 @@ func initLedger(m ratchet.Measure, build gobuild.Build) *ratchet.Ledger {
 		Exemptions: m.Exemptions, JudgedLaws: m.JudgedLaws,
 	}
 	for _, f := range m.Functions {
-		if f.CRAP > m.Cap && !m.Exempt[f.Key] {
+		if f.CRAP > m.Cap {
 			l.Functions[f.Key] = f.CRAP
 		}
 	}
@@ -141,4 +141,51 @@ func notMeasured(key string, comp int) crap.NotMeasured {
 
 func overFunction(key string, score float64) crap.Function {
 	return crap.Function{Key: key, File: "p/p.go", Comp: int(math.Ceil(score)), Cov: 0.5, CRAP: score}
+}
+
+// ledgerBuildFiles and ledgerBuildPackages are what the ledger build compiles in the
+// legacy repo: every file and package its measures name.
+var (
+	ledgerBuildFiles    = map[string]bool{"a.go": true, "b.go": true, "x.go": true, "y.go": true, "z.go": true}
+	ledgerBuildPackages = map[string]bool{"example.com/m/a": true, "example.com/m/b": true, "example.com/m/low": true}
+)
+
+// otherLegInput is a run on darwin against a ledger recorded on linux, given what the
+// ledger build compiles: the functions in compiled, and the files and packages of
+// the legacy repo.
+func otherLegInput(l *ratchet.Ledger, base ratchet.Base, m ratchet.Measure, compiled map[string]bool) ratchet.Input {
+	return ratchet.Input{
+		Ledger: l, Base: base, Run: darwin, M: m,
+		LedgerCompiled: compiled, LedgerFiles: ledgerBuildFiles, LedgerPackages: ledgerBuildPackages,
+	}
+}
+
+// defaultPaths is the configuration of a module that names no baseline or acks path.
+func defaultPaths(string) (ratchet.Paths, error) {
+	return ratchet.Paths{Ledger: ratchet.LedgerPath}, nil
+}
+
+// without is the measure of a repo where the function with the key is covered by an
+// exemption: the CRAP layer leaves it out of the violations it lists, so the baseline
+// measures nothing for it.
+func without(m ratchet.Measure, k string) ratchet.Measure {
+	var fs []crap.Function
+	for _, f := range m.Functions {
+		if f.Key != k {
+			fs = append(fs, f)
+		}
+	}
+	m.Functions = fs
+	return m
+}
+
+// num reads a number out of layer details whatever form it took.
+func num(v any) float64 {
+	switch n := v.(type) {
+	case int:
+		return float64(n)
+	case float64:
+		return n
+	}
+	return -1
 }

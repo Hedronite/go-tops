@@ -11,14 +11,15 @@ import (
 	"strings"
 )
 
-// LedgerPath is where the baseline lives, relative to the module root.
+// LedgerPath is where the baseline lives unless go-tops.yaml names another path,
+// relative to the module root.
 const LedgerPath = ".go-tops/baseline.json"
 
-// ReadBase reads the baseline at the merge base of HEAD and base through git, not
+// ReadBase reads the baseline at rel at the merge base of HEAD and base through git, not
 // the file in the working tree (§6.7). A base with no copy is a first ledger
 // (Ledger nil). No merge base, a shallow clone, an unknown ref and a copy that
 // does not parse are errors: the judgment fails and makes no guess.
-func ReadBase(dir, base string) Base {
+func ReadBase(dir, base, rel string) Base {
 	if err := notShallow(dir); err != nil {
 		return Base{Err: err}
 	}
@@ -26,7 +27,7 @@ func ReadBase(dir, base string) Base {
 	if err != nil {
 		return Base{Err: err}
 	}
-	return ledgerAt(dir, mb)
+	return ledgerAt(dir, mb, rel)
 }
 
 // notShallow fails for a shallow clone: its history may hide the merge base.
@@ -57,8 +58,8 @@ func mergeBase(dir, base string) (string, error) {
 }
 
 // ledgerAt reads the baseline in commit rev: no ledger when the commit has none.
-func ledgerAt(dir, rev string) Base {
-	spec := rev + ":" + LedgerPath
+func ledgerAt(dir, rev, rel string) Base {
+	spec := rev + ":" + rel
 	if _, code, err := git(dir, "cat-file", "-e", spec); err != nil {
 		return Base{Err: err}
 	} else if code != 0 {
@@ -100,10 +101,11 @@ func failure(err error, out string) string {
 	return strings.TrimSpace(out)
 }
 
-// readLedgerFile reads the baseline file in the working tree: nil when there is
-// none, an error when it exists and does not parse.
-func readLedgerFile(dir string) (*Ledger, error) {
-	raw, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(LedgerPath)))
+// readLedgerFile reads the baseline file in the working tree at rel, the path the
+// configuration names: nil when there is none, an error when it exists and does not
+// parse.
+func readLedgerFile(dir, rel string) (*Ledger, error) {
+	raw, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(rel)))
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, nil
 	}

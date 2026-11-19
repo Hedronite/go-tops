@@ -72,7 +72,7 @@ func TestBaseWithoutALedgerIsAFirstLedger(t *testing.T) {
 	commit(t, dir, "base", map[string]string{"a.go": "package a\n"})
 	git(t, dir, "checkout", "-q", "-b", "feature")
 	commit(t, dir, "adopt", map[string]string{baselinePath: ledgerFile(t, 12)})
-	b := ratchet.ReadBase(dir, "main")
+	b := ratchet.ReadBase(dir, "main", baselinePath)
 	if b.Err != nil || b.Ledger != nil {
 		t.Fatalf("base %+v, want no error and no ledger: a first ledger", b)
 	}
@@ -88,7 +88,7 @@ func TestBaseLedgerIsReadAtTheMergeBase(t *testing.T) {
 	commit(t, dir, "main moves", map[string]string{baselinePath: ledgerFile(t, 9)})
 	git(t, dir, "checkout", "-q", "feature")
 
-	b := ratchet.ReadBase(dir, "main")
+	b := ratchet.ReadBase(dir, "main", baselinePath)
 	if b.Err != nil || b.Ledger == nil {
 		t.Fatalf("base %+v", b)
 	}
@@ -107,7 +107,7 @@ func TestBaseIgnoresTheWorkingTree(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, filepath.FromSlash(baselinePath)), []byte(ledgerFile(t, 99)), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	b := ratchet.ReadBase(dir, "main")
+	b := ratchet.ReadBase(dir, "main", baselinePath)
 	if b.Err != nil || b.Ledger == nil || b.Ledger.Functions["example.com/m/p.F"] != 12 {
 		t.Fatalf("base %+v, want the committed 12", b)
 	}
@@ -118,7 +118,7 @@ func TestNoMergeBaseFails(t *testing.T) {
 	commit(t, dir, "base", map[string]string{"a.go": "package a\n"})
 	git(t, dir, "checkout", "-q", "--orphan", "unrelated")
 	commit(t, dir, "an unrelated history", map[string]string{"b.go": "package b\n"})
-	b := ratchet.ReadBase(dir, "main")
+	b := ratchet.ReadBase(dir, "main", baselinePath)
 	if b.Err == nil || !strings.Contains(b.Err.Error(), "merge base") {
 		t.Fatalf("base %+v, want an error naming the merge base", b)
 	}
@@ -130,7 +130,7 @@ func TestShallowCloneFails(t *testing.T) {
 	commit(t, src, "two", map[string]string{"a.go": "package a\n"})
 	clone := filepath.Join(t.TempDir(), "clone")
 	git(t, filepath.Dir(clone), "clone", "-q", "--depth", "1", "file://"+src, clone)
-	b := ratchet.ReadBase(clone, "origin/main")
+	b := ratchet.ReadBase(clone, "origin/main", baselinePath)
 	if b.Err == nil || !strings.Contains(b.Err.Error(), "shallow") {
 		t.Fatalf("base %+v, want an error naming the shallow clone", b)
 	}
@@ -139,7 +139,7 @@ func TestShallowCloneFails(t *testing.T) {
 func TestUnknownBaseFails(t *testing.T) {
 	dir := repo(t)
 	commit(t, dir, "base", map[string]string{"a.go": "package a\n"})
-	if b := ratchet.ReadBase(dir, "origin/main"); b.Err == nil {
+	if b := ratchet.ReadBase(dir, "origin/main", baselinePath); b.Err == nil {
 		t.Fatal("a base that does not exist was accepted")
 	}
 }
@@ -149,7 +149,7 @@ func TestBaseLedgerThatCannotBeReadFails(t *testing.T) {
 	commit(t, dir, "base", map[string]string{baselinePath: "{not json"})
 	git(t, dir, "checkout", "-q", "-b", "feature")
 	commit(t, dir, "work", map[string]string{"a.go": "package a\n"})
-	if b := ratchet.ReadBase(dir, "main"); b.Err == nil {
+	if b := ratchet.ReadBase(dir, "main", baselinePath); b.Err == nil {
 		t.Fatal("an unreadable base ledger was treated as absent")
 	}
 }
@@ -176,5 +176,20 @@ func TestParseRefusesWhatTheSchemaRefuses(t *testing.T) {
 		if _, err := ratchet.Parse([]byte(raw)); err == nil {
 			t.Errorf("%s: parsed", name)
 		}
+	}
+}
+
+// The base copy is read at the configured path too.
+func TestBaseLedgerIsReadAtTheConfiguredPath(t *testing.T) {
+	dir := repo(t)
+	commit(t, dir, "base", map[string]string{"ledgers/main.json": ledgerFile(t, 12), baselinePath: ledgerFile(t, 99)})
+	git(t, dir, "checkout", "-q", "-b", "feature")
+	commit(t, dir, "work", map[string]string{"a.go": "package a\n"})
+	b := ratchet.ReadBase(dir, "main", "ledgers/main.json")
+	if b.Err != nil || b.Ledger == nil || b.Ledger.Functions["example.com/m/p.F"] != 12 {
+		t.Fatalf("base %+v, want the ledger at the configured path, 12", b)
+	}
+	if none := ratchet.ReadBase(dir, "main", "ledgers/other.json"); none.Err != nil || none.Ledger != nil {
+		t.Errorf("base %+v, want no ledger at a path that has none: a first ledger", none)
 	}
 }

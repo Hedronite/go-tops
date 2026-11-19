@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Hedronite/go-tops/internal/gobuild"
 	"github.com/Hedronite/go-tops/internal/ratchet"
 	"github.com/Hedronite/go-tops/internal/report"
 )
@@ -73,7 +74,7 @@ func TestApplyCrapPassesLegacyDebtAndFillsTheEntries(t *testing.T) {
 	}
 	for i, r := range rows {
 		row, ok := r.(map[string]any)
-		if !ok || row["baseline"] != overScores[i] {
+		if !ok || num(row["baseline"]) != overScores[i] {
 			t.Errorf("row %d: %v, want its ledger entry %v as the baseline", i, r, overScores[i])
 		}
 	}
@@ -108,7 +109,7 @@ func TestApplyCrapKeepsTheNotMeasuredCountAndFailure(t *testing.T) {
 func TestApplyCrapOnAnotherLeg(t *testing.T) {
 	m := legacy()
 	l := initLedger(m, linux)
-	j := ratchet.Judge(ratchet.Input{Ledger: l, Base: based(l), Run: darwin, M: m, LedgerCompiled: compiledAll(m)})
+	j := ratchet.Judge(otherLegInput(l, based(l), m, compiledAll(m)))
 	out := find2(t, ratchet.Apply([]report.Layer{crapLayer()}, j, l), "crap")
 	if out.Outcome != "pass" {
 		t.Fatalf("crap %s: %s", out.Outcome, out.Reason)
@@ -119,7 +120,7 @@ func TestApplyCrapOnAnotherLeg(t *testing.T) {
 	}
 	// ...and a function only this leg compiles, over the cap, does fail it.
 	m.Functions = append(m.Functions, overFunction("example.com/m/p.Mac", 12))
-	held := ratchet.Judge(ratchet.Input{Ledger: l, Base: based(l), Run: darwin, M: m, LedgerCompiled: compiledAll(legacy())})
+	held := ratchet.Judge(otherLegInput(l, based(l), m, compiledAll(legacy())))
 	failing := find2(t, ratchet.Apply([]report.Layer{crapLayer()}, held, l), "crap")
 	if failing.Outcome != "fail" || !strings.Contains(failing.Reason, "example.com/m/p.Mac") {
 		t.Errorf("crap %s: %s", failing.Outcome, failing.Reason)
@@ -159,7 +160,7 @@ func TestApplyCoverage(t *testing.T) {
 		t.Errorf("coverage %s: %s", out.Outcome, out.Reason)
 	}
 	// Another leg does not judge the packages.
-	jo := ratchet.Judge(ratchet.Input{Ledger: l, Base: based(l), Run: darwin, M: bad, LedgerCompiled: compiledAll(bad)})
+	jo := ratchet.Judge(otherLegInput(l, based(l), bad, compiledAll(bad)))
 	if out := find2(t, ratchet.Apply([]report.Layer{coverageLayer()}, jo, l), "coverage"); out.Outcome != "pass" {
 		t.Errorf("another leg: coverage %s: %s", out.Outcome, out.Reason)
 	}
@@ -196,10 +197,10 @@ func TestApplyHygieneJudgesLintFindingsByTheLedger(t *testing.T) {
 		t.Fatalf("hygiene %s: %s", out.Outcome, out.Reason)
 	}
 	lint := mapOf(t, out.Details["lint"])
-	if lint["outcome"] != "pass" || lint["message"] != nil || lint["findings"] != 3 {
+	if lint["outcome"] != "pass" || lint["message"] != nil || num(lint["findings"]) != 3 {
 		t.Errorf("lint %v: a pass that still reports its 3 findings", lint)
 	}
-	if out.Details["findings"] != 3 {
+	if num(out.Details["findings"]) != 3 {
 		t.Errorf("findings %v, want the count kept", out.Details["findings"])
 	}
 
@@ -250,7 +251,7 @@ func TestApplyHygieneOnAnotherLeg(t *testing.T) {
 	m := legacy()
 	m.Findings = ratchet.Counts{"revive": {"x.go": 9}}
 	l := initLedger(legacy(), linux)
-	j := ratchet.Judge(ratchet.Input{Ledger: l, Base: based(l), Run: darwin, M: m, LedgerCompiled: compiledAll(m)})
+	j := ratchet.Judge(otherLegInput(l, based(l), m, compiledAll(m)))
 	if out := find2(t, ratchet.Apply([]report.Layer{hygieneLayer(9, nil)}, j, l), "hygiene"); out.Outcome != "pass" {
 		t.Errorf("another leg: hygiene %s: %s", out.Outcome, out.Reason)
 	}
@@ -294,5 +295,67 @@ func TestApplyCrapDoesNotForgiveAnUnmatchedExemption(t *testing.T) {
 	out := find2(t, ratchet.Apply([]report.Layer{crapLayer()}, j, l), "crap")
 	if out.Outcome != "fail" || !strings.Contains(out.Reason, "p/gone.go") {
 		t.Errorf("crap %s: %s", out.Outcome, out.Reason)
+	}
+}
+
+// On a leg that is not the ledger leg the layers fail for what is held at hard
+// (ruling C3d) and for nothing the ledger covers.
+func TestApplyOtherLegFailsTheLayersForHeldSources(t *testing.T) {
+	m := legacy()
+	m.Findings = ratchet.Counts{"errcheck": {"p/d_darwin.go": 1}}
+	m.Packages = map[string]ratchet.Package{"example.com/m/darwin": {StatementsPct: 20, Uncovered: 80}}
+	l := initLedger(legacy(), linux)
+	j := ratchet.Judge(otherLegInput(l, based(l), m, compiledAll(m)))
+	if out := find2(t, ratchet.Apply([]report.Layer{hygieneLayer(1, nil)}, j, l), "hygiene"); out.Outcome != "fail" || !strings.Contains(out.Reason, "errcheck p/d_darwin.go") {
+		t.Errorf("hygiene %s: %s", out.Outcome, out.Reason)
+	}
+	if out := find2(t, ratchet.Apply([]report.Layer{coverageLayer()}, j, l), "coverage"); out.Outcome != "fail" || !strings.Contains(out.Reason, "example.com/m/darwin") {
+		t.Errorf("coverage %s: %s", out.Outcome, out.Reason)
+	}
+}
+
+// The messages say what happened: a judged_laws that fell is not "raised", and an
+// entry that was added is not "raised from absent".
+func TestRegressionMessagesSayWhatHappened(t *testing.T) {
+	m := legacy()
+	old := initLedger(m, linux)
+	cur := clone(old)
+	cur.JudgedLaws = old.JudgedLaws - 4
+	cur.Functions[key(50)] = 10.5
+	j := ratchet.Judge(input(m, cur, based(old)))
+	var laws, added string
+	for _, f := range j.Failures {
+		switch f.Key {
+		case "judged_laws":
+			laws = f.Why
+		case key(50):
+			added = f.Why
+		}
+	}
+	if !strings.HasPrefix(laws, "judged_laws fell from 5 to 1 with no regressions record") || strings.Contains(laws, "raised") {
+		t.Errorf("judged_laws message %q", laws)
+	}
+	if !strings.HasPrefix(added, "functions added at 10.5 with no regressions record") || strings.Contains(added, "absent") {
+		t.Errorf("added message %q", added)
+	}
+	cur.Functions[key(50)] = 0
+	delete(cur.Functions, key(50))
+	cur.Functions[key(0)] = old.Functions[key(0)] + 3
+	for _, f := range ratchet.Judge(input(setScore(m, key(0), cur.Functions[key(0)]), cur, based(old))).Failures {
+		if f.Key == key(0) && !strings.HasPrefix(f.Why, "functions raised from 21 to 24 with no regressions record") {
+			t.Errorf("raised message %q", f.Why)
+		}
+	}
+}
+
+// The build text says whether cgo is on or off, and lists the tags.
+func TestBuildTextSaysCgoOnOrOff(t *testing.T) {
+	m := legacy()
+	cur := initLedger(m, linux)
+	old := clone(cur)
+	old.Build = gobuild.Build{GOOS: "darwin", GOARCH: "arm64", Tags: []string{"integration"}}
+	notes := ratchet.Notes(ratchet.Judge(input(m, cur, based(old))))
+	if len(notes) != 1 || !strings.Contains(notes[0], "linux/amd64 cgo on") || !strings.Contains(notes[0], "darwin/arm64 cgo off tags=integration") {
+		t.Errorf("notes %q, want cgo on and off said, and the tags listed", notes)
 	}
 }

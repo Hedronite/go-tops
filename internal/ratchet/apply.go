@@ -15,8 +15,7 @@ import (
 // compile can fail the CRAP layer. A layer that failed for another reason (no
 // profile, a profile with no block) stays failed. It returns a copy.
 func Apply(layers []report.Layer, j Judgment, l *Ledger) []report.Layer {
-	out := make([]report.Layer, len(layers))
-	copy(out, layers)
+	out := plain(layers)
 	for i := range out {
 		switch out[i].ID {
 		case "crap":
@@ -44,7 +43,7 @@ func applyHygiene(l report.Layer, j Judgment) report.Layer {
 	if !ok || lint["outcome"] != "fail" {
 		return l
 	}
-	if n, ok := lint["findings"].(int); !ok || n == 0 {
+	if number(lint["findings"]) == 0 {
 		return l
 	}
 	verdict := lintVerdict(j)
@@ -71,10 +70,10 @@ func applyHygiene(l report.Layer, j Judgment) report.Layer {
 // lint findings are within the ledger. A leg that is not the ledger leg does not
 // judge them.
 func lintVerdict(j Judgment) string {
-	if !ledgerLeg(j) {
-		return ""
-	}
 	failures := filterKinds(j.Failures, "findings")
+	if !ledgerLeg(j) {
+		failures = filterKinds(j.HeldToCap, "findings")
+	}
 	if len(failures) == 0 {
 		return ""
 	}
@@ -114,15 +113,6 @@ const ProblemKind = "exemption entry"
 
 func ledgerLeg(j Judgment) bool { return j.Outcome != Skip }
 
-// text is v as a string, or "" when it is not one.
-func text(v any) string {
-	s, ok := v.(string)
-	if !ok {
-		return ""
-	}
-	return s
-}
-
 func hasKey(m map[string]any, key string) bool { _, ok := m[key]; return ok }
 
 func applyCrap(l report.Layer, j Judgment, ledger *Ledger) report.Layer {
@@ -157,11 +147,15 @@ func applyCoverage(l report.Layer, j Judgment) report.Layer {
 	if (l.Outcome != "fail" && l.Outcome != "pass") || hasKey(l.Details, "error") || !hasKey(l.Details, "statements_pct") {
 		return l
 	}
+	failures := filterKinds(j.Failures, "packages")
 	if !ledgerLeg(j) {
-		l.Outcome, l.Reason = "pass", "the ratchet is skipped on this leg: the ledger leg judges the packages under the floor"
-		return l
+		failures = filterKinds(j.HeldToCap, "packages")
+		if len(failures) == 0 {
+			l.Outcome, l.Reason = "pass", "the ratchet is skipped on this leg: the ledger leg judges the packages it compiles"
+			return l
+		}
 	}
-	if failures := filterKinds(j.Failures, "packages"); len(failures) > 0 {
+	if len(failures) > 0 {
 		l.Outcome, l.Reason = "fail", fmt.Sprintf("%d package(s) fail the ratchet: %s", len(failures), summary(failures))
 		return l
 	}
@@ -198,7 +192,7 @@ func withEntries(rows any, j Judgment, ledger *Ledger) any {
 }
 
 func notMeasuredNote(details map[string]any) string {
-	if n, ok := details["not_measured"].(int); ok && n > 0 {
+	if n := number(details["not_measured"]); n > 0 {
 		return fmt.Sprintf("%d production function(s) not measured on this build", n)
 	}
 	return ""

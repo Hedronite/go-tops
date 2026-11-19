@@ -3,7 +3,6 @@ package ratchet
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -17,36 +16,46 @@ import (
 	"github.com/Hedronite/go-tops/internal/report"
 )
 
-// Measurer measures what the run has to compare with the ledger, from the layers
-// the run just ran, in the build it ran under.
-type Measurer func(ctx context.Context, env *gate.Env, run gobuild.Build, layers []report.Layer) (Measure, error)
+// Paths are the two files the configuration names, relative to the module root:
+// the baseline (`baseline:` in go-tops.yaml, default LedgerPath) and the acks
+// file. `check` and `baseline` read the same keys.
+type Paths struct {
+	Ledger string
+	Acks   string
+}
 
-// NewJudge returns the gate's ratchet hook: it reads the ledger, measures the
-// run, judges it, and gives the layers the thresholds the ledger replaces.
-func NewJudge(measure Measurer) gate.RatchetJudge {
+// Inputs is what a measurer reads about the run: the build, the layers the run
+// ran, the configured paths and the day the run measures. The day is read once, so
+// that every part of a run counts the exemptions in force on the same day.
+type Inputs struct {
+	Build  gobuild.Build
+	Layers []report.Layer
+	Paths  Paths
+	Now    time.Time
+}
+
+// Measurer measures what the run has to compare with the ledger.
+type Measurer func(ctx context.Context, env *gate.Env, in Inputs) (Measure, error)
+
+// NewJudge returns the gate's ratchet hook: it reads the ledger at the configured
+// path, measures the run, judges it, and gives the layers the thresholds the
+// ledger replaces. paths gives the configured paths of the module in dir.
+func NewJudge(measure Measurer, paths func(dir string) (Paths, error)) gate.RatchetJudge {
 	return func(ctx context.Context, env *gate.Env, layers []report.Layer) (*gate.RatchetVerdict, error) {
 		run, err := gobuild.Resolve(env.Dir, tests.Build)
 		if err != nil {
 			return nil, err
 		}
-		in := Input{Run: run}
-		ledger, readErr := readLedgerFile(env.Dir)
-		if readErr != nil {
-			return unreadable(layers, run, readErr), nil
+		ps, err := paths(env.Dir)
+		if err != nil {
+			return refused(layers, run, nil, fmt.Errorf("the configuration: %w", err)), nil
 		}
-		in.Ledger = ledger
-		if in.Ledger != nil {
-			// Every leg reads the base copy: the ledger leg judges against it, and the
-			// others only say when the build moved. Only the ledger leg fails on it.
-			in.Base = ReadBase(env.Dir, env.Base)
+		in, err := judgeInput(env, run, ps)
+		if err != nil {
+			return refused(layers, run, in.Ledger, err), nil
 		}
-		if in.Ledger != nil && !run.Equal(in.Ledger.Build) {
-			in.LedgerCompiled, err = crap.Compiled(env.Dir, in.Ledger.Build)
-			if err != nil {
-				return nil, fmt.Errorf("find what the ledger build compiles: %w", err)
-			}
-		}
-		if in.M, err = measure(ctx, env, run, layers); err != nil {
+		layers = plain(layers)
+		if in.M, err = measure(ctx, env, Inputs{Build: run, Layers: layers, Paths: ps, Now: time.Now()}); err != nil {
 			// Nothing was measured, so nothing can be judged: a run whose tests or
 			// profile failed gets a failed ratchet, never a guess and never an
 			// environment fault that hides the layers' own report.
@@ -58,10 +67,42 @@ func NewJudge(measure Measurer) gate.RatchetJudge {
 	}
 }
 
-// unreadable is the verdict when the baseline file exists and cannot be read: a
-// file the judge cannot trust fails the run, and nothing is guessed from it.
-func unreadable(layers []report.Layer, run gobuild.Build, err error) *gate.RatchetVerdict {
-	return refused(layers, run, nil, fmt.Errorf("baseline: %w", err))
+// judgeInput reads the ledger and its base copy, and on a leg that is not the ledger
+// leg what the ledger build compiles. A ledger that cannot be read is an error: the
+// judge trusts nothing it cannot read.
+func judgeInput(env *gate.Env, run gobuild.Build, ps Paths) (Input, error) {
+	in := Input{Run: run}
+	ledger, err := readLedgerFile(env.Dir, ps.Ledger)
+	if err != nil {
+		return in, fmt.Errorf("baseline: %w", err)
+	}
+	if in.Ledger = ledger; ledger == nil {
+		return in, nil
+	}
+	// Every leg reads the base copy: the ledger leg judges against it, and the
+	// others only say when the build moved. Only the ledger leg fails on it.
+	in.Base = ReadBase(env.Dir, env.Base, ps.Ledger)
+	if !run.Equal(ledger.Build) {
+		if err := ledgerSources(&in, env.Dir); err != nil {
+			return in, fmt.Errorf("find what the ledger build compiles: %w", err)
+		}
+	}
+	return in, nil
+}
+
+// ledgerSources finds what the ledger build compiles by loading and selecting with
+// the recorded build: its functions, its files and its packages.
+func ledgerSources(in *Input, dir string) error {
+	var err error
+	if in.LedgerCompiled, err = crap.Compiled(dir, in.Ledger.Build); err != nil {
+		return err
+	}
+	sel, err := crap.Select(dir, in.Ledger.Build)
+	if err != nil {
+		return err
+	}
+	in.LedgerFiles, in.LedgerPackages = sel.Files, sel.Packages
+	return nil
 }
 
 // refused is a failed ratchet that judged nothing, with the layers as they ran.
@@ -78,24 +119,20 @@ func refused(layers []report.Layer, run gobuild.Build, ledger *Ledger, err error
 // for the ledger (internal/baseline.Collect, the measurer `baseline --init` writes
 // the first ledger from), so that the run and the ledger can never measure
 // differently, plus what only a judgment needs: the functions the run does not
-// measure and the exemptions that match nothing. acks gives the module-relative
-// path of the acks file of the configuration, or "".
-func CollectMeasure(acks func(dir string) (string, error)) Measurer {
-	return func(_ context.Context, env *gate.Env, run gobuild.Build, layers []report.Layer) (Measure, error) {
-		path, err := acks(env.Dir)
-		if err != nil {
-			return Measure{}, err
-		}
+// measure and the exemptions that match nothing.
+func CollectMeasure() Measurer {
+	return func(_ context.Context, env *gate.Env, in Inputs) (Measure, error) {
 		bm, err := baseline.Collect(baseline.Feeds{
-			Report: report.Report{Layers: layers}, Config: env.Config, Dir: env.Dir, Acks: path, Build: run,
+			Report: report.Report{Layers: in.Layers}, Config: env.Config, Dir: env.Dir,
+			Acks: in.Paths.Acks, Build: in.Build, Now: func() time.Time { return in.Now },
 		})
 		if err != nil {
 			return Measure{}, err
 		}
 		m := fromBaseline(bm, env.Config)
-		m.NotMeasured = notMeasuredRows(layers)
+		m.NotMeasured = notMeasuredRows(in.Layers)
 		if len(env.Config.Exemptions) > 0 {
-			if m.Problems, err = exemptionProblems(env, run); err != nil {
+			if m.Problems, err = exemptionProblems(env, in.Now); err != nil {
 				return Measure{}, err
 			}
 		}
@@ -118,31 +155,18 @@ func fromBaseline(bm baseline.Measure, cfg gate.Config) Measure {
 	return m
 }
 
-// number is v as an int, or 0 when it is not one.
-func number(v any) int {
-	n, ok := v.(int)
-	if !ok {
-		return 0
-	}
-	return n
-}
-
 // notMeasuredRows reads the rows of the CRAP layer's violations that carry no
 // score: the functions the run does not measure and whose complexity is over the
-// cap (§6.2). The baseline records none of them, and the judge fails each.
+// cap (§6.2). The baseline records none of them, and the judge fails each. The
+// layers are plain (see details.go): a row's crap is null, not absent.
 func notMeasuredRows(layers []report.Layer) []crap.NotMeasured {
 	var out []crap.NotMeasured
-	for _, l := range layers {
+	for _, l := range plain(layers) {
 		if l.ID != "crap" {
 			continue
 		}
-		rows, ok := l.Details["violations"].([]any)
-		if !ok {
-			return nil
-		}
-		for _, r := range rows {
-			row, ok := r.(map[string]any)
-			if !ok || row["crap"] != nil {
+		for _, row := range listOf(l.Details["violations"]) {
+			if row["crap"] != nil {
 				continue
 			}
 			if key := text(row["func"]); key != "" {
@@ -153,26 +177,23 @@ func notMeasuredRows(layers []report.Layer) []crap.NotMeasured {
 	return out
 }
 
-// exemptionProblems applies the exemptions in force to every production function,
-// as the CRAP layer does, and returns the entries that match nothing. It scores the
-// module again for the function list, so it runs only when the configuration has
-// exemptions.
-func exemptionProblems(env *gate.Env, run gobuild.Build) ([]Failure, error) {
-	rep, err := crap.Score(env.Dir, filepath.Join(env.Dir, filepath.FromSlash(tests.ProfilePath)), crap.Options{
-		ErrGuardDiscount: env.Config.Crap.ErrGuardDiscount, WrapFunctions: env.Config.Crap.WrapFunctions, Build: run,
-	})
+// exemptionProblems applies the exemptions in force on day now to every production
+// function the source declares, whether or not the run's build compiles it, as the
+// CRAP layer does, and returns the entries that match nothing. The layer reports
+// them in its reason and in no field a reader could use, and the report schema has
+// none to add, so the match is made again here: from the source alone, with no
+// profile and no scoring.
+func exemptionProblems(env *gate.Env, now time.Time) ([]Failure, error) {
+	ex, err := crap.Exist(env.Dir)
 	if err != nil {
 		return nil, err
 	}
-	funcs := make([]exempt.Func, 0, len(rep.Measured)+len(rep.NotMeasured))
-	for _, f := range rep.Measured {
-		funcs = append(funcs, exempt.Func{Key: f.Key, File: f.File, Recv: f.Recv, Name: f.Name, Table: f.Table})
-	}
-	for _, f := range rep.NotMeasured {
-		funcs = append(funcs, exempt.Func{Key: f.Key, File: f.File, Recv: f.Recv, Name: f.Name, Table: f.Table})
+	funcs := make([]exempt.Func, len(ex.Funcs))
+	for i, f := range ex.Funcs {
+		funcs[i] = exempt.Func{Key: f.Key, File: f.File, Recv: f.Recv, Name: f.Name, Table: f.Table}
 	}
 	var problems []Failure
-	for _, p := range exempt.Match(env.Config.Exemptions, funcs, time.Now()).Problems {
+	for _, p := range exempt.Match(env.Config.Exemptions, funcs, now).Problems {
 		problems = append(problems, Failure{Kind: ProblemKind, Key: p.Entry.Path, Why: p.Message})
 	}
 	return problems, nil

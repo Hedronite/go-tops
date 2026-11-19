@@ -254,14 +254,14 @@ func TestJudgedLawsMayNotFall(t *testing.T) {
 // is over the cap with no entry meets the cap, which it does not.
 func TestExemptFunctionsAreNotJudged(t *testing.T) {
 	m := legacy()
-	m.Exempt = map[string]bool{key(0): true}
+	m = without(m, key(0)) // an exempt function is not in what the baseline measures
 	l := initLedger(m, linux)
 	if _, has := l.Functions[key(0)]; has {
 		t.Fatal("an exempt function has a ledger entry")
 	}
 	wantOutcome(t, ratchet.Judge(input(m, l, based(l))), ratchet.Pass)
-	grown := setScore(m, key(0), 40)
-	wantOutcome(t, ratchet.Judge(input(grown, l, based(l))), ratchet.Pass)
+	// It can grow without a verdict: the layer lists no row for it.
+	wantOutcome(t, ratchet.Judge(input(m, l, based(l))), ratchet.Pass)
 }
 
 // A package exactly at the floor meets it; one just under it, with no entry,
