@@ -1,4 +1,4 @@
-# Agent standing orders (Go-TOPS 0.4.2)
+# Agent standing orders (Go-TOPS 0.4.3)
 
 Goal: correct, dense, fast Go.
 Production: the fewest lines that keep the named invariants and measured performance.
@@ -9,7 +9,7 @@ The protocol text is [`GO_TOPS.md`](GO_TOPS.md). This file is the harness for wo
 
 ## State
 
-Protocol 0.4.2; M1 done; next M2. The Go code is the docs checker in `scripts/docs/` (its own `go.mod`) and the `gotops` CLI in the root module (`cmd/gotops/`, `internal/`): `version`, `check`, `init`, `gate`, `report`, `lock` and `doctor`. `gate` runs hygiene, tests and coverage at tier 1; CRAP and mutation are off in `go-tops.yaml` until M2 and M4, and the laws layer is a stub until M5. CI is docs CI (`.github/workflows/docs.yml`) and the one `gate` job of `.github/workflows/ci.yml`, which runs `go run ./cmd/gotops gate` under `enforce: advisory` and then asserts the report (GO_TOPS.md §6.7). Do not document, run or claim a command or layer that has not landed (`baseline`, `laws`, `survivors`, CRAP, mutation).
+Protocol 0.4.3; M1 done; next M2. The Go code is the docs checker in `scripts/docs/` (its own `go.mod`) and the `gotops` CLI in the root module (`cmd/gotops/`, `internal/`): `version`, `check`, `init`, `gate`, `report`, `lock` and `doctor`. `gate` runs hygiene, tests and coverage at tier 1; CRAP and mutation are off in `go-tops.yaml` until M2 and M4, and the laws layer is a stub until M5. CI is docs CI (`.github/workflows/docs.yml`) and the one `gate` job of `.github/workflows/ci.yml`, which runs `go run ./cmd/gotops gate` under `enforce: advisory` and then asserts the report (GO_TOPS.md §6.7). Do not document, run or claim a command or layer that has not landed (`baseline`, `laws`, `survivors`, CRAP, mutation).
 
 Points from 0.3.0 that code must follow (see the change note at the top of `GO_TOPS.md`):
 

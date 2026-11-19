@@ -1,6 +1,6 @@
 # Go-TOPS: Go Testing and Optimization Protocol Suite
 
-**Spec status:** 0.4.2 (0.4.1 was the previous revision) · **Date:** 2026-11-17 · **Owner:** Hedronite
+**Spec status:** 0.4.3 (0.4.2 was the previous revision) · **Date:** 2026-11-19 · **Owner:** Hedronite
 **Modeled on:** [Rust-TOPS](https://github.com/Hedronite/rust-tops) (protocol 1.2.0 on `main`; the latest release tag, `cargo-tops` v0.3.0, carries protocol 1.1.0, and `main` holds package 0.4.0, untagged; read 2026-11-17)
 
 > **Changes from 0.2.0 to 0.3.0:** One CRAP cap per class; authorship marking removed (§5.2, §6.2).
@@ -75,7 +75,7 @@ Plus a practice layer (human and agent working rules, §13 and `AGENTS.md`) and 
 
 | Item | Value |
 |---|---|
-| Protocol version | **0.4.2** (0.4.1 was the previous revision; 1.0.0 is set by the criterion in §19) |
+| Protocol version | **0.4.3** (0.4.2 was the previous revision; 1.0.0 is set by the criterion in §19) |
 | Package version | 0.0.0 (unreleased) |
 | Language floor ("MSRV" analogue) | Go **1.26**, the oldest Go release still supported upstream (a policy: the floor moves when upstream drops support). The floor is a language version, compared in Go's own order (`go/version.Lang`), so a `go 1.26` and a `go 1.26.4` directive both meet it. Matrix tests floor and current (current: Go 1.27) |
 | Toolchain pin | The exact Go release in `go-tops.lock` (§10). `GOTOOLCHAIN=local` makes the `go` command use the toolchain it ships with and never reads the `toolchain` line, so a runner with another patch release would pass silently: the gate therefore checks that `go env GOVERSION` equals the pin (§3.1, G-33). A `toolchain` line is optional: with or without one, and whether the `go` line names a language version (`go 1.26`) or a patch release (`go 1.27.4`), the pin is the release in the lock |
@@ -405,7 +405,7 @@ its own fuzz globs in `layers.fuzz.targets`, which G-43 reads.
 ```yaml
 # profiles/binary-cli.yaml
 class: binary-cli
-protocol: "0.4.2"
+protocol: "0.4.3"
 gates:
   coverage: { statements_floor: 70 }
   crap: { cap: 10, complexity: { err_guard_discount: true, wrap_functions: [] } }
@@ -421,7 +421,7 @@ laws:
 ```yaml
 # profiles/binary-service.yaml
 class: binary-service
-protocol: "0.4.2"
+protocol: "0.4.3"
 gates:
   coverage: { statements_floor: 75 }
   crap: { cap: 10, complexity: { err_guard_discount: true, wrap_functions: [] } }
@@ -437,7 +437,7 @@ laws:
 ```yaml
 # profiles/library-core.yaml
 class: library-core
-protocol: "0.4.2"
+protocol: "0.4.3"
 gates:
   coverage: { statements_floor: 85 }
   crap: { cap: 8, complexity: { err_guard_discount: true, wrap_functions: [] } }   # provisional (§5.2)
@@ -494,9 +494,33 @@ CRAP(f) = comp(f)² × (1 − cov(f))³ + comp(f)          cov(f) ∈ [0,1]
 - **Scope:** every production function of the module's own packages, on every run, at every tier
   that runs the layer. Excluded: `_test.go` files, generated files (as in §6.1: `*.gen.go` and
   files with a `// Code generated ... DO NOT EDIT.` header) and `testdata/` directories. Nothing
-  else is excluded; a function leaves the cap check only through an exemption (§6.8). There is no
-  diff scope for CRAP: a function's score also moves when a test is deleted, and the function
-  itself does not change. The module-wide report is the output of every run, not a separate mode.
+  else is excluded; a function leaves the cap check only through an exemption (§6.8). A function
+  in a file the run does not compile is not excluded either: it is not measured on that run, as
+  the next bullet says. There is no diff scope for CRAP: a function's score also moves when a
+  test is deleted, and the function itself does not change. The module-wide report is the output
+  of every run, not a separate mode.
+- **Files the run does not compile.** A coverage profile holds blocks only for the files the test
+  build compiled. A file that the run's `GOOS`, `GOARCH`, build tags or `CGO_ENABLED` leave out
+  (`dial_windows.go` on a Linux run) has none, and scoring its functions from that profile would
+  give them `cov = 0` for a reason no test could change. So the layer **measures** a function
+  when its file is one the `go` command selects for its package in this run, and does **not
+  measure** the others on that run. Function identity (§6.7) is still computed over every `.go`
+  file in the directory, whatever its tags, so a function has one key on every run, measured
+  there or not. A function that is not measured is never passed:
+  - The report counts these functions in `crapDetails.not_measured` (§12.3), and the text output
+    prints the count on every run where it is above zero. A run measures every function whose
+    file its own build compiles, so each leg of §11 measures what its build compiles. A function
+    in a file that no leg compiles is not measured on any run, and the report counts it on
+    every run.
+  - Complexity needs no coverage. A function that is not measured still has `comp(f)`, computed
+    from its source loaded for its own `GOOS` and `GOARCH` where the toolchain can type it, and
+    otherwise with the guard discount off, which can only raise `comp(f)`. Because
+    `CRAP(f) ≥ comp(f)` at every coverage (see "What the cap means"), a function that is not
+    measured and whose `comp(f)` is above the cap fails like any function over the cap, unless an
+    exemption (§6.8) or a carried ledger entry (§6.7) covers it. Its row in the report has `null`
+    for `cov_pct` and `crap`.
+  - A function that is not measured and whose `comp(f)` is at or under the cap is counted and not
+    judged on that run. That is not a pass: a run that measures it judges it.
 - **Enforcement** is set by `enforce` and stated once, in §6.7. This section defines the score,
   the cap and the scope; it does not say which functions may exceed the cap under which mode.
 - **Implementation:** native (not shelled out), so the formula, counting rule, and thresholds are
@@ -716,7 +740,9 @@ under `advisory` reads the report, as the bootstrap rule above does.
 
 **CRAP.** A function at or under the cap may change up to the cap. A function over the cap
 may not exceed its baseline score plus 0.01 (a rise of 0.01 or less is noise). A function absent
-from the baseline is new and meets the cap. So a function scoring 2 under a cap of 10 may rise to
+from the baseline is new and meets the cap. A function the run does not measure (§6.2) is neither:
+its score is not judged, its entry is carried, and its complexity is held as the ledger rules
+below say. So a function scoring 2 under a cap of 10 may rise to
 10, and one scoring 14.2 under a cap of 10 may not pass 14.21. Under `ratchet` no function within
 the cap is held stricter than under `hard`.
 
@@ -729,7 +755,7 @@ must be clean against `HEAD`.
 
 | Ledger kind | Entry key | Entry value | The ratchet checks |
 |---|---|---|---|
-| `functions` | function identity (below) | CRAP score when written | score ≤ value + 0.01. Only a function over the cap has an entry |
+| `functions` | function identity (below) | CRAP score when written | score ≤ value + 0.01, for a function the run measures; a function it does not measure is carried (below). Only a function over the cap has an entry |
 | `packages` | package import path | statement coverage % and uncovered-statement count | A package under the floor fails only when its percentage falls **and** its uncovered-statement count rises. Deleting tested code can lower the percentage without raising the uncovered count, so it does not fail. A package at or over the floor, or absent, is held to the floor |
 | `findings` | linter, file | count of that linter's findings that no law maps | count ≤ value |
 | `laws` | law ID, file | count of findings that make that law `refuse` | count ≤ value; `refuse` then means "no new instance" under `ratchet` and "none" under `hard` |
@@ -752,13 +778,21 @@ between baseline and run, so a configuration edit cannot quietly shrink what is 
   what was **measured**, not what **passed**. It writes when the tests are green and every
   feeding layer produced non-empty output (a non-empty coverage profile, a CRAP report with at
   least one production function, saved lint output). Red thresholds do not stop it; red tests or
-  an empty output do. It refuses when a ledger exists and under `advisory`. A repo with nothing
+  an empty output do. It records what was measured, so a function the run does not measure (§6.2)
+  gets no entry from it. It refuses when a ledger exists and under `advisory`. A repo with nothing
   over the line gets a valid file with an empty ledger.
 - A ledger kind fed only by tier 2 (`survivors`) is recorded the same way, from a tier 2 run:
   `baseline --init --kind survivors`. Until it is recorded, that kind is absent and holds at its
   `hard` form.
 - Every later write only lowers. It lowers a value, removes an entry that is no longer over
   the line, and raises `judged_laws`. It never adds an entry and never raises one.
+- **A function the run does not measure** (§6.2, a file outside the run's build) keeps its
+  `functions` entry unchanged: a write neither lowers it nor removes it, because the run has no
+  score to compare. A write removes a `functions` entry only when its function is measured on this
+  run and at or under the cap, or exists in no `.go` file of the directory, whatever its tags. A
+  carried entry covers its function only while `comp(f)` is at or under the entry's value plus
+  0.01, since `CRAP(f) ≥ comp(f)` at every coverage; a function whose complexity rises past that
+  fails like any function over the cap.
 - Raising an entry, adding one, or lowering `judged_laws` needs
   `baseline --accept-regression --reason <text> --owner <handle>` and a PR that carries the
   `protocol-change` label. The flag records the change under `regressions` in the file. `gate`
@@ -770,7 +804,9 @@ between baseline and run, so a configuration edit cannot quietly shrink what is 
   records only if every entry equals what this run measures (a `functions` value within 0.01;
   counts, percentages and uncovered-statement counts exactly), no entry exists for anything the
   run measures within the line, and `judged_laws` equals the run's count. That is what
-  `baseline --init` writes on that commit, so it is the only first ledger that passes. Any entry
+  `baseline --init` writes on that commit, so it is the only first ledger that passes. An entry
+  for a function the run does not measure (§6.2) is carried, and the first-ledger check does not
+  apply to it on that run; it applies on a run that measures the function. Any entry
   above its measured value fails, so a hand-written ledger cannot carry extra allowance. A kind
   that the base copy lacks (the tier 2 `survivors` kind, recorded later) is a first ledger for
   that kind and is checked the same way against the run that recorded it.
@@ -1189,7 +1225,7 @@ depth fails.
 
 <!-- go-tops:example path=config/go-tops.example.yaml schema=schema/go-tops.schema.json -->
 ```yaml
-protocol: "0.4.2"            # must match the schema's protocol constant
+protocol: "0.4.3"            # must match the schema's protocol constant
 version: "0.1.0"             # this config's version (non-empty)
 module: github.com/acme/myapp
 class: binary-cli            # one of the schema's classes
@@ -1330,7 +1366,7 @@ identical to the file and validates the file against the schema.
 
 <!-- go-tops:example path=config/go-tops.example.lock schema=schema/lock.schema.json -->
 ```yaml
-protocol: "0.4.2"               # must match the schema protocol constant
+protocol: "0.4.3"               # must match the schema protocol constant
 toolchain: go1.27.4             # go env GOVERSION must equal this
 
 trust:
@@ -1383,6 +1419,12 @@ CI rules (carried from Rust-TOPS's lessons):
   a developer uses. A repo that never runs on macOS drops the leg by a CODEOWNERS-reviewed edit
   of the workflow. There is **no Windows leg**: Go-TOPS judges no Windows-specific behavior, and
   a repo that ships on Windows adds its own leg.
+- **Each leg measures its own build.** The CRAP layer scores the functions in the files the leg's
+  build compiles and counts the rest as not measured (§6.2). `_darwin.go` code is measured on the
+  macOS leg and `_linux.go` code on the Ubuntu legs; a repo adds a leg, or a `deep` matrix entry,
+  for any other build it wants measured. The kit ships no Windows leg, so a `_windows.go` function
+  is not measured in any report: it is counted on every run and held only to the complexity
+  ceiling of §6.2.
 - **No `law-diff` job in the adopter drop-in.** An adopter has no law files to diff. The risk on
   the adopter's side is an edit to the files that set the gate, so the drop-in ships a CODEOWNERS
   fragment covering `go-tops.yaml`, `.golangci.yml`, `.go-tops/`, `go-tops.lock`, `tools/` and
@@ -1448,7 +1490,7 @@ CI keeps the block identical to the file and validates the file against the sche
 <!-- go-tops:example path=config/gate-report.example.json schema=schema/gate-report.schema.json -->
 ```json
 {
-  "protocol": "0.4.2",
+  "protocol": "0.4.3",
   "tool_version": "0.0.0",
   "module": "github.com/acme/myapp",
   "class": "binary-cli",
@@ -1487,9 +1529,11 @@ CI keeps the block identical to the file and validates the file against the sche
     },
     {
       "id": "crap", "tier": 1, "outcome": "fail",
-      "details": { "cap": 10,
+      "details": { "cap": 10, "not_measured": 3,
         "violations": [ { "func": "ParseSpec", "file": "internal/spec/parse.go:41",
-                          "cc": 14, "cov_pct": 52.0, "crap": 35.7, "baseline": null } ] }
+                          "cc": 14, "cov_pct": 52.0, "crap": 35.7, "baseline": null },
+                        { "func": "dial", "file": "internal/net/dial_windows.go:12",
+                          "cc": 12, "cov_pct": null, "crap": null, "baseline": null } ] }
     },
     {
       "id": "mutation", "tier": 1, "outcome": "pass",
@@ -1563,7 +1607,9 @@ Report rules:
   `fixed_version` where known) and `other`, and it can change verdict with no code change,
   because the database moves, §3.1), tests (`packages`, `tests`, `race`, `skipped`,
   `shuffle_seed`), coverage (`statements_pct`, `floor`, `profile_bytes`), CRAP (`cap`,
-  `violations`, and `exempt` for functions scored under an exemption) and mutation (the counts of
+  `violations`, `exempt` for functions scored under an exemption, and `not_measured`, the number
+  of production functions in files the run's build does not compile, §6.2; a row of `violations`
+  or `exempt` for such a function has `null` for `cov_pct` and `crap`) and mutation (the counts of
   §6.4, with `timed_out` and `timed_out_keys` for mutants that hung, `dropped` for mutants
   that did not compile, and `exempt` for the survivor keys of mutants under a `mutation`
   exemption). A layer of these five whose outcome is `fail` may carry `{ "error": "<text>" }`
@@ -1680,7 +1726,7 @@ wrong; the config wins.
 
 ---
 
-## 16. Decisions (resolved for v0.4.2; remaining calibration items noted)
+## 16. Decisions (resolved for v0.4.3; remaining calibration items noted)
 
 1. **Complexity rule (`err_guard_discount`):** **true** in every class, for guards that only return the error (wrapped or not). errcheck `check-blank` and `check-type-assertions` are required, so discarding the error is not cheaper than handling it. Explicit in every profile. (§6.3) *Changed in 0.3.0; 0.2.0 turned it off for `library-core` and `concurrency-runtime`.*
 2. **Authorship marking:** None. One CRAP cap per class for every author. (§5.2, §6.2) *Changed in 0.3.0; 0.2.0 used an `Authored-By: agent` trailer that raised the cap.*
@@ -1716,6 +1762,7 @@ wrong; the config wins.
 32. **The lock pins the executable:** an entry with `extract` carries `executable_sha256` per platform, and the gate and `lock --verify` compare the installed executable with it, because the archive hash cannot verify an installed file. (§10) *New in 0.4.2.*
 33. **Strict YAML:** the files `check` reads are strict YAML, so one text has one meaning in every reader. (§9) *New in 0.4.2.*
 34. **Hygiene details are typed:** the hygiene layer reports `golangci_lint`, `findings` and one object per check of gate 1 (`tidy`, `verify`, `toolchain`, `format`, `lint`, `vulnerabilities`, `licenses`), each with its `outcome`, or `{error}` when it measured nothing. (§12.3) *New in 0.4.2.*
+35. **Files outside the run's build are not measured, never passed:** the CRAP layer scores the production functions in files the run compiles, counts the rest in the report (`not_measured`), still holds each to the complexity ceiling, and carries a ledger entry for one unchanged. Identity stays computed over every `.go` file. (§6.2, §6.7, §12.3) *New in 0.4.3.*
 
 ---
 
@@ -1795,10 +1842,10 @@ The schemas are files in `schema/`, JSON Schema 2020-12:
 
 | File | What it validates |
 |---|---|
-| `schema/go-tops.schema.json` | `go-tops.yaml` and the class profiles in `profiles/`: one shape for both. `additionalProperties: false` at every object, so an unknown key at any depth fails. Its `protocol` is the constant `0.4.2` |
+| `schema/go-tops.schema.json` | `go-tops.yaml` and the class profiles in `profiles/`: one shape for both. `additionalProperties: false` at every object, so an unknown key at any depth fails. Its `protocol` is the constant `0.4.3` |
 | `schema/gate-report.schema.json` | `.go-tops/report.json` (§12.3): every layer with its tier and outcome, every law with its verdict and reason code, the laws counts, the vulnerability database timestamp and the shuffle seed |
 | `schema/core.schema.json` | The definitions the configuration and report schemas share: layer outcomes, law verdicts, reason codes, run outcomes, enforcement modes, law IDs, the baseline ledger and the exemption record. Both `$ref` it and define none of these again. It is a local copy: the TOPS shared core will replace it by a checked sync |
-| `schema/lock.schema.json` | `go-tops.lock` (§10): the toolchain, the trust mode and the downloaded binaries, each with an exact version, a URL template and a SHA-256 for each of four platforms. `additionalProperties: false` at every object. Its `protocol` is the constant `0.4.2` |
+| `schema/lock.schema.json` | `go-tops.lock` (§10): the toolchain, the trust mode and the downloaded binaries, each with an exact version, a URL template and a SHA-256 for each of four platforms. `additionalProperties: false` at every object. Its `protocol` is the constant `0.4.3` |
 
 `schema/core.schema.json` also defines the entries of the two ledger files that `check`
 validates: `survivorEntry` for `.go-tops/survivors.yaml` (§6.4) and `ackEntry` for

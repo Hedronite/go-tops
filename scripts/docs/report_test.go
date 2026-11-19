@@ -244,3 +244,47 @@ func TestReportAdvisoryRun(t *testing.T) {
 		})
 	}
 }
+
+// 0.4.3: a function the run does not measure is counted in not_measured, and
+// its row carries null for cov_pct and crap, both or neither (section 6.2).
+func TestReportCrapNotMeasured(t *testing.T) {
+	raw, err := os.ReadFile(reportExample)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ex := string(raw)
+	const (
+		count   = `"not_measured": 3,`
+		nullRow = `"cc": 12, "cov_pct": null, "crap": null, "baseline": null`
+	)
+	if !strings.Contains(ex, count) || !strings.Contains(ex, nullRow) {
+		t.Fatal("the example no longer carries the not-measured count and row this test edits")
+	}
+	if err := validateReport(t, ex); err != nil {
+		t.Fatalf("the example must validate: %v", err)
+	}
+	if err := validateReport(t, strings.Replace(ex, count, "", 1)); err != nil {
+		t.Errorf("the count is optional, so a report without it must validate: %v", err)
+	}
+	for _, c := range []struct{ name, from, to string }{
+		{"count-negative", count, `"not_measured": -1,`},
+		{"count-fraction", count, `"not_measured": 1.5,`},
+		{"count-string", count, `"not_measured": "3",`},
+		{"count-on-another-layer", `"profile_bytes": 48211`, `"profile_bytes": 48211, "not_measured": 1`},
+		{"cov-null-crap-number", nullRow, `"cc": 12, "cov_pct": null, "crap": 12.0, "baseline": null`},
+		{"cov-number-crap-null", nullRow, `"cc": 12, "cov_pct": 40.0, "crap": null, "baseline": null`},
+		{"crap-missing", `"cov_pct": null, "crap": null, `, `"cov_pct": null, `},
+		{"cov-above-100", nullRow, `"cc": 12, "cov_pct": 120.0, "crap": 12.0, "baseline": null`},
+		{"crap-negative", nullRow, `"cc": 12, "cov_pct": 40.0, "crap": -1.0, "baseline": null`},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			doc := strings.Replace(ex, c.from, c.to, 1)
+			if doc == ex {
+				t.Fatal("the plant changed nothing")
+			}
+			if err := validateReport(t, doc); err == nil {
+				t.Fatal("the planted report validated")
+			}
+		})
+	}
+}

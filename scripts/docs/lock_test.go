@@ -62,7 +62,7 @@ func TestLockSchemaRefusesPlantedDefects(t *testing.T) {
 		{"trust-mode", "mode: checksum", "mode: trust-me"},
 		{"trust-note-empty", "note: archive SHA-256 values copied from the upstream release checksum file; executable SHA-256 values computed from those verified archives", `note: ""`},
 		{"trust-missing", "trust:\n  mode: checksum\n  note: archive SHA-256 values copied from the upstream release checksum file; executable SHA-256 values computed from those verified archives\n", ""},
-		{"protocol-const", `protocol: "0.4.2"`, `protocol: "0.4.1"`},
+		{"protocol-const", `protocol: "0.4.3"`, `protocol: "0.4.1"`},
 		{"trust-note-blank", "note: archive SHA-256 values copied from the upstream release checksum file; executable SHA-256 values computed from those verified archives", `note: "   "`},
 		{"executable-hash-without-extract", "    extract: golangci-lint-{version}-{os}-{arch}/golangci-lint\n", ""},
 		{"short-executable-hash", "darwin/arm64: 71b89744ef6dd92dad9026b70489d1ad660da79ef90dfb5aabe995d916bec8a9", "darwin/arm64: 71b89744ef6d"},
@@ -112,7 +112,7 @@ func TestLockExtractNeedsTheExecutableHash(t *testing.T) {
 
 // A lock with no binary pins nothing: the whole list, absent or empty, fails.
 func TestLockWithNoBinariesFails(t *testing.T) {
-	head := "protocol: \"0.4.2\"\ntoolchain: go1.27.4\ntrust:\n  mode: tofu\n  note: none yet\n"
+	head := "protocol: \"0.4.3\"\ntoolchain: go1.27.4\ntrust:\n  mode: tofu\n  note: none yet\n"
 	for name, doc := range map[string]string{"empty-list": head + "binaries: []\n", "absent": head} {
 		if err := validateLock(t, doc); err == nil {
 			t.Errorf("%s validated", name)
