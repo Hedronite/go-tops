@@ -6,6 +6,9 @@
 package gobuild
 
 import (
+	"fmt"
+	"os"
+	"os/exec"
 	"slices"
 	"strings"
 )
@@ -69,4 +72,35 @@ func cgo(on bool) string {
 		return "1"
 	}
 	return "0"
+}
+
+// Resolve fills in the GOOS and GOARCH that b leaves empty from the go
+// command's own environment (`go env GOOS GOARCH`, run in dir under b's
+// environment), and keeps the tags and the cgo setting as given. The test run's
+// build leaves the platform to the go command, so a build recorded as it stands
+// would name no platform and match every one; the CRAP layer, the baseline and
+// the ratchet all call Resolve, so the build of a run is defined here and
+// nowhere else.
+func Resolve(dir string, b Build) (Build, error) {
+	if b.GOOS != "" && b.GOARCH != "" {
+		return b, nil
+	}
+	cmd := exec.Command("go", "env", "GOOS", "GOARCH")
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), b.Env()...)
+	out, err := cmd.Output()
+	if err != nil {
+		return Build{}, fmt.Errorf("go env GOOS GOARCH: %w", err)
+	}
+	fields := strings.Fields(string(out))
+	if len(fields) != 2 {
+		return Build{}, fmt.Errorf("go env GOOS GOARCH printed %q, want two values", strings.TrimSpace(string(out)))
+	}
+	if b.GOOS == "" {
+		b.GOOS = fields[0]
+	}
+	if b.GOARCH == "" {
+		b.GOARCH = fields[1]
+	}
+	return b, nil
 }

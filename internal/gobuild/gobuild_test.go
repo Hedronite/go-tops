@@ -53,3 +53,54 @@ func TestPlatformTurnsCgoOff(t *testing.T) {
 		t.Errorf("Platform = %+v", b)
 	}
 }
+
+// Resolve names the platform the go command would build for, and nothing else.
+func TestResolveFillsThePlatform(t *testing.T) {
+	t.Setenv("GOOS", "linux")
+	t.Setenv("GOARCH", "arm64")
+	got, err := gobuild.Resolve(t.TempDir(), gobuild.Build{Tags: []string{"x"}, CGOEnabled: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.GOOS != "linux" || got.GOARCH != "arm64" || !slices.Equal(got.Tags, []string{"x"}) || !got.CGOEnabled {
+		t.Errorf("Resolve = %+v, want linux/arm64 with the tags and cgo as given", got)
+	}
+}
+
+func TestResolveKeepsWhatIsNamed(t *testing.T) {
+	t.Setenv("GOOS", "linux")
+	t.Setenv("GOARCH", "arm64")
+	got, err := gobuild.Resolve(t.TempDir(), gobuild.Build{GOOS: "windows", GOARCH: "386"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.GOOS != "windows" || got.GOARCH != "386" {
+		t.Errorf("Resolve = %+v, want the named platform", got)
+	}
+	half, err := gobuild.Resolve(t.TempDir(), gobuild.Build{GOOS: "windows"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if half.GOOS != "windows" || half.GOARCH != "arm64" {
+		t.Errorf("Resolve = %+v, want windows with the environment's arm64", half)
+	}
+}
+
+// A resolved build names a platform, so a recorded one cannot match every
+// platform.
+func TestResolveNeverLeavesThePlatformEmpty(t *testing.T) {
+	got, err := gobuild.Resolve(t.TempDir(), gobuild.Build{CGOEnabled: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.GOOS == "" || got.GOARCH == "" {
+		t.Errorf("Resolve = %+v: a platform is empty", got)
+	}
+}
+
+func TestResolveFailsWhenGoCannotAnswer(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	if _, err := gobuild.Resolve(t.TempDir(), gobuild.Build{}); err == nil {
+		t.Error("Resolve succeeded with no go command")
+	}
+}

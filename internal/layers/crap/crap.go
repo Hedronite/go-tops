@@ -14,6 +14,7 @@ import (
 
 	"github.com/Hedronite/go-tops/internal/crap"
 	"github.com/Hedronite/go-tops/internal/gate"
+	"github.com/Hedronite/go-tops/internal/gobuild"
 	"github.com/Hedronite/go-tops/internal/layers/tests"
 )
 
@@ -39,10 +40,16 @@ func (Layer) Needs() []string { return []string{tests.CoverageID} }
 // the run the tests layer made, under the build that run used (§3.1).
 func (Layer) Run(_ context.Context, env *gate.Env) gate.Result {
 	cc := env.Config.Crap
+	// The build of the test run, with the platform the go command picks named,
+	// so the files scored are the files the profile covers.
+	build, err := gobuild.Resolve(env.Dir, tests.Build)
+	if err != nil {
+		return failure(err)
+	}
 	rep, err := crap.Score(env.Dir, filepath.Join(env.Dir, filepath.FromSlash(tests.ProfilePath)), crap.Options{
 		ErrGuardDiscount: cc.ErrGuardDiscount,
 		WrapFunctions:    cc.WrapFunctions,
-		Build:            tests.Build,
+		Build:            build,
 	})
 	if err != nil {
 		return failure(err)
@@ -59,14 +66,14 @@ func judge(rep crap.Report, limit float64) gate.Result {
 	for _, f := range measured {
 		violations = append(violations, violation(f.Key, f.File, f.Comp, f.Cov*100, f.CRAP))
 	}
-	// A function that is not measured on this build is held to its complexity
-	// alone: at full coverage its score is its comp, the least any coverage can
-	// give it, so over the cap it fails at every coverage level (§6.2).
+	// A function that is not measured has no coverage and so no score, and its
+	// row says so: null cov_pct and crap. Its complexity is above the cap, which
+	// fails at every coverage (§6.2).
 	for _, f := range unmeasured {
-		violations = append(violations, violation(f.Key, f.File, f.Comp, 100, float64(f.Comp)))
+		violations = append(violations, violation(f.Key, f.File, f.Comp, nil, nil))
 	}
-	details := map[string]any{"cap": limit, "violations": violations}
-	note := notMeasuredNote(len(rep.NotMeasured))
+	details := map[string]any{"cap": limit, "violations": violations, "not_measured": len(rep.NotMeasured)}
+	note := notMeasuredNote(len(rep.NotMeasured), rep.PlatformLoads)
 	if len(violations) == 0 {
 		return gate.Result{Outcome: gate.Pass, Reason: note, Details: details}
 	}
@@ -77,15 +84,22 @@ func judge(rep crap.Report, limit float64) gate.Result {
 	return gate.Result{Outcome: gate.Fail, Reason: reason, Details: details}
 }
 
-func violation(key, file string, comp int, covPct, score float64) map[string]any {
-	return map[string]any{"func": key, "file": file, "cc": comp, "cov_pct": covPct, "crap": score, "baseline": nil}
+// violation is one crapFunction row. cov and score are nil for a function that
+// is not measured; baseline is the ratchet's to fill.
+func violation(key, file string, comp int, cov, score any) map[string]any {
+	return map[string]any{"func": key, "file": file, "cc": comp, "cov_pct": cov, "crap": score, "baseline": nil}
 }
 
-func notMeasuredNote(n int) string {
-	if n == 0 {
+// notMeasuredNote is the count the text output prints on every run where it is
+// above zero (§6.2), and what typing those functions cost.
+func notMeasuredNote(n, loads int) string {
+	switch {
+	case n == 0:
 		return ""
+	case loads == 0:
+		return fmt.Sprintf("%d production function(s) not measured on this build", n)
 	}
-	return fmt.Sprintf("%d production function(s) not measured on this build", n)
+	return fmt.Sprintf("%d production function(s) not measured on this build, typed by loading the module for %d other platform(s)", n, loads)
 }
 
 func list(measured []crap.Function, unmeasured []crap.NotMeasured) string {
