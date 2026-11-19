@@ -7,9 +7,7 @@ import (
 	"io/fs"
 	"math"
 	"os"
-	"path"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/Hedronite/go-tops/internal/cover"
@@ -237,17 +235,14 @@ func (f Feeds) lintIssues() ([]lintIssue, error) {
 	return *doc.Issues, nil
 }
 
-// moduleRel makes a file name from the linter a module-relative slash path.
+// moduleRel makes a file name from the linter a module-relative slash path, as the
+// hygiene layer reads it (hygiene.ModuleRel): the config the linter read may sit
+// outside the module root, and the linter then names files from its directory.
 func (f Feeds) moduleRel(name string) string {
 	if name == "" {
 		return "(no file)"
 	}
-	if filepath.IsAbs(name) {
-		if rel, err := filepath.Rel(f.Dir, name); err == nil && !strings.HasPrefix(rel, "..") {
-			name = rel
-		}
-	}
-	return path.Clean(filepath.ToSlash(name))
+	return hygiene.ModuleRel(f.Dir, f.Config.Hygiene.LintConfig, name)
 }
 
 // crapRow is the part of a crapDetails row the ledger reads. Crap is nil for a
