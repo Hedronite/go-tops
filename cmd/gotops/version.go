@@ -2,6 +2,8 @@ package main
 
 import (
 	"os"
+	"runtime/debug"
+	"strings"
 
 	gotops "github.com/Hedronite/go-tops"
 	"github.com/Hedronite/go-tops/internal/cli"
@@ -11,7 +13,28 @@ import (
 // packageVersion is the gotops package version, a separate plane from the
 // protocol version (GO_TOPS.md §2). A release sets it at link time:
 // -ldflags "-X main.packageVersion=<version>".
-var packageVersion = "0.0.0-dev"
+var packageVersion = devVersion
+
+// devVersion is the version of a build that links none in and carries no module version.
+const devVersion = "0.0.0-dev"
+
+// readBuildInfo is the build info of the running binary; a test replaces it.
+var readBuildInfo = debug.ReadBuildInfo
+
+// toolVersion is the version of this gotops: the one a release links in, else the
+// module version of the build, which is a pseudo-version for a gotops an adopter
+// runs through `go tool` before the kit has a tag, else 0.0.0-dev.
+func toolVersion() string {
+	if packageVersion != devVersion {
+		return packageVersion
+	}
+	if info, ok := readBuildInfo(); ok {
+		if v := strings.TrimPrefix(info.Main.Version, "v"); v != "" && v != "(devel)" {
+			return v
+		}
+	}
+	return packageVersion
+}
 
 func init() {
 	cli.Register(cli.Command{
@@ -31,7 +54,7 @@ func runVersion(env cli.Env, args []string) int {
 		env.Stderr.Printf("gotops version: %v\n", err)
 		return cli.ExitEnvironment
 	}
-	env.Stdout.Printf("protocol %s\npackage %s\n", protocol, packageVersion)
+	env.Stdout.Printf("protocol %s\npackage %s\n", protocol, toolVersion())
 	printPins(env)
 	return 0
 }
