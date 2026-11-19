@@ -546,11 +546,13 @@ func loadBaselineConfig(dir string) (gate.Config, string, string, error) {
 	return cfg, eff.Laws.AckLedger, rel, nil
 }
 
-// trackedAtHead says whether git has the ledger at HEAD. A ledger deleted from
+// trackedAtHead says whether git has the ledger at HEAD. The path is read from
+// the module directory ("./"), not from the root of the repository, which the
+// module need not be. A ledger deleted from
 // the working tree is still the repo's ledger, so --init does not stand in for
 // it. A directory git cannot read has none.
 func trackedAtHead(dir, rel string) bool {
-	return exec.Command("git", "-C", dir, "cat-file", "-e", "HEAD:"+rel).Run() == nil
+	return exec.Command("git", "-C", dir, "cat-file", "-e", "HEAD:./"+rel).Run() == nil
 }
 
 // readLedger reads the ledger. A file that is there but is not a ledger is a

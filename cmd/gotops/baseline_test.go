@@ -981,3 +981,33 @@ func TestRefreshDoesNotAskToAcceptAPackageTheRatchetWouldPass(t *testing.T) {
 		t.Errorf("stdout %q should offer --accept-regression when the package rule would fail", stdout)
 	}
 }
+
+// The module need not sit at the root of the repository. git reads "rev:path" from
+// the root, so a ledger deleted from the tree of a module in a subdirectory was
+// not found at HEAD, and --init was allowed to write a fresh one over the debt.
+func TestDeletingTheLedgerIsNotAResetInASubdirectoryModule(t *testing.T) {
+	fx := newFixture()
+	fx.install(t)
+	root := t.TempDir()
+	mod := filepath.Join(root, "services", "api")
+	for rel, data := range map[string]string{"go.mod": "module example.com/app\n\ngo 1.26\n", "go-tops.lock": goodLock(t), "go-tops.yaml": ratchetConfig(t)} {
+		writeFile(t, mod, rel, data)
+	}
+	writeFile(t, mod, ledgerRel, string(baseline.Marshal(baseline.Init(baseline.Measure{Build: cmdBuild}))))
+	for _, args := range [][]string{{"init", "-q"}, {"add", "-A"}, {"-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-q", "-m", "x"}} {
+		cmd := exec.CommandContext(t.Context(), "git", args...)
+		cmd.Dir = root
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	if err := os.Remove(filepath.Join(mod, ledgerRel)); err != nil {
+		t.Fatal(err)
+	}
+	if code, _, stderr := baselineIn(t, mod, "--init"); code != 1 || !strings.Contains(stderr, "HEAD") {
+		t.Errorf("--init: exit %d, stderr %q; want 1 naming HEAD", code, stderr)
+	}
+	if _, err := os.Stat(filepath.Join(mod, ledgerRel)); err == nil {
+		t.Error("a ledger was written over a deleted one")
+	}
+}
