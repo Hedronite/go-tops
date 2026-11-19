@@ -340,12 +340,3 @@ func TestLockUpdateRefusesAPinThatIsNotNameAtVersion(t *testing.T) {
 		t.Errorf("exit %d, stderr %q", code, stderr)
 	}
 }
-
-func fileBytes(t *testing.T, dir, rel string) string {
-	t.Helper()
-	b, err := os.ReadFile(filepath.Join(dir, rel))
-	if err != nil {
-		t.Fatal(err)
-	}
-	return string(b)
-}
