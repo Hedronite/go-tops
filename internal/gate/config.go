@@ -75,6 +75,10 @@ func (c Config) layer(id string) LayerConfig {
 	return LayerConfig{Enabled: true}
 }
 
+// BaseRef is the diff base of a run: the --base option, else the configured base,
+// else origin/main. The gate and `baseline --status` read the same one.
+func (c Config) BaseRef(opt string) string { return c.base(opt) }
+
 func (c Config) base(opt string) string {
 	switch {
 	case opt != "":

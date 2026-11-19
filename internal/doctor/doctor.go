@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"go.yaml.in/yaml/v3"
+
 	"github.com/Hedronite/go-tops/internal/lock"
 )
 
@@ -86,6 +88,30 @@ func ExitCode(cs []Check) int {
 	return 0
 }
 
+// floor is the oldest language version the run may use and how a message names it:
+// the protocol's (§2), or the go_floor of go-tops.yaml when that is higher.
+type floor struct{ lang, label string }
+
+func floorOf(dir string) floor {
+	f := floor{FloorGo, "the language floor " + FloorGo + " (§2)"}
+	data, err := os.ReadFile(filepath.Join(dir, "go-tops.yaml"))
+	if err != nil {
+		return f
+	}
+	var doc struct {
+		Toolchain struct {
+			GoFloor string `yaml:"go_floor"`
+		} `yaml:"toolchain"`
+	}
+	if yaml.Unmarshal(data, &doc) != nil || !version.IsValid("go"+doc.Toolchain.GoFloor) {
+		return f
+	}
+	if lang := version.Lang("go" + doc.Toolchain.GoFloor); version.Compare(lang, f.lang) > 0 {
+		return floor{lang, "go_floor " + doc.Toolchain.GoFloor + " of go-tops.yaml"}
+	}
+	return f
+}
+
 func goVersion(e Env, l *lock.Lock) Check {
 	out, err := e.Run(e.Dir, "go", "env", "GOVERSION")
 	if err != nil {
@@ -96,8 +122,9 @@ func goVersion(e Env, l *lock.Lock) Check {
 	if !version.IsValid(release) {
 		return Check{"go", Fail, fmt.Sprintf("go env GOVERSION says %q, not a Go version", got), 3}
 	}
-	if version.Compare(version.Lang(release), FloorGo) < 0 {
-		return Check{"go", Fail, fmt.Sprintf("%s is below the language floor %s (§2)", got, FloorGo), 3}
+	fl := floorOf(e.Dir)
+	if version.Compare(version.Lang(release), fl.lang) < 0 {
+		return Check{"go", Fail, fmt.Sprintf("%s is below %s", got, fl.label), 3}
 	}
 	switch {
 	case l == nil:
@@ -105,7 +132,7 @@ func goVersion(e Env, l *lock.Lock) Check {
 	case got != l.Toolchain:
 		return Check{"go", Fail, fmt.Sprintf("%s is running, the lock pins %s (a different patch release passes silently under GOTOOLCHAIN=local)", got, l.Toolchain), 2}
 	}
-	return Check{"go", OK, got + ", the pin and above the floor " + FloorGo, 0}
+	return Check{"go", OK, got + ", the pin and above " + fl.label, 0}
 }
 
 // cCompiler finds the C compiler cgo needs: the -race detector, and so every
@@ -151,7 +178,7 @@ func tools(e Env, l *lock.Lock) []Check {
 	var out []Check
 	if l != nil {
 		for _, b := range l.Binaries {
-			out = append(out, binaryCheck(e, b.Name))
+			out = append(out, binaryCheck(e, l, b.Name))
 		}
 	}
 	data, err := os.ReadFile(filepath.Join(e.Dir, "tools", "go.mod"))
@@ -168,11 +195,18 @@ func tools(e Env, l *lock.Lock) []Check {
 	return out
 }
 
-func binaryCheck(e Env, name string) Check {
-	if p, ok := lock.BinaryPath(lock.VerifyOptions{Dir: e.Dir, LookPath: e.LookPath}, name); ok {
-		return Check{name, OK, p, 0}
+// binaryCheck finds a downloaded binary and checks it against the lock for this
+// platform, as the gate does before it runs one: a binary the lock refuses is a pin
+// mismatch (exit 2) however it got there.
+func binaryCheck(e Env, l *lock.Lock, name string) Check {
+	p, ok := lock.BinaryPath(lock.VerifyOptions{Dir: e.Dir, LookPath: e.LookPath}, name)
+	if !ok {
+		return Check{name, Fail, "neither in .go-tops/bin nor on PATH (tool-missing)", 1}
 	}
-	return Check{name, Fail, "neither in .go-tops/bin nor on PATH (tool-missing)", 1}
+	if err := l.VerifyBinary(name, p, lock.HostPlatform()); err != nil {
+		return Check{name, Fail, err.Error(), 2}
+	}
+	return Check{name, OK, p, 0}
 }
 
 func moduleCheck(e Env, t lock.ModuleTool) Check {

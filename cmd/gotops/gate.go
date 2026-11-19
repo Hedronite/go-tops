@@ -25,7 +25,7 @@ func runGate(env cli.Env, args []string) int {
 	return gate.Main(context.Background(), args, gate.CommandDeps{
 		LoadConfig:  loadGateConfig,
 		CI:          os.Getenv("CI") == "true",
-		ToolVersion: packageVersion,
+		ToolVersion: toolVersion(),
 	}, env.Stdout, env.Stderr)
 }
 
