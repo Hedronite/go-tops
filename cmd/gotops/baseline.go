@@ -35,6 +35,7 @@ const baselineUsage = `usage: gotops baseline --init
        gotops baseline
        gotops baseline --accept-regression --reason TEXT --owner HANDLE
        gotops baseline --rename OLD NEW
+       gotops baseline --status [--base REF]
 
 The only command that writes .go-tops/baseline.json (GO_TOPS.md §6.7).
   --init                 measure and write the first ledger: the feeding layers run and
@@ -51,6 +52,12 @@ The only command that writes .go-tops/baseline.json (GO_TOPS.md §6.7).
                          The PR carries the protocol-change label.
   --rename OLD NEW       rewrite one function or package key and never a value. Refused
                          unless OLD has vanished from the code and NEW exists.
+  --status               write nothing: print one JSON line saying whether a first ledger is
+                         due, which is when neither the diff base (--base, default
+                         origin/main) nor the tree has one. Exit 0 when it is due, 1 when
+                         it is not (present, deleted, advisory), 2 when the base cannot be
+                         read (a shallow clone, an unknown ref, a copy that does not
+                         parse) or the configuration is invalid.
 Every write is refused under enforce: advisory.
 Exit codes:
   0  written, or nothing to change
@@ -100,7 +107,8 @@ var (
 
 type baselineArgs struct {
 	init, accept, rename bool
-	reason, owner        string
+	status               bool
+	reason, owner, base  string
 	oldKey, newKey       string
 }
 
@@ -111,6 +119,8 @@ func newArgSet(a *baselineArgs, kind *string) *flag.FlagSet {
 	set.BoolVar(&a.init, "init", false, "")
 	set.BoolVar(&a.accept, "accept-regression", false, "")
 	set.BoolVar(&a.rename, "rename", false, "")
+	set.BoolVar(&a.status, "status", false, "")
+	set.StringVar(&a.base, "base", "", "")
 	set.StringVar(&a.reason, "reason", "", "")
 	set.StringVar(&a.owner, "owner", "", "")
 	set.StringVar(kind, "kind", "", "")
@@ -121,7 +131,7 @@ func newArgSet(a *baselineArgs, kind *string) *flag.FlagSet {
 type argRule func(a baselineArgs, kind string, rest []string) error
 
 // argRules are the rules of the command line, in the order they are checked.
-var argRules = []argRule{ruleKind, ruleOneMode, ruleRenameKeys, ruleNoStrays, ruleAcceptFlagsOnly, ruleAcceptFlags}
+var argRules = []argRule{ruleKind, ruleOneMode, ruleRenameKeys, ruleNoStrays, ruleAcceptFlagsOnly, ruleBaseOnly, ruleAcceptFlags}
 
 func ruleKind(_ baselineArgs, kind string, _ []string) error {
 	if kind != "" {
@@ -132,13 +142,13 @@ func ruleKind(_ baselineArgs, kind string, _ []string) error {
 
 func ruleOneMode(a baselineArgs, _ string, _ []string) error {
 	modes := 0
-	for _, on := range []bool{a.init, a.accept, a.rename} {
+	for _, on := range []bool{a.init, a.accept, a.rename, a.status} {
 		if on {
 			modes++
 		}
 	}
 	if modes > 1 {
-		return errors.New("--init, --accept-regression and --rename are separate modes; give one")
+		return errors.New("--init, --accept-regression, --rename and --status are separate modes; give one")
 	}
 	return nil
 }
@@ -160,6 +170,13 @@ func ruleNoStrays(a baselineArgs, _ string, rest []string) error {
 func ruleAcceptFlagsOnly(a baselineArgs, _ string, _ []string) error {
 	if !a.accept && (a.reason != "" || a.owner != "") {
 		return errors.New("--reason and --owner belong to --accept-regression")
+	}
+	return nil
+}
+
+func ruleBaseOnly(a baselineArgs, _ string, _ []string) error {
+	if !a.status && a.base != "" {
+		return errors.New("--base belongs to --status")
 	}
 	return nil
 }
@@ -201,6 +218,9 @@ func runBaseline(env cli.Env, args []string) int {
 	if err != nil {
 		env.Stderr.Printf("gotops baseline: %v\n\n%s", err, baselineUsage)
 		return baselineCustody
+	}
+	if a.status {
+		return runStatus(context.Background(), env, a)
 	}
 	if err := baselineMain(context.Background(), env, a); err != nil {
 		var be *baselineError
