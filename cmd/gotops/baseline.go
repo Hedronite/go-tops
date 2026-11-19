@@ -291,27 +291,45 @@ func currentBuild(_ context.Context, dir string) (baseline.Build, error) {
 // returns the report. Nothing is judged: the caller reads the figures, never the
 // outcome of the run.
 func runFeedingLayers(ctx context.Context, dir string, cfg gate.Config) (report.Report, error) {
-	var layers []gate.Layer
-	for _, l := range gate.Layers() {
+	return runLayers(ctx, dir, cfg, feedingOnly(gate.Layers()))
+}
+
+// feedingOnly keeps the layers that feed the ledger (§6.7).
+func feedingOnly(all []gate.Layer) []gate.Layer {
+	var out []gate.Layer
+	for _, l := range all {
 		switch l.ID() {
 		case "hygiene", "tests", "coverage", "crap":
-			layers = append(layers, l)
+			out = append(out, l)
 		}
 	}
+	return out
+}
+
+// runLayers runs layers through the gate's runner and returns its report. A run
+// that cannot start is the exit code the gate gives it.
+func runLayers(ctx context.Context, dir string, cfg gate.Config, layers []gate.Layer) (report.Report, error) {
 	res, err := gate.Execute(ctx, cfg, gate.Options{MaxTier: 1}, gate.Deps{Dir: dir, Layers: layers, ToolVersion: packageVersion})
 	if err != nil {
-		var ee *gate.ExitError
-		var ce *gate.ConfigError
-		var le *gate.LockError
-		switch {
-		case errors.As(err, &ee):
-			return report.Report{}, bfail(ee.Code, "%v", err)
-		case errors.As(err, &ce), errors.As(err, &le):
-			return report.Report{}, bfail(baselineCustody, "%v", err)
-		}
-		return report.Report{}, bfail(baselineEnv, "%v", err)
+		return report.Report{}, startError(err)
 	}
 	return res.Report, nil
+}
+
+// startError is the exit code of a run that did not start: the code the runner
+// gave it (2, 3 or 4), 2 for an invalid configuration or a lock mismatch, and 3
+// for anything else.
+func startError(err error) *baselineError {
+	var ee *gate.ExitError
+	var ce *gate.ConfigError
+	var le *gate.LockError
+	switch {
+	case errors.As(err, &ee):
+		return bfail(ee.Code, "%v", err)
+	case errors.As(err, &ce), errors.As(err, &le):
+		return bfail(baselineCustody, "%v", err)
+	}
+	return bfail(baselineEnv, "%v", err)
 }
 
 // loadBaselineConfig is the loading of `gate` (check, then the class defaults)

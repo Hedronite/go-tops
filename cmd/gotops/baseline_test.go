@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -731,5 +732,65 @@ func TestRenameMovesAPackageKeyAgainstTheRealPackageSet(t *testing.T) {
 	}
 	if got := readLedgerFile(t, dir).Ledger.Packages; got["example.com/app/b"] != (baseline.Package{StatementsPct: 50, Uncovered: 9}) {
 		t.Errorf("packages %v", got)
+	}
+}
+
+// fakeLayer is a gate layer with a fixed outcome.
+type fakeLayer struct {
+	id      string
+	outcome gate.Outcome
+	pre     error
+}
+
+func (l fakeLayer) ID() string    { return l.id }
+func (fakeLayer) Tier() int       { return 1 }
+func (fakeLayer) Needs() []string { return nil }
+func (l fakeLayer) Run(context.Context, *gate.Env) gate.Result {
+	return gate.Result{Outcome: l.outcome}
+}
+func (l fakeLayer) Preflight(context.Context, *gate.Env) error { return l.pre }
+
+func TestFeedingOnlyKeepsTheFourFeedingLayers(t *testing.T) {
+	var all []gate.Layer
+	for _, id := range []string{"hygiene", "tests", "coverage", "crap", "mutation", "allocs", "fuzz"} {
+		all = append(all, fakeLayer{id: id, outcome: gate.Pass})
+	}
+	var got []string
+	for _, l := range feedingOnly(all) {
+		got = append(got, l.ID())
+	}
+	if want := "hygiene tests coverage crap"; strings.Join(got, " ") != want {
+		t.Errorf("layers %v, want %s", got, want)
+	}
+}
+
+func TestRunLayersReturnsTheReportAndJudgesNothing(t *testing.T) {
+	dir := repoWith(t, ratchetConfig(t), "")
+	layers := []gate.Layer{fakeLayer{id: "tests", outcome: gate.Pass}, fakeLayer{id: "crap", outcome: gate.Fail}}
+	rep, err := runLayers(t.Context(), dir, gate.Config{Module: "example.com/app", Class: "binary-cli", Enforce: "ratchet"}, layers)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rep.Layers) != 2 || rep.Layers[0].Outcome != "pass" || rep.Layers[1].Outcome != "fail" {
+		t.Errorf("layers %+v: a failing layer must still come back as a figure, not an error", rep.Layers)
+	}
+}
+
+func TestRunLayersMapsAStartFailureToItsExitCode(t *testing.T) {
+	dir := repoWith(t, ratchetConfig(t), "")
+	cfg := gate.Config{Module: "example.com/app", Class: "binary-cli", Enforce: "ratchet"}
+	for name, c := range map[string]struct {
+		pre  error
+		want int
+	}{
+		"invalid configuration": {&gate.ConfigError{Err: errors.New("bad")}, 2},
+		"lock mismatch":         {&gate.LockError{Err: errors.New("bad hash")}, 2},
+		"environment":           {&gate.EnvError{Err: errors.New("no compiler")}, 3},
+	} {
+		_, err := runLayers(t.Context(), dir, cfg, []gate.Layer{fakeLayer{id: "tests", outcome: gate.Pass, pre: c.pre}})
+		var be *baselineError
+		if !errors.As(err, &be) || be.code != c.want {
+			t.Errorf("%s: err %v, want exit %d", name, err, c.want)
+		}
 	}
 }
