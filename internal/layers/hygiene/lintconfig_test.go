@@ -2,6 +2,7 @@ package hygiene
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -119,7 +120,11 @@ func TestRealLinterWithAConfigUnderGoTops(t *testing.T) {
 			f.override["golangci-lint run"] = func(argv []string) (gate.Output, error) {
 				cmd := exec.CommandContext(context.Background(), "golangci-lint", argv[1:]...)
 				cmd.Dir = f.dir
-				out, _ := cmd.CombinedOutput()
+				out, err := cmd.CombinedOutput()
+				var exit *exec.ExitError
+				if err != nil && !errors.As(err, &exit) {
+					t.Fatal(err) // the linter exits 1 for findings, which is not a failure here
+				}
 				return gate.Output{Stdout: out}, nil
 			}
 			res := runLayer(t, f, gate.Config{Hygiene: gate.HygieneConfig{LintConfig: underGoTops}})

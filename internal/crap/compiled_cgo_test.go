@@ -37,8 +37,10 @@ func TestCompiledNeedsNoToolchainForTheNamedPlatform(t *testing.T) {
 	for _, c := range []struct {
 		goos, goarch, only string
 	}{
-		{"linux", "amd64", "OnLinux"}, {"linux", "arm64", "OnLinux"},
-		{"darwin", "arm64", "OnMac"}, {"darwin", "amd64", "OnMac"},
+		{"linux", "amd64", "OnLinux"},
+		{"linux", "arm64", "OnLinux"},
+		{"darwin", "arm64", "OnMac"},
+		{"darwin", "amd64", "OnMac"},
 		{"windows", "amd64", "OnWindows"},
 	} {
 		b := gobuild.Build{GOOS: c.goos, GOARCH: c.goarch, CGOEnabled: true}
