@@ -4,6 +4,28 @@ All notable changes to this project are listed here. The protocol version and th
 
 ## [Unreleased]
 
+### Package (M3)
+
+- **The first adopter, `vigil`.** Compiled from the step READYs: the dry run (G0), the kit fixes (G1, #35), the protocol 0.4.4 bundle (G1e, #36), the skills and drop-in (G2, #37), the adoption pull request in `vigil` (G3, `Hedronite/vigil` #24) and the exit (G4).
+  - Dry run (G0): `vigil` `main` `4a71f03` was adopted in a scratch clone against the kit at `1a34736`, nothing pushed. It filed 13 frictions (F1 to F13: 2 blocking, 2 high, 4 medium, 5 low), and the first real run added three low ones (F14 to F16). `vigil` needs no `gates.tests.tags`.
+  - Kit fixes (G1, #35):
+    - A leg whose build differs from the ledger's now skips the ratchet instead of failing it: `crap.Compiled` selects the ledger build's files with `go/build` and reads the functions from the source, so no C toolchain for another OS is needed, and a function only this leg compiles is still held to the cap.
+    - `gotops baseline --status [--base REF]` is read-only and prints one JSON line: exit 0 with `first-ledger-due`, 1 with `present`, `deleted` or `not-ratchet`, 2 with `error` (it cannot tell).
+    - A lint config outside the module root works: the result path is absolute and finding names are read module-relative.
+    - `doctor` refuses a downloaded binary whose SHA-256 the lock does not hold and checks the configured `go_floor`; the report's `tool_version` is the build's module version, a pseudo-version for an adopter that pins a commit.
+  - Protocol 0.4.4 (G1e, #36): see the entry under Changed.
+  - Skills, drop-in and `init` (G2, #37):
+    - `go-tops-adopt`, `go-tops-gate` and `go-tops-review` (`SKILL.md` and a Nushell script each, mirrored byte-identical into `.claude/skills` and `.cursor/skills`) print one JSON object `{ok, command, error, data}`; `ok` follows §3.3 and the C9 judge, and a missing Nushell, tool or report is `ok: false`.
+    - The drop-in judge reads the report at every exit code. On a pull request the ubuntu leg asks `baseline --status`; when a first ledger is due it runs `baseline --init` on its own build, uploads `go-tops-baseline` and fails the run until that file is committed unchanged, and the macOS leg runs no gate meanwhile.
+    - `init` writes the kit lint config to `.go-tops/golangci.yml` and never the adopter's `.golangci.yml`, merges into an existing `tools/go.mod` without dropping a line, writes a marked `.gitignore` block, keeps the whole release of the `go` line as the floor, and names no laws command before it exists.
+    - Kit CI gains a `skills` job (Nushell 0.108.0, ubuntu and macOS) and a `bootstrap` job that runs the template's own first-ledger steps.
+  - Adoption (G3, `Hedronite/vigil` #24, merged `8bb786c` on 2026-11-19):
+    - `vigil`'s `check` job, `.golangci.yml`, `ci.yml`, `go.mod` and `go.sum` are unchanged. `tools/go.mod` pins `gotops` at `v0.0.0-20261119162302-608716388245`, the pseudo-version of kit `main` `6087163` (no tag).
+    - The first ledger was written by the ubuntu leg on run 1 of the pull request and committed byte for byte. Its build is `linux/amd64`, cgo on, no tags. It records 8 functions over the CRAP cap, 0 packages under the floor, 64 lint findings in 15 files under the kit's rules, and 0 suppressions and exemptions.
+    - Run 2: `check (ubuntu-latest)`, `check (macos-latest)`, `gate (ubuntu)` (ratchet `pass`), `gate (macos)` (ratchet `skip`, a different build) and `gate (floor)` all green; the gate exits 1 on the not-yet-judged required laws alone, which the C9 judge accepts.
+  - Exit (G4): two green `gate` runs on `vigil` `main` after the merge, both judged by C9: the merge push ([run 44573685762](https://github.com/Hedronite/vigil/actions/runs/44573685762)) and its re-run, a second judged execution on the same commit ([attempt 2](https://github.com/Hedronite/vigil/actions/runs/44573685762/attempts/2)). Making the `gate` jobs required in `vigil`'s ruleset is a dated follow-up, on or after 2026-12-03 if they stay green.
+  - Carried: `gates.tests.tags` (B16; `vigil` needs none), the live skills test in the weekly adoption job, `go-tops-review` figures only for functions over the cap, and the three low rows F14 to F16.
+
 ### Package (M2)
 
 - **Native CRAP and the ratchet** (`internal/complexity`, `internal/crap`, `internal/gobuild`, `internal/exempt`, `internal/baseline`, `internal/ratchet`, `cmd/gotops/baseline.go`). Compiled from the step READYs; protocol 0.4.3 (rulings C2 and C3 of M2) is under Changed. The package is still unreleased (0.0.0).
