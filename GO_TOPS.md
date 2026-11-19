@@ -792,7 +792,12 @@ between baseline and run, so a configuration edit cannot quietly shrink what is 
   run and at or under the cap, or exists in no `.go` file of the directory, whatever its tags. A
   carried entry covers its function only while `comp(f)` is at or under the entry's value plus
   0.01, since `CRAP(f) ≥ comp(f)` at every coverage; a function whose complexity rises past that
-  fails like any function over the cap.
+  fails like any function over the cap. There is no per-leg `baseline --init` and no other
+  mechanism. A legacy function that is over the cap on complexity and that `baseline --init` did
+  not measure gets its debt through one of two routes: on a run whose build compiles its file,
+  `baseline --accept-regression --reason <text> --owner <handle>` adds its entry at the measured
+  CRAP and writes a `regressions` record; where no leg compiles its file, it takes a `crap`
+  exemption (§6.8) with a reason, an owner and an expiry.
 - Raising an entry, adding one, or lowering `judged_laws` needs
   `baseline --accept-regression --reason <text> --owner <handle>` and a PR that carries the
   `protocol-change` label. The flag records the change under `regressions` in the file. `gate`
@@ -916,7 +921,9 @@ file, or a `symbol` that names no function in the matching files, fails, so an e
 the file with the code it covered.
 
 **What an exemption does.** Under `layer: crap` the covered functions are still scored and
-printed, marked exempt, and are not judged against the cap. Under `layer: mutation` the mutants
+printed, marked exempt, and are not judged against the cap. A function the run does not measure (§6.2) is
+covered like any other: a `path` matches production files whatever their build tags, and its
+report row has `null` for `cov_pct` and `crap`. Under `layer: mutation` the mutants
 in the covered code are not counted as survivors, and the report lists them as exempt. An
 exemption changes no other layer, no law and no coverage floor; a law is acknowledged with
 `//tops:ack` (§3.3). The gate prints every exemption in force, with its expiry, on every run.
