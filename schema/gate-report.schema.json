@@ -22,7 +22,7 @@
   ],
   "properties": {
     "protocol": {
-      "const": "0.4.2"
+      "const": "0.4.3"
     },
     "tool_version": {
       "type": "string",
@@ -80,6 +80,31 @@
         "null"
       ],
       "format": "date-time"
+    },
+    "ratchet": {
+      "description": "The ratchet judgment of a run under enforce: ratchet (§6.7). pass or fail on the ledger leg, where run_build equals ledger_build; skip on any other leg, never pass. Absent under hard and advisory.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "outcome",
+        "ledger_build",
+        "run_build"
+      ],
+      "properties": {
+        "outcome": {
+          "enum": [
+            "pass",
+            "fail",
+            "skip"
+          ]
+        },
+        "ledger_build": {
+          "$ref": "core.schema.json#/$defs/build"
+        },
+        "run_build": {
+          "$ref": "core.schema.json#/$defs/build"
+        }
+      }
     },
     "layer_counts": {
       "type": "object",
@@ -296,6 +321,25 @@
     }
   },
   "allOf": [
+    {
+      "if": {
+        "required": [
+          "enforce"
+        ],
+        "properties": {
+          "enforce": {
+            "const": "ratchet"
+          }
+        }
+      },
+      "else": {
+        "not": {
+          "required": [
+            "ratchet"
+          ]
+        }
+      }
+    },
     {
       "if": {
         "properties": {
@@ -848,6 +892,11 @@
             "$ref": "#/$defs/crapFunction"
           }
         },
+        "not_measured": {
+          "description": "Production functions in files the run's build does not compile (GOOS, GOARCH, tags, CGO_ENABLED). They are counted and never passed: one whose complexity is above the cap is a violation with null cov_pct and crap (§6.2).",
+          "type": "integer",
+          "minimum": 0
+        },
         "exempt": {
           "description": "Functions scored and printed but not judged, under a crap exemption.",
           "type": "array",
@@ -882,12 +931,20 @@
           "minimum": 1
         },
         "cov_pct": {
-          "type": "number",
+          "description": "Statement coverage of the function, guard-neutral (§6.2). null, together with crap, for a function the run does not measure.",
+          "type": [
+            "number",
+            "null"
+          ],
           "minimum": 0,
           "maximum": 100
         },
         "crap": {
-          "type": "number",
+          "description": "The unrounded score (§6.2). null, together with cov_pct, for a function the run does not measure: its complexity is above the cap, which fails at every coverage.",
+          "type": [
+            "number",
+            "null"
+          ],
           "minimum": 0
         },
         "baseline": {
@@ -897,7 +954,29 @@
             "null"
           ]
         }
-      }
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "cov_pct": {
+              "type": "number"
+            },
+            "crap": {
+              "type": "number"
+            }
+          }
+        },
+        {
+          "properties": {
+            "cov_pct": {
+              "type": "null"
+            },
+            "crap": {
+              "type": "null"
+            }
+          }
+        }
+      ]
     },
     "mutationDetails": {
       "type": "object",
