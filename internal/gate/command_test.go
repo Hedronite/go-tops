@@ -175,3 +175,35 @@ func TestMainLoadConfigEnvironmentErrorIsThree(t *testing.T) {
 		t.Fatalf("exit %d, want 3", code)
 	}
 }
+
+// A report that cannot be written is an environment error (3), not a pass: the
+// run judged something and the record of it is lost.
+func TestMainReportThatCannotBeWrittenExitsThree(t *testing.T) {
+	c := cfg()
+	c.RequiredLaws = nil
+	c.ReportPath = "blocked/r.json"
+	d := cmdDeps(t, gateLayers(nil, nil), c)
+	if err := os.WriteFile(filepath.Join(d.Dir, "blocked"), []byte("a file where a directory should be"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	code, _, stderr := run(nil, d)
+	if code != ExitEnv || !strings.Contains(stderr, "gotops gate:") {
+		t.Errorf("exit %d, stderr %q", code, stderr)
+	}
+}
+
+// With no directory given the command runs in the current one.
+func TestMainTakesTheCurrentDirectoryWhenNoneIsGiven(t *testing.T) {
+	c := cfg()
+	c.RequiredLaws = nil
+	d := cmdDeps(t, gateLayers(nil, nil), c)
+	dir := d.Dir
+	d.Dir = ""
+	t.Chdir(dir)
+	if code, _, stderr := run(nil, d); code != 0 {
+		t.Fatalf("exit %d: %s", code, stderr)
+	}
+	if _, err := os.Stat(filepath.Join(dir, ".go-tops", "report.json")); err != nil {
+		t.Error(err)
+	}
+}
