@@ -4,7 +4,7 @@
 This file is the contract between this repository and any AI coding agents (or human reviewers) working on it.
 
 **Class:** `binary-service`
-**Protocol:** Go-TOPS 0.4.3
+**Protocol:** Go-TOPS 0.4.4
 **Module:** `github.com/acme/demo`
 **Enforce:** `ratchet`
 
