@@ -127,7 +127,7 @@ func ratchetConfig(t *testing.T) string {
 
 func advisoryConfig(t *testing.T) string {
 	t.Helper()
-	return strings.Replace(goodConfig(t), "enforce: hard", "enforce: advisory\nadvisory:\n  reason: the laws layer lands at M5\n  owner: ali\n  expires: \"2099-01-01\"", 1)
+	return strings.Replace(goodConfig(t), "enforce: hard", "enforce: advisory\nadvisory:\n  reason: the laws layer lands at M5\n  owner: maintainer\n  expires: \"2099-01-01\"", 1)
 }
 
 // repoWith is a git module with go-tops.yaml and, when ledger is not empty, a
@@ -296,7 +296,7 @@ func TestEveryWriteIsRefusedUnderAdvisory(t *testing.T) {
 	for _, args := range [][]string{
 		{"--init"},
 		{},
-		{"--accept-regression", "--reason", "the parser grows one arm", "--owner", "ali"},
+		{"--accept-regression", "--reason", "the parser grows one arm", "--owner", "maintainer"},
 		{"--rename", "a", "b"},
 	} {
 		code, _, stderr := baselineIn(t, dir, args...)
@@ -381,7 +381,7 @@ func TestACustodyErrorExitsTwo(t *testing.T) {
 		}
 	})
 	for _, bad := range []string{"not json", `{"ledger":{}}`, `{"ledger":{},"judged_laws":0,"extra":1}`, ""} {
-		for _, args := range [][]string{{}, {"--accept-regression", "--reason", "the parser grows one arm", "--owner", "ali"}, {"--rename", "a", "b"}} {
+		for _, args := range [][]string{{}, {"--accept-regression", "--reason", "the parser grows one arm", "--owner", "maintainer"}, {"--rename", "a", "b"}} {
 			t.Run("ledger "+bad+" "+strings.Join(args, " "), func(t *testing.T) {
 				dir := repoWith(t, ratchetConfig(t), bad)
 				if bad == "" {
@@ -455,7 +455,7 @@ func TestPlainWriteNeedsGreenTests(t *testing.T) {
 func TestAcceptRegressionRaisesAndRecords(t *testing.T) {
 	dir, fx := initialised(t)
 	fx.setCrap(cfn("example.com/app/a.Alpha", 25), cfn("example.com/app/b.Beta", 14.5), cfn("example.com/app/a.Gamma", 30))
-	code, _, stderr := baselineIn(t, dir, "--accept-regression", "--reason", "the parser grows one arm", "--owner", "ali")
+	code, _, stderr := baselineIn(t, dir, "--accept-regression", "--reason", "the parser grows one arm", "--owner", "maintainer")
 	if code != 0 {
 		t.Fatalf("exit %d: %s", code, stderr)
 	}
@@ -463,7 +463,7 @@ func TestAcceptRegressionRaisesAndRecords(t *testing.T) {
 	if got.Ledger.Functions["example.com/app/a.Alpha"] != 25 || got.Ledger.Functions["example.com/app/a.Gamma"] != 30 {
 		t.Errorf("functions %v", got.Ledger.Functions)
 	}
-	if len(got.Regressions) != 2 || got.Regressions[0].Key != "example.com/app/a.Alpha" || got.Regressions[0].Owner != "ali" || got.Regressions[1].From != nil {
+	if len(got.Regressions) != 2 || got.Regressions[0].Key != "example.com/app/a.Alpha" || got.Regressions[0].Owner != "maintainer" || got.Regressions[1].From != nil {
 		t.Errorf("regressions %+v", got.Regressions)
 	}
 	if schemaHasBuild(t) {
@@ -481,8 +481,8 @@ func TestAcceptRegressionNeedsAReasonAndAnOwner(t *testing.T) {
 	for _, args := range [][]string{
 		{"--accept-regression"},
 		{"--accept-regression", "--reason", "the parser grows one arm"},
-		{"--accept-regression", "--owner", "ali"},
-		{"--accept-regression", "--reason", "too short", "--owner", "ali"},
+		{"--accept-regression", "--owner", "maintainer"},
+		{"--accept-regression", "--reason", "too short", "--owner", "maintainer"},
 		{"--accept-regression", "--reason", "the parser grows one arm", "--owner", " "},
 	} {
 		fx.ran = 0
@@ -501,7 +501,7 @@ func TestAcceptRegressionNeedsAReasonAndAnOwner(t *testing.T) {
 func TestAcceptRegressionWithNothingToAcceptIsRefused(t *testing.T) {
 	dir, _ := initialised(t)
 	before := fileBytes(t, dir, ledgerRel)
-	code, _, stderr := baselineIn(t, dir, "--accept-regression", "--reason", "the parser grows one arm", "--owner", "ali")
+	code, _, stderr := baselineIn(t, dir, "--accept-regression", "--reason", "the parser grows one arm", "--owner", "maintainer")
 	if code != 1 || !strings.Contains(stderr, "nothing to accept") {
 		t.Errorf("exit %d, stderr %q", code, stderr)
 	}
@@ -575,7 +575,7 @@ func TestUsageErrorsExitTwo(t *testing.T) {
 		"rename three keys":   {"--rename", "a", "b", "c"},
 		"stray argument":      {"extra"},
 		"reason without mode": {"--reason", "three words here"},
-		"owner without mode":  {"--owner", "ali"},
+		"owner without mode":  {"--owner", "maintainer"},
 		"survivors kind":      {"--init", "--kind", "survivors"},
 	} {
 		if code, _, stderr := baselineIn(t, dir, args...); code != 2 || stderr == "" {
@@ -623,7 +623,7 @@ func TestAnotherLegRefusesEveryWriteAndNamesTheLedgerBuild(t *testing.T) {
 	fx.ran = 0
 	for _, args := range [][]string{
 		{},
-		{"--accept-regression", "--reason", "the parser grows one arm", "--owner", "ali"},
+		{"--accept-regression", "--reason", "the parser grows one arm", "--owner", "maintainer"},
 		{"--rename", "example.com/app/a.Alpha", "example.com/app/a.Renamed"},
 		{"--init"},
 	} {

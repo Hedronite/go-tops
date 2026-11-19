@@ -150,40 +150,84 @@ type wireRecord struct {
 // unknown key, the two required keys present) and leaves the schema's finer
 // rules to `check`, which validates the same bytes against core.schema.json.
 func Parse(data []byte) (File, error) {
+	w, err := decodeWire(data)
+	if err != nil {
+		return File{}, err
+	}
+	if err := w.check(); err != nil {
+		return File{}, err
+	}
+	return w.file(), nil
+}
+
+// decodeWire reads exactly one JSON value with no key the file does not have.
+func decodeWire(data []byte) (wire, error) {
 	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.DisallowUnknownFields()
 	var w wire
 	if err := dec.Decode(&w); err != nil {
 		if errors.Is(err, io.EOF) {
-			return File{}, errors.New("the file is empty")
+			return wire{}, errors.New("the file is empty")
 		}
-		return File{}, fmt.Errorf("not a baseline: %w", err)
+		return wire{}, fmt.Errorf("not a baseline: %w", err)
 	}
 	if _, err := dec.Token(); !errors.Is(err, io.EOF) {
-		return File{}, errors.New("more than one JSON value, or text after the first")
+		return wire{}, errors.New("more than one JSON value, or text after the first")
 	}
+	return w, nil
+}
+
+// check refuses a file that lacks a required key or a field of its build.
+func (w wire) check() error {
 	if w.Ledger == nil || w.JudgedLaws == nil || w.Build == nil {
-		return File{}, errors.New(`not a baseline: "build", "ledger" and "judged_laws" are required`)
+		return errors.New(`not a baseline: "build", "ledger" and "judged_laws" are required`)
 	}
-	if b := w.Build; b.GOOS == nil || b.GOARCH == nil || b.Tags == nil || b.CGOEnabled == nil || *b.GOOS == "" || *b.GOARCH == "" {
-		return File{}, errors.New(`not a baseline: "build" needs goos, goarch, tags and cgo_enabled`)
+	if !w.Build.complete() {
+		return errors.New(`not a baseline: "build" needs goos, goarch, tags and cgo_enabled`)
 	}
-	f := File{JudgedLaws: *w.JudgedLaws, Build: Build{GOOS: *w.Build.GOOS, GOARCH: *w.Build.GOARCH, Tags: *w.Build.Tags, CGOEnabled: *w.Build.CGOEnabled}}
-	l := w.Ledger
-	f.Ledger = Ledger{Functions: nonEmpty(l.Functions), Findings: nonEmptyCounts(l.Findings), Laws: nonEmptyCounts(l.Laws), Exemptions: l.Exemptions, Survivors: nonEmpty(l.Survivors)}
-	if len(l.Packages) > 0 {
-		f.Ledger.Packages = map[string]Package{}
-		for k, p := range l.Packages {
-			f.Ledger.Packages[k] = Package(p)
-		}
+	return nil
+}
+
+func (b *wireBuild) complete() bool {
+	return b.GOOS != nil && b.GOARCH != nil && b.Tags != nil && b.CGOEnabled != nil && *b.GOOS != "" && *b.GOARCH != ""
+}
+
+// file is the checked wire form as a File.
+func (w wire) file() File {
+	b := w.Build
+	return File{
+		JudgedLaws:  *w.JudgedLaws,
+		Build:       Build{GOOS: *b.GOOS, GOARCH: *b.GOARCH, Tags: *b.Tags, CGOEnabled: *b.CGOEnabled},
+		Ledger:      w.Ledger.ledger(),
+		Regressions: recordsOf(w.Regressions),
 	}
+}
+
+func (l *wireLedger) ledger() Ledger {
+	out := Ledger{Functions: nonEmpty(l.Functions), Packages: packagesOf(l.Packages), Findings: nonEmptyCounts(l.Findings), Laws: nonEmptyCounts(l.Laws), Exemptions: l.Exemptions, Survivors: nonEmpty(l.Survivors)}
 	if s := l.Suppressions; s != nil {
-		f.Ledger.Nolint, f.Ledger.Ack = nonEmptyCounts(s.Nolint), nonEmptyCounts(s.Ack)
+		out.Nolint, out.Ack = nonEmptyCounts(s.Nolint), nonEmptyCounts(s.Ack)
 	}
-	for _, r := range w.Regressions {
-		f.Regressions = append(f.Regressions, Regression{Kind: r.Kind, Key: r.Key, From: r.From, To: r.To, Reason: r.Reason, Owner: r.Owner})
+	return out
+}
+
+func packagesOf(in map[string]wirePkg) map[string]Package {
+	if len(in) == 0 {
+		return nil
 	}
-	return f, nil
+	out := make(map[string]Package, len(in))
+	for k, p := range in {
+		out[k] = Package(p)
+	}
+	return out
+}
+
+func recordsOf(in []wireRecord) []Regression {
+	var out []Regression
+	for _, r := range in {
+		out = append(out, Regression{Kind: r.Kind, Key: r.Key, From: r.From, To: r.To, Reason: r.Reason, Owner: r.Owner})
+	}
+	return out
 }
 
 func nonEmpty[V any](m map[string]V) map[string]V {

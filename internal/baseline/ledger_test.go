@@ -133,8 +133,8 @@ func full() baseline.File {
 		},
 		JudgedLaws: 7,
 		Regressions: []baseline.Regression{
-			{Kind: "functions", Key: "example.com/app/z.Zed", From: nil, To: 12.5, Reason: "the parser grows by design", Owner: "ali"},
-			{Kind: "functions", Key: "example.com/app/a.Alpha", From: f64(19), To: 21, Reason: "one more format arm", Owner: "ali"},
+			{Kind: "functions", Key: "example.com/app/z.Zed", From: nil, To: 12.5, Reason: "the parser grows by design", Owner: "maintainer"},
+			{Kind: "functions", Key: "example.com/app/a.Alpha", From: f64(19), To: 21, Reason: "one more format arm", Owner: "maintainer"},
 		},
 	}
 }
@@ -189,8 +189,8 @@ const fullJSON = `{
     }
   },
   "regressions": [
-    {"from": 19, "key": "example.com/app/a.Alpha", "kind": "functions", "owner": "ali", "reason": "one more format arm", "to": 21},
-    {"from": null, "key": "example.com/app/z.Zed", "kind": "functions", "owner": "ali", "reason": "the parser grows by design", "to": 12.5}
+    {"from": 19, "key": "example.com/app/a.Alpha", "kind": "functions", "owner": "maintainer", "reason": "one more format arm", "to": 21},
+    {"from": null, "key": "example.com/app/z.Zed", "kind": "functions", "owner": "maintainer", "reason": "the parser grows by design", "to": 12.5}
   ]
 }
 `

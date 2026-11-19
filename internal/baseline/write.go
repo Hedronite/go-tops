@@ -86,54 +86,68 @@ func flat(f File) map[ekey]float64 {
 // left out: the schema requires both.
 func unflat(m map[ekey]float64, recs []Regression) File {
 	f := File{JudgedLaws: int(m[ekey{kindJudgedLaws, keyJudgedLaws}]), Regressions: recs}
-	l := &f.Ledger
-	two := func(c *Counts, k ekey, v float64) {
-		name, file, _ := strings.Cut(k.key, nameFileSeparator)
-		if *c == nil {
-			*c = Counts{}
-		}
-		if (*c)[name] == nil {
-			(*c)[name] = map[string]int{}
-		}
-		(*c)[name][file] = int(v)
-	}
 	for k, v := range m {
-		switch k.kind {
-		case kindFunctions:
-			if l.Functions == nil {
-				l.Functions = map[string]float64{}
-			}
-			l.Functions[k.key] = v
-		case kindPkgPct:
-			u, ok := m[ekey{kindPkgUncovered, k.key}]
-			if !ok {
-				continue
-			}
-			if l.Packages == nil {
-				l.Packages = map[string]Package{}
-			}
-			l.Packages[k.key] = Package{StatementsPct: v, Uncovered: int(u)}
-		case kindFindings:
-			two(&l.Findings, k, v)
-		case kindLaws:
-			two(&l.Laws, k, v)
-		case kindNolint:
-			two(&l.Nolint, k, v)
-		case kindAck:
-			two(&l.Ack, k, v)
-		case kindSurvivors:
-			if l.Survivors == nil {
-				l.Survivors = map[string]int{}
-			}
-			l.Survivors[k.key] = int(v)
-		case kindExemptions:
-			l.Exemptions = int(v)
+		if put := putters[k.kind]; put != nil {
+			put(&f.Ledger, m, k, v)
 		}
 	}
 	if len(recs) == 0 {
 		f.Regressions = nil
 	}
 	return f
+}
+
+// putters add one number of the flat form to a ledger, one function per kind.
+// The uncovered count and judged_laws have none: a package takes its count when
+// its percentage is put, and judged_laws is the file's.
+var putters = map[string]func(l *Ledger, m map[ekey]float64, k ekey, v float64){
+	kindFunctions:  putFunction,
+	kindPkgPct:     putPackage,
+	kindFindings:   func(l *Ledger, _ map[ekey]float64, k ekey, v float64) { putCount(&l.Findings, k, v) },
+	kindLaws:       func(l *Ledger, _ map[ekey]float64, k ekey, v float64) { putCount(&l.Laws, k, v) },
+	kindNolint:     func(l *Ledger, _ map[ekey]float64, k ekey, v float64) { putCount(&l.Nolint, k, v) },
+	kindAck:        func(l *Ledger, _ map[ekey]float64, k ekey, v float64) { putCount(&l.Ack, k, v) },
+	kindSurvivors:  putSurvivor,
+	kindExemptions: func(l *Ledger, _ map[ekey]float64, _ ekey, v float64) { l.Exemptions = int(v) },
+}
+
+func putFunction(l *Ledger, _ map[ekey]float64, k ekey, v float64) {
+	if l.Functions == nil {
+		l.Functions = map[string]float64{}
+	}
+	l.Functions[k.key] = v
+}
+
+// putPackage needs both numbers of the package: the schema requires them
+// together, so a package with only one is left out.
+func putPackage(l *Ledger, m map[ekey]float64, k ekey, v float64) {
+	u, ok := m[ekey{kindPkgUncovered, k.key}]
+	if !ok {
+		return
+	}
+	if l.Packages == nil {
+		l.Packages = map[string]Package{}
+	}
+	l.Packages[k.key] = Package{StatementsPct: v, Uncovered: int(u)}
+}
+
+// putCount adds one "name:file" count.
+func putCount(c *Counts, k ekey, v float64) {
+	name, file, _ := strings.Cut(k.key, nameFileSeparator)
+	if *c == nil {
+		*c = Counts{}
+	}
+	if (*c)[name] == nil {
+		(*c)[name] = map[string]int{}
+	}
+	(*c)[name][file] = int(v)
+}
+
+func putSurvivor(l *Ledger, _ map[ekey]float64, k ekey, v float64) {
+	if l.Survivors == nil {
+		l.Survivors = map[string]int{}
+	}
+	l.Survivors[k.key] = int(v)
 }
 
 // asFile is the ledger a measure describes, with nothing recorded. The round
@@ -214,42 +228,38 @@ func prune(recs []Regression, cur map[ekey]float64) []Regression {
 // nothing and lowers no judged_laws, so there is no regression to record.
 var ErrNothingToAccept = &RefusalError{Msg: "nothing to accept: the measure raises no entry, adds none and does not lower judged_laws; run a plain `gotops baseline`"}
 
+// CheckAcceptArgs says whether a reason and an owner are what an accepted
+// regression needs: a reason of at least three words, and one handle. The
+// command checks them before it measures anything, and Accept checks them again.
+func CheckAcceptArgs(reason, owner string) error {
+	if len(strings.Fields(reason)) < 3 {
+		return refuse("--reason needs at least three words saying why the debt grows")
+	}
+	if len(strings.Fields(owner)) != 1 {
+		return refuse("--owner needs one handle, a person or a team")
+	}
+	return nil
+}
+
 // Accept is a write that accepts regressions: every entry the measure raises or
 // adds, and a lowering of judged_laws, is written and recorded with its reason
 // and owner. It also lowers and removes like Lower.
 func Accept(old File, m Measure, reason, owner string) (File, error) {
-	if len(strings.Fields(reason)) < 3 {
-		return File{}, refuse("--reason needs at least three words saying why the debt grows")
+	if err := CheckAcceptArgs(reason, owner); err != nil {
+		return File{}, err
 	}
-	if owner = strings.TrimSpace(owner); owner == "" || len(strings.Fields(owner)) != 1 {
-		return File{}, refuse("--owner needs one handle, a person or a team")
-	}
+	owner = strings.TrimSpace(owner)
 	lowered := Lower(old, m)
 	fl, fm, fo := flat(lowered), flat(m.asFile()), flat(old)
 	recs := append([]Regression(nil), lowered.Regressions...)
 	accepted := 0
 	for k, mv := range fm {
-		cur, had := fl[k]
-		switch {
-		case !had:
-			// A new entry. judged_laws is always had.
-		case worse(k.kind, mv, cur):
-			// An entry raised.
-		default:
+		if !raises(fl, k, mv) {
 			continue
 		}
 		fl[k] = mv
-		rec := Regression{Kind: k.kind, Key: k.key, To: mv, Reason: reason, Owner: owner}
-		if ov, was := fo[k]; was {
-			rec.From = &ov
-		}
-		for i := range recs {
-			if recs[i].Kind == k.kind && recs[i].Key == k.key {
-				rec.From = recs[i].From // the value the diff base holds
-				recs = append(recs[:i], recs[i+1:]...)
-				break
-			}
-		}
+		var rec Regression
+		rec, recs = recordFor(recs, k, mv, fo, reason, owner)
 		recs = append(recs, rec)
 		accepted++
 	}
@@ -259,6 +269,31 @@ func Accept(old File, m Measure, reason, owner string) (File, error) {
 	out := unflat(fl, sortedRecords(recs))
 	out.Build = old.Build
 	return out, nil
+}
+
+// raises reports whether writing mv at k raises the ledger entry there or adds
+// one. judged_laws always has an entry, so it is only ever raised or not.
+func raises(ledger map[ekey]float64, k ekey, mv float64) bool {
+	cur, had := ledger[k]
+	return !had || worse(k.kind, mv, cur)
+}
+
+// recordFor is the regression record for the entry k written at mv. Its from is
+// the entry's value before the write, or nil for an added entry. An earlier
+// record of the same entry is replaced and keeps its own from, which is the
+// value the gate's diff base holds. The records left over are returned.
+func recordFor(recs []Regression, k ekey, mv float64, before map[ekey]float64, reason, owner string) (Regression, []Regression) {
+	rec := Regression{Kind: k.kind, Key: k.key, To: mv, Reason: reason, Owner: owner}
+	if ov, was := before[k]; was {
+		rec.From = &ov
+	}
+	for i := range recs {
+		if recs[i].Kind == k.kind && recs[i].Key == k.key {
+			rec.From = recs[i].From
+			return rec, slices.Delete(slices.Clone(recs), i, i+1)
+		}
+	}
+	return rec, recs
 }
 
 // Change is one entry that moved the wrong way: a raised or added entry, or a
@@ -327,46 +362,73 @@ func (s KeySets) Has(k Kind, key string) bool {
 // code, and the new key exists in the code and has no entry yet (§6.7). A
 // regressions record of the old key follows it.
 func Rename(old File, from, to string, inv Inventory) (File, error) {
+	kind, err := keyKind(old, from)
+	if err != nil {
+		return File{}, err
+	}
+	if err := checkRename(old, from, to, kind, inv); err != nil {
+		return File{}, err
+	}
+	out := copyFile(old)
+	moveKey(&out, kind, from, to)
+	return out, nil
+}
+
+// keyKind says whether the ledger holds from as a function or as a package.
+func keyKind(old File, from string) (Kind, error) {
 	_, isFn := old.Ledger.Functions[from]
 	_, isPkg := old.Ledger.Packages[from]
-	var kind Kind
 	switch {
 	case isFn && isPkg:
-		return File{}, refuse("%q is both a function key and a package key in the ledger; rename cannot tell which", from)
+		return 0, refuse("%q is both a function key and a package key in the ledger; rename cannot tell which", from)
 	case isFn:
-		kind = KindFunction
+		return KindFunction, nil
 	case isPkg:
-		kind = KindPackage
-	default:
-		return File{}, refuse("the ledger has no entry for %q", from)
+		return KindPackage, nil
 	}
+	return 0, refuse("the ledger has no entry for %q", from)
+}
+
+// checkRename applies the rules of §6.7: the old key has vanished from the code,
+// the new key exists in it, and the ledger has no entry for the new key yet.
+func checkRename(old File, from, to string, kind Kind, inv Inventory) error {
 	_, toFn := old.Ledger.Functions[to]
 	_, toPkg := old.Ledger.Packages[to]
 	switch {
 	case from == to:
-		return File{}, refuse("the old and the new key are the same")
+		return refuse("the old and the new key are the same")
 	case inv.Has(kind, from):
-		return File{}, refuse("%q still exists in the code: a key is renamed only after it has vanished", from)
+		return refuse("%q still exists in the code: a key is renamed only after it has vanished", from)
 	case !inv.Has(kind, to):
-		return File{}, refuse("%q does not exist in the code: a key is renamed only to one that exists", to)
+		return refuse("%q does not exist in the code: a key is renamed only to one that exists", to)
 	case toFn || toPkg:
-		return File{}, refuse("the ledger already has an entry for %q", to)
+		return refuse("the ledger already has an entry for %q", to)
 	}
-	out := copyFile(old)
+	return nil
+}
+
+// moveKey moves the entry of kind from one key to another, with its records.
+func moveKey(f *File, kind Kind, from, to string) {
 	if kind == KindFunction {
-		out.Ledger.Functions[to] = out.Ledger.Functions[from]
-		delete(out.Ledger.Functions, from)
+		f.Ledger.Functions[to] = f.Ledger.Functions[from]
+		delete(f.Ledger.Functions, from)
 	} else {
-		out.Ledger.Packages[to] = out.Ledger.Packages[from]
-		delete(out.Ledger.Packages, from)
+		f.Ledger.Packages[to] = f.Ledger.Packages[from]
+		delete(f.Ledger.Packages, from)
 	}
-	for i, r := range out.Regressions {
-		onKind := (kind == KindFunction && r.Kind == kindFunctions) || (kind == KindPackage && strings.HasPrefix(r.Kind, "packages."))
-		if r.Key == from && onKind {
-			out.Regressions[i].Key = to
+	for i, r := range f.Regressions {
+		if r.Key == from && recordIsOf(kind, r.Kind) {
+			f.Regressions[i].Key = to
 		}
 	}
-	return out, nil
+}
+
+// recordIsOf says whether a record kind names an entry of the kind of key.
+func recordIsOf(kind Kind, recordKind string) bool {
+	if kind == KindFunction {
+		return recordKind == kindFunctions
+	}
+	return strings.HasPrefix(recordKind, "packages.")
 }
 
 // copyFile is a deep copy.

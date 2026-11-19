@@ -101,9 +101,8 @@ type baselineArgs struct {
 	oldKey, newKey       string
 }
 
-func parseBaselineArgs(args []string) (baselineArgs, error) {
-	var a baselineArgs
-	var kind string
+// newArgSet registers the flags of the command on a.
+func newArgSet(a *baselineArgs, kind *string) *flag.FlagSet {
 	set := flag.NewFlagSet("baseline", flag.ContinueOnError)
 	set.SetOutput(io.Discard)
 	set.BoolVar(&a.init, "init", false, "")
@@ -111,32 +110,78 @@ func parseBaselineArgs(args []string) (baselineArgs, error) {
 	set.BoolVar(&a.rename, "rename", false, "")
 	set.StringVar(&a.reason, "reason", "", "")
 	set.StringVar(&a.owner, "owner", "", "")
-	set.StringVar(&kind, "kind", "", "")
-	if err := set.Parse(args); err != nil {
-		return a, err
+	set.StringVar(kind, "kind", "", "")
+	return set
+}
+
+// argRule says what is wrong with a set of arguments: nil when nothing is.
+type argRule func(a baselineArgs, kind string, rest []string) error
+
+// argRules are the rules of the command line, in the order they are checked.
+var argRules = []argRule{ruleKind, ruleOneMode, ruleRenameKeys, ruleNoStrays, ruleAcceptFlagsOnly, ruleAcceptFlags}
+
+func ruleKind(_ baselineArgs, kind string, _ []string) error {
+	if kind != "" {
+		return fmt.Errorf("--kind %s: the survivors kind is recorded from a tier 2 run, which lands with mutation at M4", kind)
 	}
+	return nil
+}
+
+func ruleOneMode(a baselineArgs, _ string, _ []string) error {
 	modes := 0
 	for _, on := range []bool{a.init, a.accept, a.rename} {
 		if on {
 			modes++
 		}
 	}
+	if modes > 1 {
+		return errors.New("--init, --accept-regression and --rename are separate modes; give one")
+	}
+	return nil
+}
+
+func ruleRenameKeys(a baselineArgs, _ string, rest []string) error {
+	if a.rename && len(rest) != 2 {
+		return errors.New("--rename takes the old key and the new key")
+	}
+	return nil
+}
+
+func ruleNoStrays(a baselineArgs, _ string, rest []string) error {
+	if !a.rename && len(rest) > 0 {
+		return fmt.Errorf("unexpected argument %q", rest[0])
+	}
+	return nil
+}
+
+func ruleAcceptFlagsOnly(a baselineArgs, _ string, _ []string) error {
+	if !a.accept && (a.reason != "" || a.owner != "") {
+		return errors.New("--reason and --owner belong to --accept-regression")
+	}
+	return nil
+}
+
+// ruleAcceptFlags is the ledger's own rule for a reason and an owner, so the
+// command and the write cannot disagree.
+func ruleAcceptFlags(a baselineArgs, _ string, _ []string) error {
+	if a.accept {
+		return baseline.CheckAcceptArgs(a.reason, a.owner)
+	}
+	return nil
+}
+
+func parseBaselineArgs(args []string) (baselineArgs, error) {
+	var a baselineArgs
+	var kind string
+	set := newArgSet(&a, &kind)
+	if err := set.Parse(args); err != nil {
+		return a, err
+	}
 	rest := set.Args()
-	switch {
-	case kind != "":
-		return a, fmt.Errorf("--kind %s: the survivors kind is recorded from a tier 2 run, which lands with mutation at M4", kind)
-	case modes > 1:
-		return a, errors.New("--init, --accept-regression and --rename are separate modes; give one")
-	case a.rename && len(rest) != 2:
-		return a, errors.New("--rename takes the old key and the new key")
-	case !a.rename && len(rest) > 0:
-		return a, fmt.Errorf("unexpected argument %q", rest[0])
-	case !a.accept && (a.reason != "" || a.owner != ""):
-		return a, errors.New("--reason and --owner belong to --accept-regression")
-	case a.accept && len(strings.Fields(a.reason)) < 3:
-		return a, errors.New("--accept-regression needs --reason with at least three words saying why the debt grows")
-	case a.accept && (strings.TrimSpace(a.owner) == "" || len(strings.Fields(a.owner)) != 1):
-		return a, errors.New("--accept-regression needs --owner with one handle, a person or a team")
+	for _, rule := range argRules {
+		if err := rule(a, kind, rest); err != nil {
+			return a, err
+		}
 	}
 	if a.rename {
 		a.oldKey, a.newKey = rest[0], rest[1]
@@ -165,74 +210,137 @@ func runBaseline(env cli.Env, args []string) int {
 	return 0
 }
 
+// baselineRun is one invocation that has found its configuration and its
+// ledger and is on the ledger leg.
+type baselineRun struct {
+	env            cli.Env
+	a              baselineArgs
+	dir, rel, path string
+	acks           string
+	cfg            gate.Config
+	old            baseline.File
+	build          baseline.Build
+}
+
 func baselineMain(ctx context.Context, env cli.Env, a baselineArgs) error {
-	dir, err := os.Getwd()
-	if err != nil {
-		return bfail(baselineEnv, "%v", err)
-	}
-	cfg, acks, rel, err := loadBaselineConfig(dir)
+	r, err := openBaseline(ctx, env, a)
 	if err != nil {
 		return err
-	}
-	if cfg.Enforce == "advisory" {
-		return bfail(baselineRefused, "refused under enforce: advisory: the baseline cannot be written (GO_TOPS.md §6.7)")
-	}
-	path := filepath.Join(dir, filepath.FromSlash(rel))
-	old, exists, err := readLedger(path, rel)
-	switch {
-	case a.init && (exists || trackedAtHead(dir, rel)):
-		return bfail(baselineRefused, "%s exists, in the tree or at HEAD: --init writes a first ledger only, and deleting the file is not a reset (GO_TOPS.md §6.7). A later write is `gotops baseline`", rel)
-	case !a.init && !exists:
-		return bfail(baselineCustody, "%s does not exist: under ratchet a missing baseline is a custody failure. The first ledger is `gotops baseline --init`", rel)
-	case err != nil && !a.init:
-		return err
-	}
-	build, err := runBuild(ctx, dir)
-	if err != nil {
-		return bfail(baselineEnv, "read the build: %v", err)
-	}
-	if !a.init && !build.Equal(old.Build) {
-		return bfail(baselineRefused, "this run's build (%s) is not the ledger build (%s): the baseline is written only on the ledger leg (GO_TOPS.md §6.7)", build, old.Build)
 	}
 	if a.rename {
-		return renameKey(env, dir, cfg, path, rel, old, a)
+		return r.renameKey()
 	}
-	m, err := measure(ctx, dir, cfg, acks, build)
+	m, err := measure(ctx, r.dir, r.cfg, r.acks, r.build)
 	if err != nil {
 		return err
 	}
 	switch {
 	case a.init:
-		next := baseline.Init(m)
-		if err := writeLedger(path, baseline.Marshal(next)); err != nil {
-			return err
-		}
-		env.Stdout.Printf("%s written: %s\nCommit it with go-tops.yaml; `gotops check` and `gotops gate` then read it as the first ledger.\n", rel, describe(next))
-		return nil
+		return r.initLedger(m)
 	case a.accept:
-		next, err := baseline.Accept(old, m, a.reason, a.owner)
-		if err != nil {
-			return refusal(err)
-		}
-		if err := writeLedger(path, baseline.Marshal(next)); err != nil {
-			return err
-		}
-		env.Stdout.Printf("%s written: %s\n%d regression(s) recorded under owner %s. The PR carries the protocol-change label.\n", rel, describe(next), len(next.Regressions), a.owner)
-		return nil
+		return r.acceptRegressions(m)
 	}
-	next := baseline.Lower(old, m)
-	before, after := baseline.Marshal(old), baseline.Marshal(next)
-	if string(before) == string(after) {
-		env.Stdout.Printf("%s unchanged: nothing to lower.\n", rel)
-	} else {
-		if err := writeLedger(path, after); err != nil {
-			return err
-		}
-		env.Stdout.Printf("%s written: %s\n", rel, describe(next))
+	return r.lower(m)
+}
+
+// openBaseline loads the configuration, refuses what advisory refuses, finds the
+// ledger the mode needs, and checks that this run is on its leg.
+func openBaseline(ctx context.Context, env cli.Env, a baselineArgs) (*baselineRun, error) {
+	dir, err := os.Getwd()
+	if err != nil {
+		return nil, bfail(baselineEnv, "%v", err)
+	}
+	cfg, acks, rel, err := loadBaselineConfig(dir)
+	if err != nil {
+		return nil, err
+	}
+	if cfg.Enforce == "advisory" {
+		return nil, bfail(baselineRefused, "refused under enforce: advisory: the baseline cannot be written (GO_TOPS.md §6.7)")
+	}
+	r := &baselineRun{env: env, a: a, dir: dir, rel: rel, path: filepath.Join(dir, filepath.FromSlash(rel)), acks: acks, cfg: cfg}
+	if err := r.findLedger(); err != nil {
+		return nil, err
+	}
+	if err := r.checkLeg(ctx); err != nil {
+		return nil, err
+	}
+	return r, nil
+}
+
+// findLedger reads the ledger a plain write, an accept or a rename changes, and
+// refuses --init when one exists: in the tree or at HEAD, because deleting the
+// file is not a reset.
+func (r *baselineRun) findLedger() error {
+	old, exists, err := readLedger(r.path, r.rel)
+	switch {
+	case r.a.init && (exists || trackedAtHead(r.dir, r.rel)):
+		return bfail(baselineRefused, "%s exists, in the tree or at HEAD: --init writes a first ledger only, and deleting the file is not a reset (GO_TOPS.md §6.7). A later write is `gotops baseline`", r.rel)
+	case !r.a.init && !exists:
+		return bfail(baselineCustody, "%s does not exist: under ratchet a missing baseline is a custody failure. The first ledger is `gotops baseline --init`", r.rel)
+	case err != nil && !r.a.init:
+		return err
+	}
+	r.old = old
+	return nil
+}
+
+// checkLeg reads this run's build and refuses a write from any run but the ledger
+// leg: the one whose build the ledger records (ruling C3). --init records it.
+func (r *baselineRun) checkLeg(ctx context.Context) error {
+	build, err := runBuild(ctx, r.dir)
+	if err != nil {
+		return bfail(baselineEnv, "read the build: %v", err)
+	}
+	r.build = build
+	if !r.a.init && !build.Equal(r.old.Build) {
+		return bfail(baselineRefused, "this run's build (%s) is not the ledger build (%s): the baseline is written only on the ledger leg (GO_TOPS.md §6.7)", build, r.old.Build)
+	}
+	return nil
+}
+
+func (r *baselineRun) initLedger(m baseline.Measure) error {
+	next := baseline.Init(m)
+	if err := writeLedger(r.path, baseline.Marshal(next)); err != nil {
+		return err
+	}
+	r.env.Stdout.Printf("%s written: %s\nCommit it with go-tops.yaml; `gotops check` and `gotops gate` then read it as the first ledger.\n", r.rel, describe(next))
+	return nil
+}
+
+func (r *baselineRun) acceptRegressions(m baseline.Measure) error {
+	next, err := baseline.Accept(r.old, m, r.a.reason, r.a.owner)
+	if err != nil {
+		return refusal(err)
+	}
+	if err := writeLedger(r.path, baseline.Marshal(next)); err != nil {
+		return err
+	}
+	r.env.Stdout.Printf("%s written: %s\n%d regression(s) recorded under owner %s. The PR carries the protocol-change label.\n", r.rel, describe(next), len(next.Regressions), r.a.owner)
+	return nil
+}
+
+// lower is the plain write: it lowers and removes, and says what it left alone.
+func (r *baselineRun) lower(m baseline.Measure) error {
+	next := baseline.Lower(r.old, m)
+	if err := r.writeIfChanged(next); err != nil {
+		return err
 	}
 	if n := len(baseline.Raised(next, baseline.Init(m))); n > 0 {
-		env.Stdout.Printf("%d measured value(s) are above the ledger or absent from it and were left as they are. `gotops baseline --accept-regression --reason TEXT --owner HANDLE` records them.\n", n)
+		r.env.Stdout.Printf("%d measured value(s) are above the ledger or absent from it and were left as they are. `gotops baseline --accept-regression --reason TEXT --owner HANDLE` records them.\n", n)
 	}
+	return nil
+}
+
+func (r *baselineRun) writeIfChanged(next baseline.File) error {
+	after := baseline.Marshal(next)
+	if string(baseline.Marshal(r.old)) == string(after) {
+		r.env.Stdout.Printf("%s unchanged: nothing to lower.\n", r.rel)
+		return nil
+	}
+	if err := writeLedger(r.path, after); err != nil {
+		return err
+	}
+	r.env.Stdout.Printf("%s written: %s\n", r.rel, describe(next))
 	return nil
 }
 
@@ -246,19 +354,19 @@ func refusal(err error) error {
 	return bfail(baselineEnv, "%v", err)
 }
 
-func renameKey(env cli.Env, dir string, cfg gate.Config, path, rel string, old baseline.File, a baselineArgs) error {
-	inv, err := scanInventory(dir)
+func (r *baselineRun) renameKey() error {
+	inv, err := scanInventory(r.dir)
 	if err != nil {
 		return bfail(baselineEnv, "read the source tree: %v", err)
 	}
-	next, err := baseline.Rename(old, a.oldKey, a.newKey, inv)
+	next, err := baseline.Rename(r.old, r.a.oldKey, r.a.newKey, inv)
 	if err != nil {
 		return refusal(err)
 	}
-	if err := writeLedger(path, baseline.Marshal(next)); err != nil {
+	if err := writeLedger(r.path, baseline.Marshal(next)); err != nil {
 		return err
 	}
-	env.Stdout.Printf("%s written: %s renamed to %s; its value is unchanged. Review the diff in the PR.\n", rel, a.oldKey, a.newKey)
+	r.env.Stdout.Printf("%s written: %s renamed to %s; its value is unchanged. Review the diff in the PR.\n", r.rel, r.a.oldKey, r.a.newKey)
 	return nil
 }
 

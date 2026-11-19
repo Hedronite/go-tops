@@ -3,6 +3,7 @@ package baseline_test
 import (
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/Hedronite/go-tops/internal/baseline"
@@ -264,14 +265,14 @@ func TestAcceptRaisesAnEntryAndRecordsIt(t *testing.T) {
 	old := ledgerOf(legacy())
 	m := legacy()
 	m.Functions["m/a.F1"] = 25
-	got, err := baseline.Accept(old, m, goodReason, "ali")
+	got, err := baseline.Accept(old, m, goodReason, "maintainer")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got.Ledger.Functions["m/a.F1"] != 25 {
 		t.Errorf("entry %v, want 25", got.Ledger.Functions["m/a.F1"])
 	}
-	want := []baseline.Regression{{Kind: "functions", Key: "m/a.F1", From: f64(21), To: 25, Reason: goodReason, Owner: "ali"}}
+	want := []baseline.Regression{{Kind: "functions", Key: "m/a.F1", From: f64(21), To: 25, Reason: goodReason, Owner: "maintainer"}}
 	if !reflect.DeepEqual(got.Regressions, want) {
 		t.Errorf("regressions %+v, want %+v", got.Regressions, want)
 	}
@@ -284,7 +285,7 @@ func TestAcceptAddsAnEntryWithANullFrom(t *testing.T) {
 	m.Findings["errcheck"] = map[string]int{"z.go": 1}
 	m.Nolint["gosec"]["c.go"] = 1
 	m.Exemptions = 2
-	got, err := baseline.Accept(old, m, goodReason, "ali")
+	got, err := baseline.Accept(old, m, goodReason, "maintainer")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -292,10 +293,10 @@ func TestAcceptAddsAnEntryWithANullFrom(t *testing.T) {
 		t.Errorf("ledger %+v", got.Ledger)
 	}
 	want := []baseline.Regression{
-		{Kind: "exemptions", Key: "exemptions", From: f64(1), To: 2, Reason: goodReason, Owner: "ali"},
-		{Kind: "findings", Key: "errcheck:z.go", From: nil, To: 1, Reason: goodReason, Owner: "ali"},
-		{Kind: "functions", Key: "m/new.Grew", From: nil, To: 33, Reason: goodReason, Owner: "ali"},
-		{Kind: "suppressions.nolint", Key: "gosec:c.go", From: nil, To: 1, Reason: goodReason, Owner: "ali"},
+		{Kind: "exemptions", Key: "exemptions", From: f64(1), To: 2, Reason: goodReason, Owner: "maintainer"},
+		{Kind: "findings", Key: "errcheck:z.go", From: nil, To: 1, Reason: goodReason, Owner: "maintainer"},
+		{Kind: "functions", Key: "m/new.Grew", From: nil, To: 33, Reason: goodReason, Owner: "maintainer"},
+		{Kind: "suppressions.nolint", Key: "gosec:c.go", From: nil, To: 1, Reason: goodReason, Owner: "maintainer"},
 	}
 	if !reflect.DeepEqual(got.Regressions, want) {
 		t.Errorf("regressions\n%+v\nwant\n%+v", got.Regressions, want)
@@ -310,7 +311,7 @@ func TestAcceptRecordsAPackageThatGotWorse(t *testing.T) {
 	m := legacy()
 	m.Packages["m/d"] = baseline.Package{StatementsPct: 50, Uncovered: 45} // pct fell, uncovered rose
 	m.Packages["m/e"] = baseline.Package{StatementsPct: 10, Uncovered: 90} // a new package under the floor
-	got, err := baseline.Accept(old, m, goodReason, "ali")
+	got, err := baseline.Accept(old, m, goodReason, "maintainer")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -318,10 +319,10 @@ func TestAcceptRecordsAPackageThatGotWorse(t *testing.T) {
 		t.Errorf("packages %v", got.Ledger.Packages)
 	}
 	want := []baseline.Regression{
-		{Kind: "packages.statements_pct", Key: "m/d", From: f64(62.5), To: 50, Reason: goodReason, Owner: "ali"},
-		{Kind: "packages.statements_pct", Key: "m/e", From: nil, To: 10, Reason: goodReason, Owner: "ali"},
-		{Kind: "packages.uncovered", Key: "m/d", From: f64(30), To: 45, Reason: goodReason, Owner: "ali"},
-		{Kind: "packages.uncovered", Key: "m/e", From: nil, To: 90, Reason: goodReason, Owner: "ali"},
+		{Kind: "packages.statements_pct", Key: "m/d", From: f64(62.5), To: 50, Reason: goodReason, Owner: "maintainer"},
+		{Kind: "packages.statements_pct", Key: "m/e", From: nil, To: 10, Reason: goodReason, Owner: "maintainer"},
+		{Kind: "packages.uncovered", Key: "m/d", From: f64(30), To: 45, Reason: goodReason, Owner: "maintainer"},
+		{Kind: "packages.uncovered", Key: "m/e", From: nil, To: 90, Reason: goodReason, Owner: "maintainer"},
 	}
 	if !reflect.DeepEqual(got.Regressions, want) {
 		t.Errorf("regressions\n%+v\nwant\n%+v", got.Regressions, want)
@@ -330,11 +331,11 @@ func TestAcceptRecordsAPackageThatGotWorse(t *testing.T) {
 
 func TestAcceptRecordsLoweredJudgedLaws(t *testing.T) {
 	old := baseline.File{JudgedLaws: 6}
-	got, err := baseline.Accept(old, baseline.Measure{JudgedLaws: 4}, goodReason, "ali")
+	got, err := baseline.Accept(old, baseline.Measure{JudgedLaws: 4}, goodReason, "maintainer")
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []baseline.Regression{{Kind: "judged_laws", Key: "judged_laws", From: f64(6), To: 4, Reason: goodReason, Owner: "ali"}}
+	want := []baseline.Regression{{Kind: "judged_laws", Key: "judged_laws", From: f64(6), To: 4, Reason: goodReason, Owner: "maintainer"}}
 	if got.JudgedLaws != 4 || !reflect.DeepEqual(got.Regressions, want) {
 		t.Errorf("%+v", got)
 	}
@@ -346,7 +347,7 @@ func TestAcceptAlsoLowersAndRemovesLikeAPlainWrite(t *testing.T) {
 	m.Functions["m/a.F1"] = 25 // raised
 	m.Functions["m/b.F4"] = 20 // lowered
 	delete(m.Functions, "m/d.F8")
-	got, err := baseline.Accept(old, m, goodReason, "ali")
+	got, err := baseline.Accept(old, m, goodReason, "maintainer")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -368,11 +369,11 @@ func TestAcceptRaisedAgainKeepsTheEarliestFrom(t *testing.T) {
 		Ledger:      baseline.Ledger{Functions: map[string]float64{"m/a.F": 25}},
 		Regressions: []baseline.Regression{{Kind: "functions", Key: "m/a.F", From: f64(21), To: 25, Reason: "first reason given", Owner: "first"}},
 	}
-	got, err := baseline.Accept(old, baseline.Measure{Functions: map[string]float64{"m/a.F": 30}}, goodReason, "ali")
+	got, err := baseline.Accept(old, baseline.Measure{Functions: map[string]float64{"m/a.F": 30}}, goodReason, "maintainer")
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []baseline.Regression{{Kind: "functions", Key: "m/a.F", From: f64(21), To: 30, Reason: goodReason, Owner: "ali"}}
+	want := []baseline.Regression{{Kind: "functions", Key: "m/a.F", From: f64(21), To: 30, Reason: goodReason, Owner: "maintainer"}}
 	if !reflect.DeepEqual(got.Regressions, want) {
 		t.Errorf("regressions %+v, want %+v", got.Regressions, want)
 	}
@@ -383,10 +384,10 @@ func TestAcceptNeedsAReasonOfThreeWordsAndAnOwner(t *testing.T) {
 	m := legacy()
 	m.Functions["m/a.F1"] = 25
 	for name, c := range map[string]struct{ reason, owner string }{
-		"no reason":        {"", "ali"},
-		"one word":         {"growth", "ali"},
-		"two words":        {"needs growth", "ali"},
-		"blank reason":     {"   ", "ali"},
+		"no reason":        {"", "maintainer"},
+		"one word":         {"growth", "maintainer"},
+		"two words":        {"needs growth", "maintainer"},
+		"blank reason":     {"   ", "maintainer"},
 		"no owner":         {goodReason, ""},
 		"blank owner":      {goodReason, "  "},
 		"owner with space": {goodReason, "two words"},
@@ -401,7 +402,7 @@ func TestAcceptWithNothingToAcceptSaysSo(t *testing.T) {
 	old := ledgerOf(legacy())
 	m := legacy()
 	delete(m.Functions, "m/a.F1") // only an improvement
-	_, err := baseline.Accept(old, m, goodReason, "ali")
+	_, err := baseline.Accept(old, m, goodReason, "maintainer")
 	if !errors.Is(err, baseline.ErrNothingToAccept) {
 		t.Errorf("err %v, want ErrNothingToAccept", err)
 	}
@@ -550,7 +551,7 @@ func TestWritesKeepTheLedgerBuild(t *testing.T) {
 	if got := baseline.Lower(old, baseline.Measure{}); !got.Build.Equal(testBuild) {
 		t.Errorf("Lower changed the build: %+v", got.Build)
 	}
-	got, err := baseline.Accept(old, baseline.Measure{Functions: map[string]float64{"m/a.F": 30}}, goodReason, "ali")
+	got, err := baseline.Accept(old, baseline.Measure{Functions: map[string]float64{"m/a.F": 30}}, goodReason, "maintainer")
 	if err != nil || !got.Build.Equal(testBuild) {
 		t.Errorf("Accept: %v %+v", err, got.Build)
 	}
@@ -569,5 +570,38 @@ func TestKeySetsAnswerPerKind(t *testing.T) {
 	s := baseline.KeySets{Functions: []string{"m/a.F"}, Packages: []string{"m/a"}}
 	if !s.Has(baseline.KindFunction, "m/a.F") || s.Has(baseline.KindFunction, "m/a") || !s.Has(baseline.KindPackage, "m/a") || s.Has(baseline.KindPackage, "m/a.F") {
 		t.Error("KeySets mixed functions and packages")
+	}
+}
+
+func TestCheckAcceptArgs(t *testing.T) {
+	for name, c := range map[string]struct {
+		reason, owner string
+		ok            bool
+	}{
+		"good":             {goodReason, "maintainer", true},
+		"padded owner":     {goodReason, "  maintainer ", true},
+		"two word reason":  {"needs growth", "maintainer", false},
+		"no reason":        {"", "maintainer", false},
+		"no owner":         {goodReason, "", false},
+		"blank owner":      {goodReason, "   ", false},
+		"owner with space": {goodReason, "two words", false},
+	} {
+		err := baseline.CheckAcceptArgs(c.reason, c.owner)
+		var ref *baseline.RefusalError
+		if (err == nil) != c.ok || (err != nil && !errors.As(err, &ref)) {
+			t.Errorf("%s: err %v, want ok=%v and a refusal otherwise", name, err, c.ok)
+		}
+	}
+}
+
+func TestRenameRefusesAKeyThatIsBothAFunctionAndAPackage(t *testing.T) {
+	old := baseline.File{Ledger: baseline.Ledger{
+		Functions: map[string]float64{"m/x": 12},
+		Packages:  map[string]baseline.Package{"m/x": {StatementsPct: 10, Uncovered: 3}},
+	}}
+	_, err := baseline.Rename(old, "m/x", "m/y", inv{fns: set("m/y"), pkgs: set("m/y")})
+	var ref *baseline.RefusalError
+	if !errors.As(err, &ref) || !strings.Contains(err.Error(), "both") {
+		t.Errorf("err %v", err)
 	}
 }

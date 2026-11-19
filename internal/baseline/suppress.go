@@ -57,57 +57,78 @@ func walkGo(dir string, fn func(rel, abs string) error) error {
 	})
 }
 
+// tally counts suppressions as they are read.
+type tally struct{ nolint, ack Counts }
+
+func bump(c *Counts, name, file string) {
+	if *c == nil {
+		*c = Counts{}
+	}
+	if (*c)[name] == nil {
+		(*c)[name] = map[string]int{}
+	}
+	(*c)[name][file]++
+}
+
 // scanSuppressions counts the suppressions of the module (§6.7): //nolint
 // comments per linter and file, and //tops:ack comments and acks.yaml entries
 // per law and file. A comment that names two linters counts once for each. A
 // file that does not parse cannot be shown to hold no suppression, so it is an
 // error and not a zero.
 func scanSuppressions(dir, acks string) (nolint, ack Counts, err error) {
-	bump := func(c *Counts, name, file string) {
-		if *c == nil {
-			*c = Counts{}
-		}
-		if (*c)[name] == nil {
-			(*c)[name] = map[string]int{}
-		}
-		(*c)[name][file]++
-	}
-	err = walkGo(dir, func(rel, abs string) error {
-		f, perr := parser.ParseFile(token.NewFileSet(), abs, nil, parser.ParseComments|parser.SkipObjectResolution)
-		if perr != nil {
-			return fmt.Errorf("cannot read the suppressions of %s: %w", rel, perr)
-		}
-		for _, g := range f.Comments {
-			for _, c := range g.List {
-				text, ok := strings.CutPrefix(c.Text, "//")
-				if !ok {
-					continue
-				}
-				text = strings.TrimLeft(text, " \t")
-				if names, ok := nolintNames(text); ok {
-					for _, n := range names {
-						bump(&nolint, n, rel)
-					}
-				}
-				if m := ackRE.FindStringSubmatch(text); m != nil {
-					bump(&ack, m[1], rel)
-				}
-			}
-		}
-		return nil
-	})
-	if err != nil {
+	var t tally
+	if err := walkGo(dir, t.scanFile); err != nil {
 		return nil, nil, err
 	}
+	if err := t.readAcks(dir, acks); err != nil {
+		return nil, nil, err
+	}
+	return t.nolint, t.ack, nil
+}
+
+// scanFile counts the suppression comments of one source file.
+func (t *tally) scanFile(rel, abs string) error {
+	f, err := parser.ParseFile(token.NewFileSet(), abs, nil, parser.ParseComments|parser.SkipObjectResolution)
+	if err != nil {
+		return fmt.Errorf("cannot read the suppressions of %s: %w", rel, err)
+	}
+	for _, g := range f.Comments {
+		for _, c := range g.List {
+			t.comment(rel, c.Text)
+		}
+	}
+	return nil
+}
+
+// comment counts one comment: a line comment that is a //nolint directive or a
+// //tops:ack, and nothing else.
+func (t *tally) comment(rel, raw string) {
+	text, ok := strings.CutPrefix(raw, "//")
+	if !ok {
+		return
+	}
+	text = strings.TrimLeft(text, " \t")
+	if names, ok := nolintNames(text); ok {
+		for _, n := range names {
+			bump(&t.nolint, n, rel)
+		}
+	}
+	if m := ackRE.FindStringSubmatch(text); m != nil {
+		bump(&t.ack, m[1], rel)
+	}
+}
+
+// readAcks counts the entries of acks.yaml, if the file is there.
+func (t *tally) readAcks(dir, acks string) error {
 	if acks == "" {
-		return nolint, ack, nil
+		return nil
 	}
-	raw, rerr := os.ReadFile(filepath.Join(dir, filepath.FromSlash(acks)))
-	if errors.Is(rerr, fs.ErrNotExist) {
-		return nolint, ack, nil
+	raw, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(acks)))
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
 	}
-	if rerr != nil {
-		return nil, nil, rerr
+	if err != nil {
+		return err
 	}
 	var doc struct {
 		Acks []struct {
@@ -116,12 +137,12 @@ func scanSuppressions(dir, acks string) (nolint, ack Counts, err error) {
 		} `yaml:"acks"`
 	}
 	if err := yaml.Unmarshal(raw, &doc); err != nil {
-		return nil, nil, fmt.Errorf("%s: %w", acks, err)
+		return fmt.Errorf("%s: %w", acks, err)
 	}
 	for _, a := range doc.Acks {
-		bump(&ack, a.Law, filepath.ToSlash(filepath.Clean(a.File)))
+		bump(&t.ack, a.Law, filepath.ToSlash(filepath.Clean(a.File)))
 	}
-	return nolint, ack, nil
+	return nil
 }
 
 // nolintNames reads the text of a comment, after its slashes: `nolint`,
@@ -139,6 +160,12 @@ func nolintNames(text string) ([]string, bool) {
 	if !ok {
 		return nil, false
 	}
+	return linterList(list), true
+}
+
+// linterList is the comma-separated linters of a directive, up to the first
+// space. A list with no name silences every linter, as a bare directive does.
+func linterList(list string) []string {
 	if i := strings.IndexAny(list, " \t"); i >= 0 {
 		list = list[:i]
 	}
@@ -149,7 +176,7 @@ func nolintNames(text string) ([]string, bool) {
 		}
 	}
 	if len(out) == 0 {
-		return []string{nolintAll}, true
+		return []string{nolintAll}
 	}
-	return out, true
+	return out
 }
