@@ -1,12 +1,14 @@
 name: go-tops
 
-# The Go-TOPS drop-in (GO_TOPS.md §11): one job that runs the gate. Every action
-# is pinned by commit SHA (the comment names the release), and the job only reads.
+# The Go-TOPS drop-in (GO_TOPS.md §11): the gate job, and a manual job that writes
+# the first ledger. Every action is pinned by commit SHA (the comment names the
+# release), and the jobs only read.
 
 on:
   pull_request:
   push:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -18,6 +20,7 @@ concurrency:
 jobs:
   gate:
     name: gate (${{ matrix.leg }})
+    if: github.event_name != 'workflow_dispatch'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -79,6 +82,25 @@ jobs:
         env:
           GOTOOLCHAIN: local
         run: go tool -modfile=tools/go.mod gotops gate
+      # The ratchet is judged on the ledger leg only (GO_TOPS.md §6.7), and this
+      # repository's ledger leg is the ubuntu leg. If that leg reports a ratchet
+      # outcome of skip, or none, the baseline was recorded under a build no leg
+      # runs, so every leg would skip and the ratchet would never be judged.
+      - name: the ratchet is judged on the ledger leg
+        if: matrix.leg == 'ubuntu'
+        run: |
+          set -euo pipefail
+          report=.go-tops/report.json
+          if [ "$(jq -r .enforce "$report")" = ratchet ]; then
+            outcome="$(jq -r '.ratchet.outcome // "none"' "$report")"
+            case "$outcome" in
+              pass|fail) ;;
+              *)
+                echo "::error::the ubuntu leg is the ledger leg but reports a ratchet outcome of ${outcome}: the baseline was recorded under another build. Run the baseline workflow by hand, which writes it on this leg, and commit the file."
+                exit 1
+                ;;
+            esac
+          fi
       # The floor leg builds and tests on the floor toolchain. The gate itself
       # runs on the other legs: a narrowed gate run leaves laws out of range.
       - name: build and test on the floor
@@ -100,3 +122,49 @@ jobs:
             !.go-tops/bin/
           include-hidden-files: true
           if-no-files-found: warn
+
+  # The first ledger is written on the ledger leg's build: the ubuntu leg's
+  # runner and toolchain. Run this workflow by hand (workflow_dispatch), download
+  # the artifact and commit .go-tops/baseline.json. It refuses when a ledger exists.
+  baseline:
+    name: baseline (ledger leg)
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version: "1.27.4"
+          cache-dependency-path: |
+            go.sum
+            tools/go.sum
+      # The feeding layers read golangci-lint's saved output, so the pinned
+      # release is installed as on the gate legs, archive-checked.
+      - name: install golangci-lint v2.15.0
+        env:
+          VERSION: "2.15.0"
+          PLATFORM: linux-amd64
+        run: |
+          set -euo pipefail
+          sha=9b7fe6a6bf6334b98decf8d86b11415ea7889afdabdd1959fdce23af2a9ebcea
+          archive="$RUNNER_TEMP/golangci-lint.tar.gz"
+          curl --fail --silent --show-error --location --output "$archive" \
+            "https://github.com/golangci/golangci-lint/releases/download/v$VERSION/golangci-lint-$VERSION-$PLATFORM.tar.gz"
+          echo "$sha  $archive" | shasum -a 256 -c -
+          mkdir -p "$RUNNER_TEMP/golangci-lint"
+          tar -xzf "$archive" --strip-components=1 -C "$RUNNER_TEMP/golangci-lint"
+          echo "$RUNNER_TEMP/golangci-lint" >> "$GITHUB_PATH"
+      - name: write the first ledger
+        env:
+          GOTOOLCHAIN: local
+        run: go tool -modfile=tools/go.mod gotops baseline --init
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: go-tops-baseline
+          # .go-tops is a hidden directory, which the action skips by default.
+          path: .go-tops/baseline.json
+          include-hidden-files: true
+          if-no-files-found: error

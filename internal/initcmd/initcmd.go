@@ -63,6 +63,7 @@ func Run(o Options, stdout, stderr Printer) int {
 	for _, n := range p.notes {
 		stdout.Printf("note: %s\n", n)
 	}
+	stdout.Printf("next: %s\n", nextStep)
 	if o.Offline {
 		stdout.Printf("note: --offline: tools/go.sum is not written; run go -C tools mod tidy\n")
 		stdout.Printf("note: until tools/go.sum exists, the workflow's setup-go cache (cache-dependency-path: go.sum and tools/go.sum) finds no file in a module with no dependencies, and the job can fail at setup\n")
@@ -116,6 +117,11 @@ type plan struct {
 }
 
 const agentsFile = "AGENTS.md"
+
+// nextStep is what follows init (GO_TOPS.md §6.7, §12.1): the first ledger is
+// measured on the ledger leg's build, then committed. Under ratchet the gate
+// fails until it exists.
+const nextStep = "run gotops baseline --init on the ledger leg's build (the workflow's manual baseline job does it and uploads the file), then commit .go-tops/baseline.json"
 
 func buildPlan(o Options) (*plan, error) {
 	in, err := gatherInputs(o)
