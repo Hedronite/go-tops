@@ -203,12 +203,12 @@ func TestBaseLedgerIsReadAtTheConfiguredPath(t *testing.T) {
 func TestBaseIsReadAtThePathTheBaseCommitNames(t *testing.T) {
 	dir := repo(t)
 	commit(t, dir, "base", map[string]string{
-		"go-tops.yaml":    "protocol: \"0.4.3\"\nbaseline: old/ledger.json\n",
+		"go-tops.yaml":    "protocol: \"" + protocolID + "\"\nbaseline: old/ledger.json\n",
 		"old/ledger.json": ledgerFile(t, 12),
 	})
 	git(t, dir, "checkout", "-q", "-b", "feature")
 	commit(t, dir, "move the baseline", map[string]string{
-		"go-tops.yaml":    "protocol: \"0.4.3\"\nbaseline: new/ledger.json\n",
+		"go-tops.yaml":    "protocol: \"" + protocolID + "\"\nbaseline: new/ledger.json\n",
 		"new/ledger.json": ledgerFile(t, 99),
 	})
 	moved := ratchet.ReadBase(dir, "main", "new/ledger.json")
