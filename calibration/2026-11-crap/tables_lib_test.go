@@ -184,6 +184,10 @@ func delta(native, probe int) string {
 	}
 }
 
+// titled puts a top-level heading and a blank line before a generated
+// document, which markdownlint requires of the first line (MD041).
+func titled(title, body string) string { return "# " + title + "\n\n" + body }
+
 // renderTables writes the record's three tables: counts against the probe,
 // the CRAP histogram and the five top scorers per repository. The output is
 // deterministic.

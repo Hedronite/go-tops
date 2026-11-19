@@ -1,3 +1,5 @@
+# Calibration tables, 2026-11
+
 | Repo | Commit | Functions | Probe | Δ | Not measured | Over 6 | Probe | Δ | Over 8 | Probe | Δ | Over 10 | Probe | Δ |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | augur | `fa72aa7` | 140 | 140 | 0 | 0 | 36 | 35 | +1 | 28 | 28 | 0 | 20 | 19 | +1 |

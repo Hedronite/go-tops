@@ -181,3 +181,16 @@ func TestRenderTables(t *testing.T) {
 		t.Error("rendering is not deterministic")
 	}
 }
+
+// markdownlint's MD041 wants the first line of a document to be a top-level
+// heading; the generated files are checked by the docs workflow, so each starts
+// with one, then a blank line.
+func TestTitledDocumentStartsWithATopLevelHeading(t *testing.T) {
+	doc := titled("Calibration tables", "| a |\n|---|\n| 1 |\n")
+	if !strings.HasPrefix(doc, "# Calibration tables\n\n| a |") {
+		t.Errorf("document = %q, want a top-level heading, a blank line, then the body", doc)
+	}
+	if strings.Count(doc, "\n# ") != 0 || !strings.HasSuffix(doc, "| 1 |\n") {
+		t.Errorf("one heading only, and the body untouched: %q", doc)
+	}
+}

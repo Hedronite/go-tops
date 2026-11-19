@@ -57,9 +57,11 @@ for entry in $REPOS; do
 	echo "$name $sha" >>"$W/repos.txt"
 done
 
-# Cross-check: the gate's CRAP layer at three caps on one repo. Hygiene may be
-# red here (the repo has no kit config of its own) and that does not matter:
-# only the crap layer's violations are read, from the report the run wrote.
+# Cross-check: the gate's CRAP layer at three caps on one repo. `--only crap`
+# runs the layers CRAP needs (tests and coverage) and preflights only those, so
+# the run needs no golangci-lint and no vulnerability database, and only the crap
+# layer's violations are read, from the report the run wrote. CI is cleared
+# because a narrowed range is refused when CI=true.
 (cd "$ROOT" && go build -o "$W/gotops" ./cmd/gotops)
 # The protocol version has one source, the schema the binary embeds.
 proto=$("$W/gotops" version | sed -n 's/^protocol //p')
@@ -102,7 +104,7 @@ layers:
   fuzz:  { enabled: false, reason: "calibration measures CRAP only" }
   bench: { enabled: false, reason: "calibration measures CRAP only" }
 EOF
-	(cd "$W/$XREPO" && "$W/gotops" gate --max-tier 1 >"$W/xcheck/gate-$cap.txt" 2>&1 || true)
+	(cd "$W/$XREPO" && CI= "$W/gotops" gate --only crap >"$W/xcheck/gate-$cap.txt" 2>&1 || true)
 	if [ ! -s "$W/$XREPO/.go-tops/report.json" ]; then
 		echo "run.sh: the gate wrote no report at cap $cap. Last lines:" >&2
 		tail -n 20 "$W/xcheck/gate-$cap.txt" >&2

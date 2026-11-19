@@ -34,7 +34,7 @@ func TestCalibrate(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeResults(t, out, rs)
-	write(t, filepath.Join(out, "tables.md"), renderTables(rs, probe))
+	write(t, filepath.Join(out, "tables.md"), titled("Calibration tables, 2026-11", renderTables(rs, probe)))
 	crossCheck(t, out, rs)
 }
 
@@ -128,7 +128,7 @@ func crossCheck(t *testing.T, out string, rs []repoResult) {
 			t.Errorf("%s at cap %g: the gate reports %d violations, the scorer %d functions over the cap", repo, c, got, want)
 		}
 	}
-	write(t, filepath.Join(out, "crosscheck.md"), b.String())
+	write(t, filepath.Join(out, "crosscheck.md"), titled("Gate cross-check, 2026-11", b.String()))
 }
 
 // gateViolations reads the crap layer's violations from a gate report.
