@@ -2,6 +2,7 @@ package hygiene
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/Hedronite/go-tops/internal/gate"
@@ -96,5 +97,61 @@ func TestLintFiguresShape(t *testing.T) {
 	entry, ok := h.result([]step{{name: "golangci-lint run", outcome: gate.Fail, message: "3 finding(s)"}}).Details["lint"].(map[string]any)
 	if !ok || entry["outcome"] != "fail" || entry["findings"] != 3 {
 		t.Errorf("details[lint] = %v (%T)", entry, entry)
+	}
+}
+
+// checkOrder is read by ChecksOf, and the ratchet folds in that order, so it must
+// name the same checks as keys and in the order the layer runs them. The first
+// test pins the set, the second the order, from the commands the layer starts.
+func TestCheckOrderAndKeysNameTheSameChecks(t *testing.T) {
+	seen := map[string]bool{}
+	for _, k := range checkOrder {
+		if seen[k] {
+			t.Errorf("checkOrder repeats %q", k)
+		}
+		seen[k] = true
+	}
+	if len(seen) != len(keys) {
+		t.Errorf("checkOrder has %d checks, keys has %d", len(seen), len(keys))
+	}
+	for command, key := range keys {
+		if !seen[key] {
+			t.Errorf("keys maps %q to %q, which checkOrder lacks", command, key)
+		}
+	}
+}
+
+func TestCheckOrderIsTheOrderTheLayerRunsItsChecks(t *testing.T) {
+	f := newFake(t)
+	runLayer(t, f, gate.Config{Hygiene: gate.HygieneConfig{Depguard: true}})
+	marks := map[string]func(call string) bool{
+		"tidy":            func(c string) bool { return strings.Contains(c, "mod tidy") },
+		"verify":          func(c string) bool { return strings.Contains(c, "mod verify") },
+		"toolchain":       func(c string) bool { return strings.Contains(c, "env GOVERSION") },
+		"format":          func(c string) bool { return strings.Contains(c, "golangci-lint fmt") },
+		"lint":            func(c string) bool { return strings.Contains(c, "golangci-lint run") },
+		"vulnerabilities": func(c string) bool { return strings.Contains(c, "govulncheck") },
+		"licenses":        func(c string) bool { return strings.Contains(c, "go-licenses") },
+		"depguard":        func(c string) bool { return strings.Contains(c, "golangci-lint linters") },
+	}
+	first := map[string]int{}
+	for i, argv := range f.calls {
+		call := strings.Join(argv, " ")
+		for key, is := range marks {
+			if _, ok := first[key]; !ok && is(call) {
+				first[key] = i
+			}
+		}
+	}
+	last := -1
+	for _, key := range checkOrder {
+		i, ok := first[key]
+		if !ok {
+			t.Fatalf("the layer started no command for %q: %v", key, f.calls)
+		}
+		if i < last {
+			t.Errorf("checkOrder lists %q after a check the layer runs later (command %d, previous %d)", key, i, last)
+		}
+		last = i
 	}
 }
