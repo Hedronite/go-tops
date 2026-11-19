@@ -61,11 +61,13 @@ done
 # red here (the repo has no kit config of its own) and that does not matter:
 # only the crap layer's violations are read, from the report the run wrote.
 (cd "$ROOT" && go build -o "$W/gotops" ./cmd/gotops)
+# The protocol version has one source, the schema the binary embeds.
+proto=$("$W/gotops" version | sed -n 's/^protocol //p')
 mod=$(cd "$W/$XREPO" && go list -m)
 (cd "$W/$XREPO" && "$W/gotops" init --class binary-cli --offline --force >/dev/null)
 for cap in 6 8 10; do
 	cat >"$W/$XREPO/go-tops.yaml" <<EOF
-protocol: "0.4.2"
+protocol: "$proto"
 version: "0.0.0"
 module: $mod
 class: binary-cli
@@ -88,7 +90,7 @@ gates:
     shuffle: true
     count: 1
   coverage:
-    statements_floor: 0
+    statements_floor: 70
     exclude_generated: true
   crap:
     cap: $cap
