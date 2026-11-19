@@ -345,6 +345,9 @@ func F() {}
 	f.write("b/testdata/x.go", "package x\n\nvar _ = 1 //nolint:unused // a fixture is not the module's code\n")
 	f.write("vendor/v/v.go", "package v\n\nvar _ = 1 //nolint:unused // vendored\n")
 	f.write(".hidden/h.go", "package h\n\nvar _ = 1 //nolint:unused // hidden\n")
+	f.write("_skip/s.go", "package s\n\nvar _ = 1 //nolint:unused // the go command ignores _ directories\n")
+	f.write("nested/go.mod", "module example.com/nested\n")
+	f.write("nested/n.go", "package n\n\nvar _ = 1 //nolint:unused // another module\n")
 	got, err := baseline.Collect(f.in)
 	if err != nil {
 		t.Fatal(err)

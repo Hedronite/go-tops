@@ -19,10 +19,18 @@ const nolintAll = "all"
 
 var ackRE = regexp.MustCompile(`^tops:ack\s+(G-[0-9]{2})(\s|$)`)
 
-// skipDir says whether the walk leaves a directory out: a hidden one, vendored
-// code, and test fixtures are not the module's own code.
-func skipDir(name string) bool {
-	return strings.HasPrefix(name, ".") || name == "vendor" || name == "testdata"
+// skipDir says whether the walk leaves a directory out. It is the scope of the
+// CRAP layer (internal/crap): hidden and underscore directories, vendored code,
+// test fixtures and nested modules are not the module's own code.
+func skipDir(root, p, name string) bool {
+	if p == root {
+		return false
+	}
+	if name == "testdata" || name == "vendor" || strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_") {
+		return true
+	}
+	_, err := os.Stat(filepath.Join(p, "go.mod"))
+	return err == nil
 }
 
 // walkGo calls fn with the module-relative slash path of every .go file under
@@ -33,7 +41,7 @@ func walkGo(dir string, fn func(rel, abs string) error) error {
 			return err
 		}
 		if d.IsDir() {
-			if p != dir && skipDir(d.Name()) {
+			if skipDir(dir, p, d.Name()) {
 				return filepath.SkipDir
 			}
 			return nil

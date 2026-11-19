@@ -10,12 +10,14 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/Hedronite/go-tops/internal/baseline"
 	"github.com/Hedronite/go-tops/internal/cli"
 	"github.com/Hedronite/go-tops/internal/config"
 	"github.com/Hedronite/go-tops/internal/gate"
+	"github.com/Hedronite/go-tops/internal/layers/tests"
 	"github.com/Hedronite/go-tops/internal/report"
 )
 
@@ -77,9 +79,7 @@ func bfail(code int, format string, a ...any) *baselineError {
 // replaces them, so the command is exercised without a test run or a linter.
 var (
 	runFeeding = runFeedingLayers
-	// runBuild is the build the run measures (ruling C3). STAND-IN until
-	// internal/crap defines it: the operating system and architecture from the go
-	// command, cgo on and the race tag, as the test run of the tests layer sets.
+	// runBuild is the build the run measures (ruling C3).
 	runBuild      = currentBuild
 	scanInventory = func(dir, module string) (baseline.Inventory, error) { return baseline.ScanInventory(dir, module) }
 )
@@ -265,8 +265,10 @@ func measure(ctx context.Context, dir string, cfg gate.Config, acks string, buil
 	return m, nil
 }
 
-// currentBuild is the build of the run: GOOS and GOARCH as the go command sees
-// them, with the settings the test run pins: cgo on and the race tag.
+// currentBuild is the build of the run: the tests layer's build (cgo on and its
+// tags; the race tag is implicit in `go test -race`) with the GOOS and GOARCH the
+// go command resolves, because a ledger that left them empty would let every
+// platform write it.
 func currentBuild(ctx context.Context, dir string) (baseline.Build, error) {
 	cmd := exec.CommandContext(ctx, "go", "env", "GOOS", "GOARCH")
 	cmd.Dir = dir
@@ -278,7 +280,8 @@ func currentBuild(ctx context.Context, dir string) (baseline.Build, error) {
 	if len(f) != 2 {
 		return baseline.Build{}, fmt.Errorf("go env GOOS GOARCH printed %q", strings.TrimSpace(string(out)))
 	}
-	return baseline.Build{GOOS: f[0], GOARCH: f[1], Tags: []string{"race"}, CGOEnabled: true}, nil
+	b := tests.Build
+	return baseline.Build{GOOS: f[0], GOARCH: f[1], Tags: slices.Clone(b.Tags), CGOEnabled: b.CGOEnabled}, nil
 }
 
 // runFeedingLayers runs hygiene, tests, coverage and CRAP as `gate` would and
