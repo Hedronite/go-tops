@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/Hedronite/go-tops/internal/gate"
+	"github.com/Hedronite/go-tops/internal/gobuild"
 )
 
 // IDs of the two layers.
@@ -38,13 +39,16 @@ var Command = []string{
 	"-coverprofile=" + ProfilePath, "-coverpkg=./...", "./...",
 }
 
-// Env is added to the environment of the test run. CGO_ENABLED=1 because -race
-// needs cgo. GOFLAGS is set to the one flag the run already passes: the go
-// command takes an inherited GOFLAGS, from the environment or from `go env -w`,
-// and would apply -skip, -short, -vet=off or -run to the gate's own run, so
-// tests would be hidden from it. An empty GOFLAGS does not override a `go env
-// -w` setting; a non-empty one does.
-var Env = []string{"CGO_ENABLED=1", "GOFLAGS=-count=1"}
+// Build is the build of the one test run: cgo on, because -race needs it, and
+// the platform and tags of the go command's own environment. The CRAP layer
+// loads the module under this same build (internal/gobuild), so the files it
+// scores are the files the profile covers.
+var Build = gobuild.Build{CGOEnabled: true}
+
+// Env is added to the environment of the test run: CGO_ENABLED=1 because -race
+// needs cgo, and GOFLAGS set to the one flag the run already passes, so that an
+// inherited GOFLAGS never reaches it (see gobuild.Build.Env).
+var Env = Build.Env()
 
 // Tests is gate 2.
 type Tests struct{}
@@ -101,38 +105,19 @@ func (Tests) Run(ctx context.Context, env *gate.Env) gate.Result {
 }
 
 // judge turns a parsed run into the layer's result (§3.1 gate 2): all pass, no
-// race, at least one test ran, and the shuffle seed recorded.
+// race, at least one test ran, and the shuffle seed recorded. Each rule is a
+// check of its own; the fallbacks speak only when no specific rule did.
 func judge(r *Result, out gate.Output) gate.Result {
 	var problems []string
-	if len(r.BuildErrors) > 0 || len(r.FailedPackages) > 0 {
-		var parts []string
-		if len(r.BuildErrors) > 0 {
-			parts = append(parts, "build failed: "+joinMax(r.BuildErrors, 3))
+	for _, check := range specificChecks {
+		problems = append(problems, check(r, out)...)
+	}
+	for _, check := range fallbackChecks {
+		if len(problems) == 0 {
+			problems = append(problems, check(r, out)...)
 		}
-		if len(r.FailedPackages) > 0 && len(r.BuildErrors) == 0 {
-			parts = append(parts, "package(s) failed outside any test: "+joinMax(r.FailedPackages, 3))
-		}
-		problems = append(problems, parts...)
 	}
-	if len(r.FailedTests) > 0 {
-		problems = append(problems, fmt.Sprintf("%d test(s) failed: %s", len(r.FailedTests), joinMax(r.FailedTests, 5)))
-	}
-	// A race inside a test fails that test, which is reported above. A race the
-	// detector finds outside any test exits 66. The gate reads the result of
-	// the run, never the text a test logs: a test that prints the race banner
-	// and passes has not raced.
-	if out.ExitCode == raceExit {
-		problems = append(problems, fmt.Sprintf("data race detected (go test exited %d, the race detector's exit status)", raceExit))
-	}
-	if r.Ran() == 0 && len(problems) == 0 {
-		problems = append(problems, fmt.Sprintf("no test ran (%d skipped): a green run that measured nothing is a failure", r.Skipped))
-	}
-	if out.ExitCode != 0 && len(problems) == 0 {
-		problems = append(problems, fmt.Sprintf("go test exited %d: %s", out.ExitCode, firstLines(string(out.Stderr), 3)))
-	}
-	if !r.HasSeed && r.Ran() > 0 {
-		problems = append(problems, "no -test.shuffle line in the output: the run was not shuffled")
-	}
+	problems = append(problems, notShuffled(r, out)...)
 	if len(problems) == 0 {
 		return gate.Result{Outcome: gate.Pass, Details: figures(r)}
 	}
@@ -141,6 +126,65 @@ func judge(r *Result, out gate.Output) gate.Result {
 		return gate.Result{Outcome: gate.Fail, Reason: msg, Details: figures(r)}
 	}
 	return gate.Result{Outcome: gate.Fail, Reason: msg, Details: map[string]any{"error": msg}}
+}
+
+// check is one rule of gate 2: the problems it finds in a run, none if it passes.
+type check func(r *Result, out gate.Output) []string
+
+// specificChecks name what went wrong. A race inside a test fails that test,
+// which failedTests reports; the race detector's own exit status is for a race
+// outside any test. The gate reads the result of the run, never the text a test
+// logs: a test that prints the race banner and passes has not raced.
+var specificChecks = []check{buildFailed, failedTests, raceDetected}
+
+// fallbackChecks are the rules for a run that failed in no way the specific ones
+// name: it ran nothing, or go test exited non-zero for no reason the output gave.
+var fallbackChecks = []check{nothingRan, unexplainedExit}
+
+func buildFailed(r *Result, _ gate.Output) []string {
+	var parts []string
+	if len(r.BuildErrors) > 0 {
+		parts = append(parts, "build failed: "+joinMax(r.BuildErrors, 3))
+	}
+	if len(r.FailedPackages) > 0 && len(r.BuildErrors) == 0 {
+		parts = append(parts, "package(s) failed outside any test: "+joinMax(r.FailedPackages, 3))
+	}
+	return parts
+}
+
+func failedTests(r *Result, _ gate.Output) []string {
+	if len(r.FailedTests) == 0 {
+		return nil
+	}
+	return []string{fmt.Sprintf("%d test(s) failed: %s", len(r.FailedTests), joinMax(r.FailedTests, 5))}
+}
+
+func raceDetected(_ *Result, out gate.Output) []string {
+	if out.ExitCode != raceExit {
+		return nil
+	}
+	return []string{fmt.Sprintf("data race detected (go test exited %d, the race detector's exit status)", raceExit)}
+}
+
+func nothingRan(r *Result, _ gate.Output) []string {
+	if r.Ran() != 0 {
+		return nil
+	}
+	return []string{fmt.Sprintf("no test ran (%d skipped): a green run that measured nothing is a failure", r.Skipped)}
+}
+
+func unexplainedExit(_ *Result, out gate.Output) []string {
+	if out.ExitCode == 0 {
+		return nil
+	}
+	return []string{fmt.Sprintf("go test exited %d: %s", out.ExitCode, firstLines(string(out.Stderr), 3))}
+}
+
+func notShuffled(r *Result, _ gate.Output) []string {
+	if r.HasSeed || r.Ran() == 0 {
+		return nil
+	}
+	return []string{"no -test.shuffle line in the output: the run was not shuffled"}
 }
 
 // raceExit is the exit status of a program the race detector found a race in.

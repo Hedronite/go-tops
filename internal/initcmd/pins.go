@@ -1,9 +1,6 @@
 package initcmd
 
-import (
-	"strconv"
-	"strings"
-)
+import "strings"
 
 // The kit's embedded pins. init writes them into go-tops.lock and
 // tools/go.mod, so the first gate run is already pinned (GO_TOPS.md §10).
@@ -13,8 +10,7 @@ const (
 	// protocolFloorMinor is the minor release of the language floor (§2).
 	protocolFloorMinor = 26
 
-	// The dates on which the layers that land later stop being off (§3.3).
-	expiresM2 = "2027-01-31"
+	// The date on which the layer that lands later stops being off (§3.3).
 	expiresM4 = "2027-03-01"
 )
 
@@ -59,14 +55,16 @@ var moduleTools = []moduleTool{
 
 const gotopsPackage, gotopsModule = "github.com/Hedronite/go-tops/cmd/gotops", "github.com/Hedronite/go-tops"
 
-// goCurrent is the language version of the pinned toolchain: go1.27.4 -> 1.27.
-func goCurrent() string {
+// goCurrent is go_current for a module whose go line names the floor: the
+// language version of the pinned toolchain (go1.27.4 -> 1.27), or the pinned
+// release itself (1.27.4) when the floor names a release. Go orders the release
+// 1.27.0 above the language version 1.27, so check (go_floor above go_current)
+// would refuse the pair if go_current stayed a language version.
+func goCurrent(floor string) string {
 	v := strings.TrimPrefix(toolchain, "go")
+	if strings.Count(floor, ".") == 2 {
+		return v
+	}
 	parts := strings.SplitN(v, ".", 3)
 	return parts[0] + "." + parts[1]
-}
-
-// goCurrentMinor is the minor release of the pinned toolchain.
-func goCurrentMinor() (int, error) {
-	return strconv.Atoi(strings.Split(goCurrent(), ".")[1])
 }

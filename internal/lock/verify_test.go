@@ -25,7 +25,7 @@ func writeLock(t *testing.T, toolchain, name, hash string, extract bool) string 
 	if extract {
 		ex = "    extract: " + name + "-{version}/" + name + "\n"
 	}
-	doc := "protocol: \"0.4.2\"\ntoolchain: " + toolchain + "\ntrust:\n  mode: checksum\n  note: copied from the release checksum file\nbinaries:\n" +
+	doc := "protocol: \"" + protocolID + "\"\ntoolchain: " + toolchain + "\ntrust:\n  mode: checksum\n  note: copied from the release checksum file\nbinaries:\n" +
 		"  - name: " + name + "\n    version: \"1.2.3\"\n    url: https://example.com/v{version}/" + name + "-{os}-{arch}\n" + ex + "    sha256:\n"
 	archive := hash
 	if extract {
@@ -169,7 +169,7 @@ func TestVerifyMissingOrInvalidLockExitsTwo(t *testing.T) {
 		t.Errorf("no lock: exit %d, want 2", code)
 	}
 	dir := writeLock(t, "go1.27.4", "tool", sha(t, "x"), false)
-	if err := os.WriteFile(filepath.Join(dir, FileName), []byte("protocol: \"0.4.2\"\nbogus_key: 1\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, FileName), []byte("protocol: \""+protocolID+"\"\nbogus_key: 1\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if code := ExitCode(Verify(VerifyOptions{Dir: dir, Run: fakeRun("go1.27.4"), LookPath: noPath})); code != 2 {

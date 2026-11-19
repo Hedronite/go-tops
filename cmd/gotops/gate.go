@@ -25,7 +25,7 @@ func runGate(env cli.Env, args []string) int {
 	return gate.Main(context.Background(), args, gate.CommandDeps{
 		LoadConfig:  loadGateConfig,
 		CI:          os.Getenv("CI") == "true",
-		ToolVersion: packageVersion,
+		ToolVersion: toolVersion(),
 	}, env.Stdout, env.Stderr)
 }
 
@@ -55,51 +55,84 @@ func loadGateConfig(dir string) (gate.Config, error) {
 // toGateConfig turns an effective configuration into what the runner reads. It
 // fails when a key the runner needs is absent, which Effective rules out.
 func toGateConfig(e *config.Config) (gate.Config, error) {
-	g, l := e.Gates, e.Layers
-	if g.Crap.Cap == nil || g.Coverage.StatementsFloor == nil || g.Crap.Enabled == nil || g.Mutation.Enabled == nil ||
-		l.Fuzz.Enabled == nil || l.Stress.Enabled == nil || l.Bench.Enabled == nil {
-		return gate.Config{}, fmt.Errorf("the configuration is not effective: a key the gate reads is absent")
+	if err := requireEffective(e); err != nil {
+		return gate.Config{}, err
 	}
 	c := gate.Config{
 		Module:       e.Module,
 		Class:        e.Class,
 		Enforce:      e.Enforce,
-		Base:         g.Mutation.Base,
+		Base:         e.Gates.Mutation.Base,
 		ReportPath:   e.Report.Path,
 		RequiredLaws: e.Laws.Required,
-		Layers: map[string]gate.LayerConfig{
-			"crap":     {Enabled: *g.Crap.Enabled, Reason: g.Crap.Reason, Expires: g.Crap.Expires},
-			"mutation": {Enabled: *g.Mutation.Enabled, Reason: g.Mutation.Reason, Expires: g.Mutation.Expires},
-			"fuzz":     {Enabled: *l.Fuzz.Enabled, Reason: l.Fuzz.Reason},
-			"stress":   {Enabled: *l.Stress.Enabled, Reason: l.Stress.Reason},
-			"bench":    {Enabled: *l.Bench.Enabled, Reason: l.Bench.Reason},
-		},
-		Hygiene: gate.HygieneConfig{
-			LintConfig: g.Hygiene.GolangciLint.Config,
-			VulnDB:     g.Hygiene.Govulncheck.DB,
-			FailOn:     g.Hygiene.Govulncheck.FailOn,
-			Depguard:   g.Hygiene.Deps.Depguard != nil && *g.Hygiene.Deps.Depguard,
-			Licenses:   g.Hygiene.Deps.Licenses.Allow,
-		},
-		Coverage: gate.CoverageConfig{
-			StatementsFloor:     *g.Coverage.StatementsFloor,
-			ExcludeGenerated:    g.Coverage.ExcludeGenerated != nil && *g.Coverage.ExcludeGenerated,
-			IntegrationEnabled:  g.Coverage.Integration.Enabled != nil && *g.Coverage.Integration.Enabled,
-			IntegrationPackages: g.Coverage.Integration.Packages,
-		},
-		Crap: gate.CrapConfig{
-			Cap:              *g.Crap.Cap,
-			ErrGuardDiscount: g.Crap.Complexity.ErrGuardDiscount != nil && *g.Crap.Complexity.ErrGuardDiscount,
-			WrapFunctions:    g.Crap.Complexity.WrapFunctions,
-		},
+		Layers:       layerSwitches(e.Gates, e.Layers),
+		Hygiene:      hygieneOf(e.Gates.Hygiene),
+		Coverage:     coverageOf(e.Gates.Coverage),
+		Crap:         crapOf(e.Gates.Crap),
+		Exemptions:   exemptionsOf(e.Exemptions),
 	}
 	if e.Advisory != nil {
 		c.AdvisoryExpires = e.Advisory.Expires
 	}
-	for _, x := range e.Exemptions {
-		c.Exemptions = append(c.Exemptions, report.Exemption{
+	return c, nil
+}
+
+// requireEffective checks that every key the gate reads has a value: the class
+// defaults fill them all, so an absent one is a configuration that did not go
+// through Effective.
+func requireEffective(e *config.Config) error {
+	g, l := e.Gates, e.Layers
+	if g.Crap.Cap == nil || g.Coverage.StatementsFloor == nil || g.Crap.Enabled == nil || g.Mutation.Enabled == nil ||
+		l.Fuzz.Enabled == nil || l.Stress.Enabled == nil || l.Bench.Enabled == nil {
+		return fmt.Errorf("the configuration is not effective: a key the gate reads is absent")
+	}
+	return nil
+}
+
+// layerSwitches is the switch of each layer that has one in go-tops.yaml.
+func layerSwitches(g config.Gates, l config.Layers) map[string]gate.LayerConfig {
+	return map[string]gate.LayerConfig{
+		"crap":     {Enabled: *g.Crap.Enabled, Reason: g.Crap.Reason, Expires: g.Crap.Expires},
+		"mutation": {Enabled: *g.Mutation.Enabled, Reason: g.Mutation.Reason, Expires: g.Mutation.Expires},
+		"fuzz":     {Enabled: *l.Fuzz.Enabled, Reason: l.Fuzz.Reason},
+		"stress":   {Enabled: *l.Stress.Enabled, Reason: l.Stress.Reason},
+		"bench":    {Enabled: *l.Bench.Enabled, Reason: l.Bench.Reason},
+	}
+}
+
+func hygieneOf(h config.Hygiene) gate.HygieneConfig {
+	return gate.HygieneConfig{
+		LintConfig: h.GolangciLint.Config,
+		VulnDB:     h.Govulncheck.DB,
+		FailOn:     h.Govulncheck.FailOn,
+		Depguard:   h.Deps.Depguard != nil && *h.Deps.Depguard,
+		Licenses:   h.Deps.Licenses.Allow,
+	}
+}
+
+func coverageOf(c config.Coverage) gate.CoverageConfig {
+	return gate.CoverageConfig{
+		StatementsFloor:     *c.StatementsFloor,
+		ExcludeGenerated:    c.ExcludeGenerated != nil && *c.ExcludeGenerated,
+		IntegrationEnabled:  c.Integration.Enabled != nil && *c.Integration.Enabled,
+		IntegrationPackages: c.Integration.Packages,
+	}
+}
+
+func crapOf(c config.Crap) gate.CrapConfig {
+	return gate.CrapConfig{
+		Cap:              *c.Cap,
+		ErrGuardDiscount: c.Complexity.ErrGuardDiscount != nil && *c.Complexity.ErrGuardDiscount,
+		WrapFunctions:    c.Complexity.WrapFunctions,
+	}
+}
+
+func exemptionsOf(in []config.Exemption) []report.Exemption {
+	var out []report.Exemption
+	for _, x := range in {
+		out = append(out, report.Exemption{
 			Path: x.Path, Symbol: x.Symbol, Layer: x.Layer, Shape: x.Shape, Reason: x.Reason, Owner: x.Owner, Expires: x.Expires,
 		})
 	}
-	return c, nil
+	return out
 }

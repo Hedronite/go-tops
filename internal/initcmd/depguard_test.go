@@ -20,7 +20,7 @@ func TestLintConfigEnablesDepguardWhenTheConfigDoes(t *testing.T) {
 			if deps["depguard"] != true {
 				t.Fatalf("go-tops.yaml deps.depguard = %v, want true", deps["depguard"])
 			}
-			lint := asMap(t, decodeYAML(t, read(t, dir, ".golangci.yml")))
+			lint := asMap(t, decodeYAML(t, read(t, dir, ".go-tops/golangci.yml")))
 			linters := asMap(t, lint["linters"])
 			enabled, ok := linters["enable"].([]any)
 			if !ok || len(enabled) != 1 || enabled[0] != "depguard" {
@@ -74,7 +74,7 @@ func TestWorkflowFloorLegGuardsTheToolchain(t *testing.T) {
 		"name: toolchain is the floor release",
 		"if: matrix.leg == 'floor'",
 		`got="$(go env GOVERSION)"`,
-		"go1.26|go1.26.*) ;;",
+		"go1.26.4|go1.26.4.*) ;;",
 	} {
 		if !strings.Contains(text, want) {
 			t.Errorf("the workflow lacks %q", want)

@@ -121,8 +121,8 @@ func Render(r Report, f Format) ([]byte, error) {
 }
 
 // RenderText is the one text renderer: `gotops gate` prints it for a run and
-// `gotops report` for a stored one. It shows one line per layer, the laws, the
-// verdict. A partial run says PARTIAL, and an advisory run says it is not
+// `gotops report` for a stored one. It shows one line per layer, one line for
+// every exemption in force with its expiry (§6.8), the laws, the verdict. A partial run says PARTIAL, and an advisory run says it is not
 // enforced: `NOT ENFORCED (advisory, expires <date>): outcome <OUTCOME>`
 // (§3.3, §6.7).
 func RenderText(r Report) string {
@@ -138,6 +138,10 @@ func RenderText(r Report) string {
 		}
 		b.WriteByte('\n')
 	}
+	renderRatchet(&b, r.Ratchet)
+	for _, e := range r.Exemptions {
+		fmt.Fprintf(&b, "  %s\n", e.Line())
+	}
 	if r.VulnDBTimestamp != nil {
 		fmt.Fprintf(&b, "  vulnerability database as of %s; time-dependent: the same commit can change verdict when it moves\n", *r.VulnDBTimestamp)
 	}
@@ -145,6 +149,30 @@ func RenderText(r Report) string {
 	fmt.Fprintf(&b, "layers: %d enabled in range, %d ran\n", r.LayerCounts.EnabledInRange, r.LayerCounts.Ran)
 	renderVerdict(&b, r.Summary)
 	return b.String()
+}
+
+// renderRatchet prints the ratchet judgment of a run under enforce: ratchet: its
+// outcome, and the ledger's build and this run's, so a skip names the build the
+// ledger leg runs under (§6.7, §12.3). A run with no ratchet object prints
+// nothing.
+func renderRatchet(b *strings.Builder, r *Ratchet) {
+	if r == nil {
+		return
+	}
+	fmt.Fprintf(b, "  %-12s %s  (ledger build %s, this run %s)\n", "ratchet", r.Outcome, describeBuild(r.LedgerBuild), describeBuild(r.RunBuild))
+}
+
+// describeBuild names a build in the text: the platform, whether cgo is on or off,
+// and the tags when there are any.
+func describeBuild(b Build) string {
+	s := b.GOOS + "/" + b.GOARCH + " cgo off"
+	if b.CgoEnabled {
+		s = b.GOOS + "/" + b.GOARCH + " cgo on"
+	}
+	if len(b.Tags) > 0 {
+		s += " tags=" + strings.Join(b.Tags, ",")
+	}
+	return s
 }
 
 // layerError is the text of a failed layer's {error} form (§12.3).

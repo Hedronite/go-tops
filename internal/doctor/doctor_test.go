@@ -96,21 +96,11 @@ func TestGoVersionAgainstTheFloor(t *testing.T) {
 	}
 }
 
-func writeLock(t *testing.T, dir, toolchain string) {
-	t.Helper()
-	doc := "protocol: \"0.4.2\"\ntoolchain: " + toolchain + "\ntrust:\n  mode: checksum\n  note: copied from the release checksum file\nbinaries:\n" +
-		"  - name: golangci-lint\n    version: \"2.15.0\"\n    url: https://example.com/{version}/{os}-{arch}\n    sha256:\n" +
-		"      darwin/arm64: " + strings.Repeat("a", 64) + "\n      darwin/amd64: " + strings.Repeat("b", 64) + "\n" +
-		"      linux/amd64: " + strings.Repeat("c", 64) + "\n      linux/arm64: " + strings.Repeat("d", 64) + "\n"
-	if err := os.WriteFile(filepath.Join(dir, "go-tops.lock"), []byte(doc), 0o644); err != nil {
-		t.Fatal(err)
-	}
-}
-
 // The pin is the exact release: a different patch release is exit 2.
 func TestPinMismatchExitsTwo(t *testing.T) {
 	dir := t.TempDir()
-	writeLock(t, dir, "go1.27.4")
+	lockFor(t, dir, "go1.27.4", pinnedBinary)
+	binaryAt(t, dir, pinnedBinary)
 	cs := Run(env(dir, nil, "go1.27.3"))
 	c := get(cs, "go")
 	if c.Status != Fail || c.Exit != 2 || ExitCode(cs) != 2 || !strings.Contains(c.Detail, "go1.27.4") {
@@ -130,7 +120,7 @@ func TestNoLockIsAWarningNotAFailure(t *testing.T) {
 
 func TestDownloadedBinaryMissingIsToolMissingExitOne(t *testing.T) {
 	dir := t.TempDir()
-	writeLock(t, dir, "go1.27.4")
+	lockFor(t, dir, "go1.27.4", "x")
 	e := env(dir, nil, "go1.27.4")
 	e.LookPath = func(name string) (string, error) {
 		if name == "cc" {

@@ -1,4 +1,4 @@
-protocol: "0.4.2"            # must match the schema's protocol constant
+protocol: "0.4.4"            # must match the schema's protocol constant
 version: "0.1.0"             # this config's version (non-empty)
 module: github.com/acme/myapp
 class: binary-cli            # one of the schema's classes
@@ -13,7 +13,7 @@ toolchain:
 
 gates:
   hygiene:
-    golangci_lint: { config: .golangci.yml }
+    golangci_lint: { config: .go-tops/golangci.yml }
     govulncheck:   { fail_on: reachable }
     deps:          { depguard: true, licenses: { allow: [MIT, Apache-2.0, BSD-3-Clause, BSD-2-Clause, ISC] } }
   tests:

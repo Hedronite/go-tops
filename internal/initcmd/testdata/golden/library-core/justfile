@@ -9,10 +9,6 @@ check:
 gate:
     {{gotops}} gate
 
-# The laws layer alone.
-laws:
-    {{gotops}} laws run
-
 # Print the last report.
 report:
     {{gotops}} report --format text

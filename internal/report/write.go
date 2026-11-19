@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	gotops "github.com/Hedronite/go-tops"
 )
@@ -44,6 +45,7 @@ type Report struct {
 	DurationMS      int64       `json:"duration_ms"`
 	VulnDBTimestamp *string     `json:"vuln_db_timestamp"`
 	LayerCounts     LayerCounts `json:"layer_counts"`
+	Ratchet         *Ratchet    `json:"ratchet,omitempty"`
 	Exemptions      []Exemption `json:"exemptions"`
 	Layers          []Layer     `json:"layers"`
 	Laws            Laws        `json:"laws"`
@@ -63,6 +65,34 @@ type LayerCounts struct {
 	Ran            int `json:"ran"`
 }
 
+// Build is the build a run's go commands use (GO_TOPS.md §6.7): GOOS, GOARCH,
+// the sorted build tags and CGO_ENABLED. The baseline records one.
+type Build struct {
+	GOOS       string   `json:"goos"`
+	GOARCH     string   `json:"goarch"`
+	Tags       []string `json:"tags"`
+	CgoEnabled bool     `json:"cgo_enabled"`
+}
+
+// MarshalJSON writes a build with no tags as an empty array, which the schema
+// requires, never as null.
+func (b Build) MarshalJSON() ([]byte, error) {
+	type plain Build
+	if b.Tags == nil {
+		b.Tags = []string{}
+	}
+	return json.Marshal(plain(b))
+}
+
+// Ratchet is the ratchet judgment of a run under enforce: ratchet (§6.7). The
+// outcome is pass or fail on the ledger leg, where the two builds are equal,
+// and skip on any other leg, never pass.
+type Ratchet struct {
+	Outcome     string `json:"outcome"`
+	LedgerBuild Build  `json:"ledger_build"`
+	RunBuild    Build  `json:"run_build"`
+}
+
 // Exemption is one record of §6.8, in force on the day of the run.
 type Exemption struct {
 	Path    string `json:"path"`
@@ -72,6 +102,19 @@ type Exemption struct {
 	Reason  string `json:"reason"`
 	Owner   string `json:"owner"`
 	Expires string `json:"expires"`
+}
+
+// Line is the exemption as one printed line, with its expiry (§6.8): the text
+// output prints one for every exemption in force, on every run.
+func (e Exemption) Line() string {
+	line := "exemption in force: layer " + e.Layer + " path " + e.Path
+	if e.Symbol != "" {
+		line += " symbol " + e.Symbol
+	}
+	if e.Shape != "" {
+		line += " shape " + e.Shape
+	}
+	return line + " expires " + e.Expires + " owner " + e.Owner + ": " + strings.Join(strings.Fields(e.Reason), " ")
 }
 
 // Layer is one layer in range with its outcome (§3.3).

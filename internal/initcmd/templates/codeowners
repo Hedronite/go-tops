@@ -5,7 +5,6 @@
 
 /go-tops.yaml                    {OWNER}
 /go-tops.lock                    {OWNER}
-/.golangci.yml                   {OWNER}
 /.go-tops/                       {OWNER}
 /tools/                          {OWNER}
 /.github/workflows/go-tops.yml   {OWNER}

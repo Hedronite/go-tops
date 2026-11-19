@@ -134,13 +134,9 @@ var atLine = regexp.MustCompile(`- at '([^']*)': (.*)`)
 
 // validate checks the lock against the embedded schema/lock.schema.json.
 func validate(l *Lock) []string {
-	raw, err := fs.ReadFile(gotops.Files(), "schema/lock.schema.json")
+	sch, err := lockSchema()
 	if err != nil {
-		return []string{"cannot read the embedded lock schema: " + err.Error()}
-	}
-	sch, err := compile(raw)
-	if err != nil {
-		return []string{"cannot compile the embedded lock schema: " + err.Error()}
+		return []string{err.Error()}
 	}
 	doc, err := json.Marshal(l)
 	if err != nil {
@@ -150,7 +146,26 @@ func validate(l *Lock) []string {
 	if err != nil {
 		return []string{err.Error()}
 	}
-	verr := sch.Validate(inst)
+	return problemsOf(sch.Validate(inst))
+}
+
+// lockSchema reads and compiles the schema the binary embeds.
+func lockSchema() (*jsonschema.Schema, error) {
+	raw, err := fs.ReadFile(gotops.Files(), "schema/lock.schema.json")
+	if err != nil {
+		return nil, fmt.Errorf("cannot read the embedded lock schema: %w", err)
+	}
+	sch, err := compile(raw)
+	if err != nil {
+		return nil, fmt.Errorf("cannot compile the embedded lock schema: %w", err)
+	}
+	return sch, nil
+}
+
+// problemsOf turns the validator's error into one "pointer: message" line per
+// violated rule, the pointer "/" for the document itself. An error in a form it
+// cannot split is reported by its first line.
+func problemsOf(verr error) []string {
 	if verr == nil {
 		return nil
 	}

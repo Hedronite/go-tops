@@ -1,5 +1,5 @@
 # Go-TOPS configuration (GO_TOPS.md §9), written by gotops init.
-protocol: "0.4.2"
+protocol: "0.4.4"
 version: "0.1.0"
 module: github.com/acme/demo
 class: binary-service
@@ -13,7 +13,7 @@ toolchain:
 
 gates:
   hygiene:
-    golangci_lint: { config: .golangci.yml }
+    golangci_lint: { config: .go-tops/golangci.yml }
     govulncheck:   { fail_on: reachable }
     deps:          { depguard: true, licenses: { allow: [MIT, Apache-2.0, BSD-3-Clause, BSD-2-Clause, ISC] } }
   tests:
@@ -24,9 +24,7 @@ gates:
     statements_floor: 75
     exclude_generated: true
   crap:
-    enabled: false
-    reason: "native CRAP lands at M2 of the kit"
-    expires: "2027-01-31"
+    enabled: true
     cap: 10
     complexity: { err_guard_discount: true, wrap_functions: [] }
   mutation:

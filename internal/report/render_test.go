@@ -181,3 +181,72 @@ func TestRenderTextPrintsTheErrorOnlyWhenItDiffersFromTheReason(t *testing.T) {
 		t.Errorf("a different error is shown beside the reason:\n%s", text)
 	}
 }
+
+// §6.8: the gate prints every exemption in force, with its expiry, on every
+// run; a run with none prints no such line.
+func TestRenderTextPrintsEveryExemptionInForceWithItsExpiry(t *testing.T) {
+	r := exampleReport(t)
+	if len(r.Exemptions) == 0 {
+		t.Fatal("the example no longer carries an exemption")
+	}
+	text := RenderText(r)
+	for _, want := range []string{"exemption in force", "crap", "internal/wire/dispatch.go", "Server.handleOp", "table-switch", "2027-03-01", "platform"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("the text lacks %q:\n%s", want, text)
+		}
+	}
+	r.Exemptions = nil
+	if text := RenderText(r); strings.Contains(text, "exemption in force") {
+		t.Errorf("a run with no exemption printed one:\n%s", text)
+	}
+}
+
+func TestExemptionLineIsOneLineWithItsExpiry(t *testing.T) {
+	e := Exemption{Path: "a/**", Layer: "mutation", Reason: "frozen\nvendor   port", Owner: "protocol", Expires: "2027-01-31"}
+	line := e.Line()
+	if strings.Contains(line, "\n") || !strings.Contains(line, "2027-01-31") || !strings.Contains(line, "frozen vendor port") {
+		t.Errorf("line = %q", line)
+	}
+	if strings.Contains(line, "symbol") || strings.Contains(line, "shape") {
+		t.Errorf("an entry with no symbol or shape printed them: %q", line)
+	}
+}
+
+// The ratchet line (§6.7, §12.3): the outcome and both builds, so a leg that
+// skips the ratchet names the build the ledger leg runs under.
+func TestRenderTextRatchetLine(t *testing.T) {
+	linux := Build{GOOS: "linux", GOARCH: "amd64", Tags: []string{}, CgoEnabled: true}
+	mac := Build{GOOS: "darwin", GOARCH: "arm64", Tags: []string{"integration", "x"}}
+	tests := []struct {
+		name string
+		r    *Ratchet
+		want string
+	}{
+		{"pass", &Ratchet{Outcome: "pass", LedgerBuild: linux, RunBuild: linux}, "  ratchet      pass  (ledger build linux/amd64 cgo on, this run linux/amd64 cgo on)\n"},
+		{"fail", &Ratchet{Outcome: "fail", LedgerBuild: linux, RunBuild: linux}, "  ratchet      fail  (ledger build linux/amd64 cgo on, this run linux/amd64 cgo on)\n"},
+		{"skip", &Ratchet{Outcome: "skip", LedgerBuild: linux, RunBuild: mac}, "  ratchet      skip  (ledger build linux/amd64 cgo on, this run darwin/arm64 cgo off tags=integration,x)\n"},
+	}
+	for _, tc := range tests {
+		got := RenderText(Report{Ratchet: tc.r})
+		if !strings.Contains(got, tc.want) {
+			t.Errorf("%s: want %q in\n%s", tc.name, tc.want, got)
+		}
+	}
+	if got := RenderText(Report{}); strings.Contains(got, "ratchet") {
+		t.Errorf("a run with no ratchet object prints a ratchet line:\n%s", got)
+	}
+}
+
+// The ratchet line sits with the layers, before the exemptions and the laws.
+func TestRenderTextRatchetLineOrder(t *testing.T) {
+	b := Build{GOOS: "linux", GOARCH: "amd64", Tags: []string{}}
+	got := RenderText(Report{
+		Layers:     []Layer{{ID: "crap", Outcome: "pass"}},
+		Ratchet:    &Ratchet{Outcome: "pass", LedgerBuild: b, RunBuild: b},
+		Exemptions: []Exemption{{Path: "a.go", Layer: "crap", Reason: "dispatch table", Owner: "x", Expires: "2027-01-01"}},
+	})
+	layer, ratchet, exemption, laws := strings.Index(got, "  crap "), strings.Index(got, "  ratchet "), strings.Index(got, "a.go"), strings.Index(got, "  laws ")
+	if layer >= ratchet || ratchet >= exemption || exemption >= laws {
+		t.Errorf("order: layer %d ratchet %d exemption %d laws %d\n%s", layer, ratchet, exemption, laws, got)
+	}
+}

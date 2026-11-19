@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -291,53 +292,99 @@ func (h *run) format() step {
 	return failed(name, "exit %d: %s", out.ExitCode, head(string(out.Stderr)+"\n"+diff, 3))
 }
 
-// lintResult is the part of golangci-lint's JSON the gate reads.
-type lintResult struct {
-	Issues []struct {
-		FromLinter string
-		Text       string
-		Pos        struct {
-			Filename string
-			Line     int
-		}
+// lintIssue is one finding in golangci-lint's JSON, the part the gate reads.
+type lintIssue struct {
+	FromLinter string
+	Text       string
+	Pos        struct {
+		Filename string
+		Line     int
 	}
 }
+
+// lintResult is the part of golangci-lint's JSON the gate reads.
+type lintResult struct {
+	Issues []lintIssue
+}
+
+// lintName is the check's command, and its name in the steps.
+const lintName = "golangci-lint run"
 
 // lint: one adopter-style `golangci-lint run`, its JSON saved to
 // .go-tops/lint-style.json. The gate judges the saved document: a missing,
 // empty or unreadable file fails (§3.4 rule 5), and so does any finding.
 func (h *run) lint() step {
-	const name = "golangci-lint run"
 	argv, err := h.tool(golangciLint)
 	if err != nil {
-		return missing(name, err)
+		return missing(lintName, err)
 	}
-	if v, verr := h.exec(append(append([]string{}, argv...), "version", "--short")...); verr == nil && v.ExitCode == 0 {
-		if s := strings.TrimSpace(string(v.Stdout)); s != "" {
-			h.lintVersion = "v" + strings.TrimPrefix(s, "v")
-		}
+	if v := h.linterVersion(argv); v != "" {
+		h.lintVersion = v
 	}
+	res, out, bad := h.runLint(argv)
+	if bad != nil {
+		return *bad
+	}
+	h.findings = len(res.Issues)
+	h.note("lint", lintFigures(res))
+	return lintVerdict(res, out)
+}
+
+// linterVersion is the version the linter reports, "v" and all, or "" when it
+// does not say.
+func (h *run) linterVersion(argv []string) string {
+	v, err := h.exec(append(append([]string{}, argv...), "version", "--short")...)
+	if err != nil || v.ExitCode != 0 {
+		return ""
+	}
+	s := strings.TrimSpace(string(v.Stdout))
+	if s == "" {
+		return ""
+	}
+	return "v" + strings.TrimPrefix(s, "v")
+}
+
+// runLint runs the linter and reads the document it saved. A previous result is
+// cleared first, so a stale file never stands in for this run's. The step is set
+// when the run cannot be judged: the file could not be cleared, the command did
+// not start, or no readable result came out.
+func (h *run) runLint(argv []string) (lintResult, gate.Output, *step) {
+	fail := func(s step) (lintResult, gate.Output, *step) { return lintResult{}, gate.Output{}, &s }
 	path := filepath.Join(h.env.Dir, filepath.FromSlash(LintJSON))
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return failed(name, "%v", err)
+		return fail(failed(lintName, "%v", err))
 	}
 	if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return failed(name, "cannot clear the previous result: %v", err)
+		return fail(failed(lintName, "cannot clear the previous result: %v", err))
 	}
 	args := append(append(append([]string{}, argv...), "run"), h.lintConfigArgs()...)
-	out, err := h.exec(append(args, "--output.json.path="+LintJSON, "./...")...)
+	// Not capped: the default stops at 3 findings with the same text and 50 per
+	// linter, and which files survive varies from run to run, so a ledger written
+	// from one run would disagree with the gate on identical code.
+	args = append(args, "--max-issues-per-linter=0", "--max-same-issues=0")
+	// The result path is absolute: the linter resolves a relative one against the
+	// directory of the config it reads, which may be .go-tops/ and not the module.
+	out, err := h.exec(append(args, "--output.json.path="+path, "./...")...)
 	if err != nil {
-		return cantStart(name, err)
+		return fail(cantStart(lintName, err))
 	}
 	doc, err := os.ReadFile(path)
 	if err != nil || len(strings.TrimSpace(string(doc))) == 0 {
-		return failed(name, "no result: %s was not written or is empty (exit %d: %s)", LintJSON, out.ExitCode, head(string(out.Stderr), 2))
+		return fail(failed(lintName, "no result: %s was not written or is empty (exit %d: %s)", LintJSON, out.ExitCode, head(string(out.Stderr), 2)))
 	}
 	res, err := parseLint(doc)
 	if err != nil {
-		return failed(name, "%s: %v", LintJSON, err)
+		return fail(failed(lintName, "%s: %v", LintJSON, err))
 	}
-	h.findings = len(res.Issues)
+	for i := range res.Issues {
+		res.Issues[i].Pos.Filename = ModuleRel(h.env.Dir, h.env.Config.Hygiene.LintConfig, res.Issues[i].Pos.Filename)
+	}
+	return res, out, nil
+}
+
+// lintFigures are the figures the lint entry adds to its outcome in the details:
+// the findings as an int, and the count by linter. The ratchet reads this shape.
+func lintFigures(res lintResult) map[string]any {
 	by := map[string]any{}
 	for _, is := range res.Issues {
 		n := 0
@@ -346,14 +393,19 @@ func (h *run) lint() step {
 		}
 		by[is.FromLinter] = n + 1
 	}
-	h.note("lint", map[string]any{"findings": h.findings, "by_linter": by})
+	return map[string]any{"findings": len(res.Issues), "by_linter": by}
+}
+
+// lintVerdict is the step for a lint run that produced a result: any finding
+// fails, and so does a non-zero exit with none.
+func lintVerdict(res lintResult, out gate.Output) step {
 	switch {
-	case h.findings > 0:
-		return failed(name, "%d finding(s): %s", h.findings, summarizeLint(res))
+	case len(res.Issues) > 0:
+		return failed(lintName, "%d finding(s): %s", len(res.Issues), summarizeLint(res))
 	case out.ExitCode != 0:
-		return failed(name, "exit %d with no findings in %s: %s", out.ExitCode, LintJSON, head(string(out.Stderr), 3))
+		return failed(lintName, "exit %d with no findings in %s: %s", out.ExitCode, LintJSON, head(string(out.Stderr), 3))
 	}
-	return passed(name)
+	return passed(lintName)
 }
 
 func parseLint(doc []byte) (lintResult, error) {
@@ -435,6 +487,41 @@ func (h *run) depguard() step {
 
 const defaultLintConfig = ".golangci.yml"
 
+// ModuleRel makes a file name from golangci-lint a module-relative slash path. The
+// linter names a file relative to the directory its config says (the config file's
+// own directory by default, run.relative-path-mode) or absolutely, so a config under
+// .go-tops/ gives "../a/a.go" for the module's a/a.go. A relative name that is a file
+// of the module stays as it is; one that is not is tried against the config's
+// directory; an absolute one is made relative to the module.
+func ModuleRel(dir, lintConfig, name string) string {
+	if !filepath.IsAbs(name) {
+		name = fromConfigDir(dir, lintConfig, name)
+	}
+	if filepath.IsAbs(name) {
+		if rel, err := filepath.Rel(dir, name); err == nil && !strings.HasPrefix(rel, "..") {
+			name = rel
+		}
+	}
+	return path.Clean(filepath.ToSlash(name))
+}
+
+// fromConfigDir resolves a relative name against the config's directory when the
+// module has no such file and the config's directory does.
+func fromConfigDir(dir, lintConfig, name string) string {
+	if isFile(filepath.Join(dir, name)) || lintConfig == "" {
+		return name
+	}
+	if p := filepath.Join(dir, filepath.Dir(lintConfig), name); isFile(p) {
+		return p
+	}
+	return name
+}
+
+func isFile(p string) bool {
+	st, err := os.Stat(p)
+	return err == nil && !st.IsDir()
+}
+
 func firstNonEmpty(a, b string) string {
 	if a != "" {
 		return a
@@ -477,9 +564,9 @@ func (h *run) licenses() step {
 // schema hygieneDetails: one entry per check under its key, the lint version
 // and the style-lint finding count.
 func (h *run) result(steps []step) gate.Result {
-	var bad, absent []string
 	d := map[string]any{}
-	for _, s := range steps {
+	checks := make([]Check, len(steps))
+	for i, s := range steps {
 		key := keys[s.name]
 		e := map[string]any{"outcome": string(s.outcome)}
 		if s.message != "" {
@@ -489,12 +576,7 @@ func (h *run) result(steps []step) gate.Result {
 			e[k] = v
 		}
 		d[key] = e
-		switch s.outcome {
-		case gate.Fail:
-			bad = append(bad, s.name+": "+s.message)
-		case gate.ToolMissing:
-			absent = append(absent, s.name+": "+s.message)
-		}
+		checks[i] = Check{Name: s.name, Outcome: s.outcome, Message: s.message}
 	}
 	version := h.lintVersion
 	if version == "" {
@@ -506,15 +588,67 @@ func (h *run) result(steps []step) gate.Result {
 	if h.vuln != nil {
 		res.VulnDBTimestamp = h.vuln.dbLastModified
 	}
+	res.Outcome, res.Reason = Fold(checks)
+	return res
+}
+
+// Check is one check of gate 1 as the details record it: its command, how it
+// came out and why.
+type Check struct {
+	Name    string
+	Outcome gate.Outcome
+	Message string
+}
+
+// Fold is the outcome and the reason of the layer for its checks (§3.1 gate 1): a
+// check that lacks a tool makes it tool-missing, and otherwise any failed check
+// fails it. The layer folds its steps with it, and the ratchet folds the checks
+// again after it replaces one of them, so the two can never say different things.
+func Fold(checks []Check) (gate.Outcome, string) {
+	var bad, absent []string
+	for _, c := range checks {
+		switch c.Outcome {
+		case gate.Fail:
+			bad = append(bad, c.Name+": "+c.Message)
+		case gate.ToolMissing:
+			absent = append(absent, c.Name+": "+c.Message)
+		}
+	}
 	switch {
 	case len(absent) > 0:
-		res.Outcome = gate.ToolMissing
-		res.Reason = fmt.Sprintf("%d check(s) lack a tool: %s", len(absent), strings.Join(absent, "; "))
+		return gate.ToolMissing, fmt.Sprintf("%d check(s) lack a tool: %s", len(absent), strings.Join(absent, "; "))
 	case len(bad) > 0:
-		res.Outcome = gate.Fail
-		res.Reason = fmt.Sprintf("%d of %d checks failed: %s", len(bad), len(steps), strings.Join(bad, "; "))
-	default:
-		res.Outcome = gate.Pass
+		return gate.Fail, fmt.Sprintf("%d of %d checks failed: %s", len(bad), len(checks), strings.Join(bad, "; "))
 	}
-	return res
+	return gate.Pass, ""
+}
+
+// checkOrder is the order of the checks in a run, by their keys in the details.
+var checkOrder = []string{"tidy", "verify", "toolchain", "format", "lint", "vulnerabilities", "licenses", "depguard"}
+
+// ChecksOf reads the checks out of the details the layer wrote, in the order the
+// layer ran them. An entry that is absent, or not a check, is left out.
+func ChecksOf(details map[string]any) []Check {
+	names := map[string]string{}
+	for command, key := range keys {
+		names[key] = command
+	}
+	var out []Check
+	for _, key := range checkOrder {
+		entry, ok := details[key].(map[string]any)
+		if !ok {
+			continue
+		}
+		out = append(out, Check{Name: names[key], Outcome: gate.Outcome(asString(entry["outcome"])), Message: asString(entry["message"])})
+	}
+	return out
+}
+
+// asString is v as a string, or "" when it is not one.
+func asString(v any) string {
+	s, ok := v.(string)
+	if !ok {
+		return ""
+	}
+	return s
 }

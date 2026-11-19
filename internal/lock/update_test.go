@@ -220,7 +220,7 @@ func TestUpdateFailuresLeaveTheFileUntouched(t *testing.T) {
 
 func TestUpdateRefusesALockThatDoesNotLoad(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, FileName), []byte("protocol: \"0.4.2\"\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, FileName), []byte("protocol: \""+protocolID+"\"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := Update(UpdateOptions{Dir: dir, Fetch: func(string) ([]byte, error) { return nil, nil }}); err == nil {
@@ -303,7 +303,7 @@ func TestUpdateFailureKinds(t *testing.T) {
 		t.Errorf("a missing lock is a configuration error: %v", err)
 	}
 	bad := t.TempDir()
-	if err := os.WriteFile(filepath.Join(bad, FileName), []byte("protocol: \"0.4.2\"\nbogus_key: 1\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(bad, FileName), []byte("protocol: \""+protocolID+"\"\nbogus_key: 1\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	_, err = Update(UpdateOptions{Dir: bad, Fetch: archiveFetcher(t, &urls)})

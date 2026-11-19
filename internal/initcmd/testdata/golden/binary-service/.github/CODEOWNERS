@@ -5,7 +5,6 @@
 
 /go-tops.yaml                    @acme
 /go-tops.lock                    @acme
-/.golangci.yml                   @acme
 /.go-tops/                       @acme
 /tools/                          @acme
 /.github/workflows/go-tops.yml   @acme

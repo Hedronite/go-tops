@@ -16,7 +16,7 @@ import (
 // The oracle is GO_TOPS.md §3.1 (gate 1), §3.3 (outcomes), §3.4 rule 5 (no
 // silent empties) and §12.2 (exit 2 for a lock that does not load).
 
-const lockText = `protocol: "0.4.2"
+const lockTextTemplate = `protocol: "@PROTOCOL@"
 toolchain: go1.27.4
 trust:
   mode: checksum
@@ -37,6 +37,8 @@ binaries:
       linux/amd64: d9af4564c05beb2f5e130119aec45e5e89d28e5017d558d3ca382659f2427894
       linux/arm64: 14680d7674eb1fed0405446670e15dcffb74e979ef0dcd41f998c088fd6babfb
 `
+
+var lockText = strings.Replace(lockTextTemplate, "@PROTOCOL@", protocolID, 1)
 
 const cleanStream = `{"config":{"protocol_version":"v1.0.0","scanner_name":"govulncheck","db_last_modified":"2026-11-17T09:12:44Z"}}
 {"progress":{"message":"Scanning your code and 3 packages across 1 dependent module for known vulnerabilities..."}}
@@ -253,8 +255,8 @@ func TestOneLintRunAndNoVet(t *testing.T) {
 		}
 	}
 	for _, c := range f.calls {
-		if strings.HasPrefix(strings.Join(c, " "), "golangci-lint run") && !strings.Contains(strings.Join(c, " "), "--output.json.path=.go-tops/lint-style.json") {
-			t.Errorf("the lint run does not save its JSON to .go-tops/lint-style.json: %v", c)
+		if strings.HasPrefix(strings.Join(c, " "), "golangci-lint run") && !strings.Contains(strings.Join(c, " "), "--output.json.path="+filepath.Join(f.dir, ".go-tops", "lint-style.json")) {
+			t.Errorf("the lint run does not save its JSON to .go-tops/lint-style.json, by its absolute path: %v", c)
 		}
 	}
 }
