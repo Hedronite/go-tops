@@ -40,7 +40,6 @@ func (in *inputs) values() map[string]string {
 		"{TOOLCHAIN}":                 toolchain,
 		"{TOOLCHAIN_NUM}":             strings.TrimPrefix(toolchain, "go"),
 		"{OWNER}":                     in.owner,
-		"{EXPIRES_M2}":                expiresM2,
 		"{EXPIRES_M4}":                expiresM4,
 		"{LAYERS}":                    in.layersYAML(),
 		"{DEPGUARD}":                  strconv.FormatBool(in.depguard),

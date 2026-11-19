@@ -1,12 +1,16 @@
 name: go-tops
 
-# The Go-TOPS drop-in (GO_TOPS.md §11): one job that runs the gate. Every action
-# is pinned by commit SHA (the comment names the release), and the job only reads.
+# The Go-TOPS drop-in (GO_TOPS.md §11): one job. On a push or a pull request each
+# leg runs the gate. When the workflow is dispatched by hand, only the ubuntu leg
+# acts: it is the ledger leg, and it writes the first ledger instead of running
+# the gate (GO_TOPS.md §6.7). Every action is pinned by commit SHA (the comment
+# names the release), and the job only reads.
 
 on:
   pull_request:
   push:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -27,11 +31,14 @@ jobs:
           - { leg: macos, os: macos-latest, go: "{TOOLCHAIN_NUM}", lint_platform: darwin-arm64 }
           - { leg: floor, os: ubuntu-latest, go: "{GO_FLOOR}" }
     steps:
+      # A manual dispatch runs the ubuntu leg only: the other legs skip every step.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: github.event_name != 'workflow_dispatch' || matrix.leg == 'ubuntu'
         with:
           fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        if: github.event_name != 'workflow_dispatch' || matrix.leg == 'ubuntu'
         with:
           go-version: ${{ matrix.go }}
           cache-dependency-path: |
@@ -43,7 +50,7 @@ jobs:
       # checks the installed executable against the lock before it runs it. A bump
       # is a new hash here and a reviewed change to the lock.
       - name: install golangci-lint v{GOLANGCI_VERSION}
-        if: matrix.leg != 'floor'
+        if: matrix.leg != 'floor' && (github.event_name != 'workflow_dispatch' || matrix.leg == 'ubuntu')
         env:
           VERSION: "{GOLANGCI_VERSION}"
           PLATFORM: ${{ matrix.lint_platform }}
@@ -64,7 +71,7 @@ jobs:
       # setup-go installs the latest release of the floor language version; this
       # step proves the floor leg runs it and not another toolchain.
       - name: toolchain is the floor release
-        if: matrix.leg == 'floor'
+        if: matrix.leg == 'floor' && github.event_name != 'workflow_dispatch'
         run: |
           set -euo pipefail
           got="$(go env GOVERSION)"
@@ -75,14 +82,33 @@ jobs:
           esac
       # The gate leg: gotops runs every layer and fails the job on a red gate.
       - name: gate
-        if: matrix.leg != 'floor'
+        if: matrix.leg != 'floor' && github.event_name != 'workflow_dispatch'
         env:
           GOTOOLCHAIN: local
         run: go tool -modfile=tools/go.mod gotops gate
+      # The ratchet is judged on the ledger leg only (GO_TOPS.md §6.7), and this
+      # repository's ledger leg is the ubuntu leg. If that leg reports a ratchet
+      # outcome of skip, or none, the baseline was recorded under a build no leg
+      # runs, so every leg would skip and the ratchet would never be judged.
+      - name: the ratchet is judged on the ledger leg
+        if: matrix.leg == 'ubuntu' && github.event_name != 'workflow_dispatch'
+        run: |
+          set -euo pipefail
+          report=.go-tops/report.json
+          if [ "$(jq -r .enforce "$report")" = ratchet ]; then
+            outcome="$(jq -r '.ratchet.outcome // "none"' "$report")"
+            case "$outcome" in
+              pass|fail) ;;
+              *)
+                echo "::error::the ubuntu leg is the ledger leg but reports a ratchet outcome of ${outcome}: the baseline was recorded under another build. Run the baseline workflow by hand, which writes it on this leg, and commit the file."
+                exit 1
+                ;;
+            esac
+          fi
       # The floor leg builds and tests on the floor toolchain. The gate itself
       # runs on the other legs: a narrowed gate run leaves laws out of range.
       - name: build and test on the floor
-        if: matrix.leg == 'floor'
+        if: matrix.leg == 'floor' && github.event_name != 'workflow_dispatch'
         env:
           GOTOOLCHAIN: local
           CGO_ENABLED: "1"
@@ -90,7 +116,7 @@ jobs:
           go build ./...
           go test -race -shuffle=on -count=1 ./...
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        if: always() && matrix.leg != 'floor'
+        if: always() && matrix.leg != 'floor' && github.event_name != 'workflow_dispatch'
         with:
           name: go-tops-${{ matrix.leg }}
           # Hidden files are off by default and .go-tops is a hidden directory;
@@ -100,3 +126,22 @@ jobs:
             !.go-tops/bin/
           include-hidden-files: true
           if-no-files-found: warn
+      # Run this workflow by hand (workflow_dispatch) to write the first ledger on
+      # the ledger leg's build: the ubuntu runner and toolchain of the gate leg,
+      # with the pinned golangci-lint installed above, because the feeding layers
+      # read its output. Download the artifact and commit .go-tops/baseline.json.
+      # baseline --init refuses when a ledger exists.
+      - name: write the first ledger
+        if: github.event_name == 'workflow_dispatch' && matrix.leg == 'ubuntu'
+        env:
+          GOTOOLCHAIN: local
+        run: go tool -modfile=tools/go.mod gotops baseline --init
+      - name: upload the first ledger as go-tops-baseline
+        if: github.event_name == 'workflow_dispatch' && matrix.leg == 'ubuntu'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: go-tops-baseline
+          # .go-tops is a hidden directory, which the action skips by default.
+          path: .go-tops/baseline.json
+          include-hidden-files: true
+          if-no-files-found: error
