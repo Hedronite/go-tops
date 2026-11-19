@@ -247,7 +247,7 @@ func TestAGoLineAboveThePinnedToolchainIsRefused(t *testing.T) {
 func TestOwnerFromTheModulePathIsFlaggedAndAnExplicitOwnerIsNot(t *testing.T) {
 	dir := newModule(t, "github.com/Acme/demo", "1.26")
 	_, out, _ := run(opts(dir, "binary-cli"))
-	if !strings.Contains(out, "@Acme") || !strings.Contains(out, "organisation") || !strings.Contains(out, "--owner") {
+	if !strings.Contains(out, "@Acme") || !strings.Contains(out, "organisation") || !strings.Contains(out, "--owner") || !strings.Contains(out, "codeowners/errors?ref=<branch>") {
 		t.Errorf("a derived owner is not flagged:\n%s", out)
 	}
 	dir = newModule(t, "github.com/Acme/demo", "1.26")

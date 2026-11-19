@@ -121,6 +121,9 @@ def run-problems [code: int, r: record] {
   if not ($others | is-empty) {
     $out = ($out | append $"failed: ($others | str join ', ')")
   }
+  if ($r.summary.exit_code? | default null) != $code {
+    $out = ($out | append $"the gate exited ($code) and its report says exit_code ($r.summary.exit_code? | default 'missing')")
+  }
   if $code == 1 and ($failed | is-empty) {
     $out = ($out | append "the gate exited 1 but the report names no failed item")
   }

@@ -13,7 +13,7 @@ nu go-tops-gate.nu [--path .] [--max-tier 1] [--base <ref>] [--report .go-tops/r
 
 It prints one JSON object. `command` is the exact `gotops gate` argv. `ok` is judged from the report and the exit code, never from the exit code alone, under ruling C9: until the required laws are judged (M5) the gate exits 1 on them alone, and that is a pass. `ok` is true only when:
 
-- the exit code is 0 or 1 (2, 3 and 4 are errors, not verdicts);
+- the exit code is 0 or 1 (2, 3 and 4 are errors, not verdicts) and is the `summary.exit_code` the report records;
 - the report exists, is JSON and has its layers, laws, summary and enforce fields;
 - every layer is `pass` or `skip`, and the run was not partial;
 - the only failed item, if any, is `laws`, with every required law reported not evaluated, none judged and none refused;

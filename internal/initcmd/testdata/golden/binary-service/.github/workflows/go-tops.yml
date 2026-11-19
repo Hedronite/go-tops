@@ -103,17 +103,16 @@ jobs:
       # included, fails the run on the ubuntu leg. The macOS leg asks too, and while a
       # first ledger is due it runs no gate, which would only fail on the missing ledger:
       # the ubuntu leg fails the run. The step records the exit code with set +e, so
-      # bash -e does not abort on the status exit 1 or 2. The base ref reaches the
-      # command through the environment, never through the script text.
+      # bash -e does not abort on the status exit 1 or 2. The status reads the base that
+      # go-tops.yaml configures, as the gate does, so both answer for the same diff.
       - name: is a first ledger due (baseline --status)
         id: status
         if: matrix.leg != 'floor' && github.event_name == 'pull_request'
         env:
           GOTOOLCHAIN: local
-          BASE_REF: ${{ github.base_ref }}
         run: |
           set +e
-          line="$(go tool -modfile=tools/go.mod gotops baseline --status --base "origin/$BASE_REF")"
+          line="$(go tool -modfile=tools/go.mod gotops baseline --status)"
           code=$?  # 0 due, 1 not due, 2 cannot tell: read before any later command
           echo "$line"
           state="$(printf '%s\n' "$line" | jq -e -r .state 2>/dev/null)" || state=""
@@ -191,6 +190,7 @@ jobs:
         env:
           GATE_EXIT: ${{ steps.gate.outputs.code }}
           LEG: ${{ matrix.leg }}
+          STATUS_STATE: ${{ steps.status.outputs.state }}
         run: |
           set -uo pipefail
           report=.go-tops/report.json
@@ -198,7 +198,14 @@ jobs:
           case "${GATE_EXIT:-}" in
             0|1) ;;
             "") fail "the gate step recorded no exit code: a step before it failed, so the gate did not run" ;;
-            *) fail "the gate exited $GATE_EXIT: a usage, configuration or environment error, not a verdict. A repository with no committed ledger has the ubuntu leg write one on a pull request: download go-tops-baseline from that leg and commit it." ;;
+            *)
+              case "$GATE_EXIT:${STATUS_STATE:-}" in
+                2:deleted) fail "the gate exited 2 and the ledger was deleted: deleting the ledger is not a reset: restore .go-tops/baseline.json from the base or HEAD, because a ledger changes only through gotops baseline." ;;
+                2:*) fail "the gate exited 2: a configuration or custody error: go-tops.yaml or go-tops.lock is invalid, a pinned tool does not match the lock, or the ledger is missing or differs from HEAD. The log above names it; gotops check and gotops lock --verify show it locally." ;;
+                3:*) fail "the gate exited 3: an environment error: the repository or a tool could not be read, or no C compiler is available for cgo. The log above names it." ;;
+                4:*) fail "the gate exited 4: refused in CI: a dry run or a range that leaves a required law out is not run in CI." ;;
+                *) fail "the gate exited $GATE_EXIT, which the protocol gives no meaning: not a verdict" ;;
+              esac ;;
           esac
           test -f "$report" || fail "the gate wrote no ${report}"
           jq -e 'type == "object"' "$report" > /dev/null 2>&1 || fail "${report} is not a JSON report"
@@ -209,7 +216,7 @@ jobs:
             case "$LEG:$outcome" in
               ubuntu:pass|macos:pass|macos:skip) ;;
               ubuntu:fail) fail "the ratchet fails: a function is over its ledger entry" ;;
-              ubuntu:*) fail "the ubuntu leg is the ledger leg but reports a ratchet outcome of $outcome: the baseline was recorded under another build. Run the workflow by hand with mode init or refresh, which writes it on this leg, and commit the file." ;;
+              ubuntu:*) fail "the ubuntu leg is the ledger leg but reports a ratchet outcome of $outcome: the baseline was recorded under another build. The first ledger comes from the pull-request run of this leg, which writes it on this leg's own build when none exists. To replace a ledger recorded under another build, run the workflow by hand with mode init or refresh after the workflow is on the default branch, and commit the file it uploads." ;;
               *) fail "the ratchet outcome is $outcome on the $LEG leg" ;;
             esac
           fi
@@ -223,6 +230,7 @@ jobs:
             and (.layer_counts.ran | type) == "number"
             and .layer_counts.ran == .layer_counts.enabled_in_range
             and ((.summary.failed - ["laws"]) | length) == 0
+            and .summary.exit_code == $code
             and ($code == 0 or (.summary.failed | length) > 0)
             and (if (.summary.failed | any(. == "laws")) then
                    .laws.required > 0
@@ -230,7 +238,7 @@ jobs:
                    and .laws.judged == 0
                    and ([.laws.results[] | select(.verdict == "refuse")] | length) == 0
                  else true end)
-          ' "$report" > /dev/null || fail "the gate report is not a pass under ruling C9: a layer failed or did not run, the run was partial, or something besides the required laws (all reported not evaluated, none judged, none refused) failed"
+          ' "$report" > /dev/null || fail "the gate report is not a pass under ruling C9: the gate exited $GATE_EXIT and its report says another exit code, a layer failed or did not run, the run was partial, or something besides the required laws (all reported not evaluated, none judged, none refused) failed"
       # The floor leg builds and tests on the floor toolchain. The gate itself
       # runs on the other legs: a narrowed gate run leaves laws out of range.
       - name: build and test on the floor

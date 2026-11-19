@@ -35,20 +35,24 @@ func ran(t *testing.T, steps []step, ctx map[string]string, names ...string) map
 	return out
 }
 
-func TestStatusStepReadsTheBaseThroughTheEnvironment(t *testing.T) {
+func TestStatusStepReadsTheConfiguredBaseLikeTheGate(t *testing.T) {
 	dir := newModule(t, "github.com/acme/demo", "1.26")
 	if code, _, errs := run(opts(dir, "binary-cli")); code != ExitOK {
 		t.Fatal(errs)
 	}
-	s := stepNamed(t, workflowSteps(t, dir), "baseline --status)")
+	steps := workflowSteps(t, dir)
+	s := stepNamed(t, steps, "baseline --status)")
 	if s.ID != "status" {
 		t.Errorf("the step id is %q, want status: later steps read its output", s.ID)
 	}
-	if !strings.Contains(s.Run, `gotops baseline --status --base "origin/$BASE_REF"`) || strings.Contains(s.Run, "${{") {
-		t.Errorf("the base ref must reach the command through the environment, not the script text:\n%s", s.Run)
+	// The gate reads the base go-tops.yaml configures, so the status must too: a
+	// base of its own could answer a different question than the gate then asks.
+	if strings.Contains(s.Run, "--base") || s.Env["BASE_REF"] != "" {
+		t.Errorf("the status step names a base of its own:\n%s\n%v", s.Run, s.Env)
 	}
-	if s.Env["BASE_REF"] != "${{ github.base_ref }}" {
-		t.Errorf("BASE_REF = %q", s.Env["BASE_REF"])
+	gate := steps[indexOf2(steps, func(g step) bool { return g.ID == "gate" })]
+	if strings.Contains(gate.Run, "--base") {
+		t.Errorf("the gate step names a base: %s", gate.Run)
 	}
 }
 
@@ -145,7 +149,7 @@ func TestStatusStepActsOnACodeAndAStateThatAgree(t *testing.T) {
 		out := filepath.Join(work, "output")
 		cmd := exec.Command("bash", "-e", "-c", s.Run)
 		cmd.Dir = work
-		cmd.Env = append(os.Environ(), "PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"), "GITHUB_OUTPUT="+out, "BASE_REF=release/1.x")
+		cmd.Env = append(os.Environ(), "PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"), "GITHUB_OUTPUT="+out)
 		if b, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("status exit %d %s: the step failed: %v\n%s", c.code, c.stdout, err, b)
 		}
@@ -155,7 +159,7 @@ func TestStatusStepActsOnACodeAndAStateThatAgree(t *testing.T) {
 			t.Errorf("status exit %d %s: output %q, want %q (%v)", c.code, c.stdout, got, want, err)
 		}
 		argv, err := os.ReadFile(filepath.Join(work, "argv"))
-		if err != nil || strings.TrimSpace(string(argv)) != "tool -modfile=tools/go.mod gotops baseline --status --base origin/release/1.x" {
+		if err != nil || strings.TrimSpace(string(argv)) != "tool -modfile=tools/go.mod gotops baseline --status" {
 			t.Errorf("the status ran as %q (%v)", argv, err)
 		}
 	}

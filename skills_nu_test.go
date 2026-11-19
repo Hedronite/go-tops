@@ -267,6 +267,10 @@ func setRunTags(tags ...string) func(report) {
 	}
 }
 
+func setExit(n int) func(report) {
+	return func(r report) { r.obj("summary")["exit_code"] = n }
+}
+
 func dropKey(key string) func(report) {
 	return func(r report) { delete(r, key) }
 }
@@ -281,15 +285,18 @@ func addResult(id, verdict string) func(report) {
 
 var gateCases = []gateCase{
 	{"C9: the required laws alone, ratchet pass", nil, "1", nil, true, ""},
-	{"exit 0 with nothing failed", failedItems(), "0", nil, true, ""},
+	{"exit 0 with nothing failed", both(failedItems(), setExit(0)), "0", nil, true, ""},
+	{"exit 0 while the report says exit 1", nil, "0", nil, false, "exit_code"},
+	{"exit 1 while the report says exit 0", setExit(0), "1", nil, false, "exit_code"},
+	{"the report has no exit code", func(r report) { delete(r.obj("summary"), "exit_code") }, "1", nil, false, "exit_code"},
 	{"ratchet skip on another build", both(setRatchet("skip"), setRunBuild("linux")), "1", nil, true, ""},
 	{"ratchet skip on the ledger's own build", setRatchet("skip"), "1", nil, false, "own build"},
 	{"ratchet skip on the ledger's build with other tags", both(setRatchet("skip"), setRunTags("integration")), "1", nil, true, ""},
 	{"ratchet skip with no builds named", both(setRatchet("skip"), func(r report) { delete(r.obj("ratchet"), "run_build") }), "1", nil, false, "own build"},
 	{"ratchet pass", setRatchet("pass"), "1", nil, true, ""},
 	{"a law that is not required and not evaluated is a gap, not a failure", addResult("G-40", "not-evaluated"), "1", nil, true, ""},
-	{"advisory with a failing layer", both(func(r report) { r["enforce"] = "advisory"; delete(r, "ratchet") }, setLayer("crap", "fail"), failedItems("crap")), "0", nil, false, "crap"},
-	{"advisory with the required laws alone", func(r report) { r["enforce"] = "advisory"; delete(r, "ratchet") }, "0", nil, true, ""},
+	{"advisory with a failing layer", both(func(r report) { r["enforce"] = "advisory"; delete(r, "ratchet") }, setLayer("crap", "fail"), failedItems("crap"), setExit(0)), "0", nil, false, "crap"},
+	{"advisory with the required laws alone", both(func(r report) { r["enforce"] = "advisory"; delete(r, "ratchet") }, setExit(0)), "0", nil, true, ""},
 	{"ratchet fail", both(setRatchet("fail"), failedItems("ratchet", "laws")), "1", nil, false, "ratchet"},
 	{"ratchet fail listed nowhere", setRatchet("fail"), "1", nil, false, "ratchet"},
 	{"no ratchet outcome under enforce ratchet", dropKey("ratchet"), "1", nil, false, "ratchet outcome"},
@@ -303,9 +310,9 @@ var gateCases = []gateCase{
 	{"a law was judged", setLaw("judged", 1), "1", nil, false, "judged"},
 	{"a law is refused", addResult("G-41", "refuse"), "1", nil, false, "G-41"},
 	{"a refused law beside a judged one", both(setLaw("judged", 1), addResult("G-30", "refuse")), "1", nil, false, "refused"},
-	{"the run was partial", both(func(r report) { r.obj("summary")["outcome"] = "partial" }, failedItems()), "0", nil, false, "partial"},
+	{"the run was partial", both(func(r report) { r.obj("summary")["outcome"] = "partial" }, failedItems(), setExit(0)), "0", nil, false, "partial"},
 	{"a layer in range did not run", func(r report) { r.obj("layer_counts")["ran"] = 3 }, "1", nil, false, "partial"},
-	{"exit 0 while the report names a failed layer", both(setLayer("tests", "fail"), failedItems("tests")), "0", nil, false, "tests"},
+	{"exit 0 while the report names a failed layer", both(setLayer("tests", "fail"), failedItems("tests"), setExit(0)), "0", nil, false, "tests"},
 	{"no layers in the report", dropKey("layers"), "1", nil, false, "layers"},
 	{"no laws record", dropKey("laws"), "1", nil, false, "laws"},
 	{"no summary", dropKey("summary"), "1", nil, false, "summary"},

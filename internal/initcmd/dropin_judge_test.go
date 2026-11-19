@@ -137,7 +137,7 @@ func (g gateDoc) json(t *testing.T) string {
 		"enforce":      g.enforce,
 		"layers":       layers,
 		"layer_counts": map[string]any{"enabled_in_range": len(layers), "ran": ran},
-		"summary":      map[string]any{"failed": append([]string{}, g.failed...), "outcome": outcome, "exit_code": 1, "enforced": g.enforce != "advisory"},
+		"summary":      map[string]any{"failed": append([]string{}, g.failed...), "outcome": outcome, "exit_code": g.reportedExit(outcome), "enforced": g.enforce != "advisory"},
 		"laws":         map[string]any{"required": g.required, "required_not_evaluated": g.notEval, "judged": g.judged, "results": g.results()},
 	}
 	switch g.ratchet {
@@ -152,6 +152,15 @@ func (g gateDoc) json(t *testing.T) string {
 		t.Fatal(err)
 	}
 	return string(b)
+}
+
+// reportedExit is the summary exit_code of the report (GO_TOPS.md section 12.3): 1
+// for a failed run that is enforced, and 0 for every other run.
+func (g gateDoc) reportedExit(outcome string) int {
+	if g.enforce != "advisory" && outcome == "fail" {
+		return 1
+	}
+	return 0
 }
 
 var linuxBuild = map[string]any{"goos": "linux", "goarch": "amd64", "tags": []string{}, "cgo_enabled": true}
@@ -246,6 +255,10 @@ func judgeCases() []judgeCase {
 		{"advisory exit 0 with the required laws alone", "ubuntu", "0", gateDoc{enforce: "advisory", failed: []string{"laws"}, required: 16, notEval: 16}, false},
 		{"advisory exit 0 with a refused law", "ubuntu", "0", gateDoc{enforce: "advisory", failed: []string{"laws"}, required: 16, notEval: 16, refused: []string{"G-41"}}, true},
 		{"exit 0 with a failed layer the report names", "macos", "0", clean.with(func(g *gateDoc) { g.layers = map[string]string{"tests": "fail"}; g.failed = []string{"tests"} }), true},
+		// the exit code the gate recorded is the one its report says (R15)
+		{"exit 0 while the report says exit 1 and fails the laws", "ubuntu", "0", c9(), true},
+		{"exit 0 while the report says exit 1, on the other leg", "macos", "0", c9(), true},
+		{"exit 1 while the report says exit 0", "ubuntu", "1", c9().with(func(g *gateDoc) { g.failed = nil }), true},
 		// a ratchet skip is judged by build (C3b)
 		{"a skip on another build", "macos", "0", clean.with(func(g *gateDoc) { g.ratchet = "skip" }), false},
 		{"a skip on the ledger's own build", "macos", "0", clean.with(func(g *gateDoc) { g.ratchet = "skip"; g.sameBuild = true }), true},
@@ -387,6 +400,77 @@ func TestRefreshSaysWhenNothingChanged(t *testing.T) {
 		}
 		if got := strings.Contains(string(out), "unchanged: same ledger uploaded"); got != c.line {
 			t.Errorf("%s: prints the unchanged line = %v, want %v\n%s", c.name, got, c.line, out)
+		}
+	}
+}
+
+// The failure of a gate that did not give a verdict names its cause from the exit
+// code and the state `baseline --status` recorded, not one hint for all of them.
+func TestTheJudgeNamesTheCauseOfAGateThatGaveNoVerdict(t *testing.T) {
+	needTools(t)
+	_, judge := judgeSteps(t)
+	if judge.Env["STATUS_STATE"] != "${{ steps.status.outputs.state }}" {
+		t.Fatalf("the judge reads the recorded status state: %v", judge.Env)
+	}
+	for _, c := range []struct {
+		name, code, state string
+		want, notWant     []string
+	}{
+		{"a deleted ledger", "2", "deleted", []string{"deleting the ledger is not a reset", "restore"}, []string{"go-tops-baseline"}},
+		{"a configuration or custody error", "2", "present", []string{"configuration", "lock"}, []string{"go-tops-baseline", "first ledger"}},
+		{"no status recorded (a push)", "2", "", []string{"configuration"}, []string{"go-tops-baseline", "first ledger"}},
+		{"an environment error", "3", "present", []string{"environment"}, []string{"go-tops-baseline", "first ledger"}},
+		{"refused in CI", "4", "present", []string{"refused in CI"}, []string{"go-tops-baseline", "first ledger"}},
+		{"a code the protocol does not define", "64", "present", []string{"64"}, []string{"go-tops-baseline"}},
+	} {
+		dir := t.TempDir()
+		if err := os.MkdirAll(filepath.Join(dir, ".go-tops"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		cmd := exec.Command("bash", "-e", "-c", judge.Run)
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(), "GATE_EXIT="+c.code, "LEG=ubuntu", "STATUS_STATE="+c.state)
+		out, err := cmd.CombinedOutput()
+		if err == nil {
+			t.Errorf("%s: the judge passed", c.name)
+			continue
+		}
+		for _, w := range c.want {
+			if !strings.Contains(string(out), w) {
+				t.Errorf("%s: the message lacks %q:\n%s", c.name, w, out)
+			}
+		}
+		for _, w := range c.notWant {
+			if strings.Contains(string(out), w) {
+				t.Errorf("%s: the message has %q, which is not its cause:\n%s", c.name, w, out)
+			}
+		}
+	}
+}
+
+// A ratchet skip on the ledger leg does not send the adopter to a manual run that
+// cannot start before the workflow is on the default branch.
+func TestTheJudgeSaysWhereTheFirstLedgerComesFromOnASkip(t *testing.T) {
+	needTools(t)
+	_, judge := judgeSteps(t)
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, ".go-tops"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	doc := c9().with(func(g *gateDoc) { g.ratchet = "skip" })
+	if err := os.WriteFile(filepath.Join(dir, ".go-tops", "report.json"), []byte(doc.json(t)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("bash", "-e", "-c", judge.Run)
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "GATE_EXIT=1", "LEG=ubuntu", "STATUS_STATE=present")
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatal("a skip on the ledger leg passed")
+	}
+	for _, w := range []string{"pull-request run", "after the workflow is on the default branch"} {
+		if !strings.Contains(string(out), w) {
+			t.Errorf("the message lacks %q:\n%s", w, out)
 		}
 	}
 }

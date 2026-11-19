@@ -57,7 +57,7 @@ type inputs struct {
 func (in *inputs) notes() []string {
 	notes := append([]string(nil), in.warnings...)
 	if in.ownerFromPath {
-		notes = append(notes, "the CODEOWNERS owner "+in.owner+" comes from the module path: a bare organisation is not a valid owner, only a user or @org/team is; pass --owner with one, and check .github/CODEOWNERS on the default branch with gh api repos/<owner>/<repo>/codeowners/errors")
+		notes = append(notes, "the CODEOWNERS owner "+in.owner+" comes from the module path: a bare organisation is not a valid owner, only a user or @org/team is; pass --owner with one, and check .github/CODEOWNERS with gh api repos/<owner>/<repo>/codeowners/errors on the default branch, or on a pull request branch with gh api repos/<owner>/<repo>/codeowners/errors?ref=<branch>")
 	}
 	return append(notes, lintBinaryNote)
 }
