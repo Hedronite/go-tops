@@ -20,7 +20,7 @@ import (
 //
 // It needs the network (init tidies tools/go.mod, the hygiene layer reads the
 // vulnerability database) and the pinned golangci-lint on PATH, so it carries
-// the build tag and runs on tower:
+// the build tag and runs by hand:
 //
 //	go test -tags adoption -run TestAdoption -timeout 20m ./cmd/gotops
 //
