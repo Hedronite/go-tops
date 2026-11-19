@@ -16,7 +16,7 @@ import (
 // The oracle is GO_TOPS.md §3.1 (gate 1), §3.3 (outcomes), §3.4 rule 5 (no
 // silent empties) and §12.2 (exit 2 for a lock that does not load).
 
-const lockText = `protocol: "0.4.2"
+const lockText = `protocol: "0.4.3"
 toolchain: go1.27.4
 trust:
   mode: checksum

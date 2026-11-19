@@ -249,15 +249,52 @@
         }
       }
     },
+    "build": {
+      "description": "The build a run's go commands use (§6.7): GOOS, GOARCH, the sorted build tags and CGO_ENABLED. The baseline records the build it was measured under, and the run whose build equals it is the ledger leg.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "goos",
+        "goarch",
+        "tags",
+        "cgo_enabled"
+      ],
+      "properties": {
+        "goos": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+$"
+        },
+        "goarch": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+$"
+        },
+        "tags": {
+          "description": "Build tags, sorted, with no repeat.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_.]+$"
+          }
+        },
+        "cgo_enabled": {
+          "type": "boolean"
+        }
+      }
+    },
     "baseline": {
       "description": "The file .go-tops/baseline.json (§6.7).",
       "type": "object",
       "additionalProperties": false,
       "required": [
+        "build",
         "ledger",
         "judged_laws"
       ],
       "properties": {
+        "build": {
+          "$ref": "#/$defs/build"
+        },
         "ledger": {
           "$ref": "#/$defs/ledger"
         },
