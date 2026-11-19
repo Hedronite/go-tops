@@ -418,11 +418,8 @@ func TestWorkflowIsThePinnedDropIn(t *testing.T) {
 			t.Errorf("workflow lacks %q", want)
 		}
 	}
-	// C3b: the gate, and the manual job that writes the first ledger.
-	_, gate := wf.Jobs["gate"]
-	_, baseline := wf.Jobs["baseline"]
-	if !gate || !baseline || len(wf.Jobs) != 2 {
-		t.Errorf("want the jobs gate and baseline, got %v", wf.Jobs)
+	if _, has := wf.Jobs["gate"]; !has || len(wf.Jobs) != 1 {
+		t.Errorf("want one job named gate (GO_TOPS.md section 16 item 26), got %v", wf.Jobs)
 	}
 }
 
@@ -556,7 +553,7 @@ func TestAdoptionRecordItem6NamesTheLedgerLeg(t *testing.T) {
 	item := rec[i:j]
 	for _, want := range []string{
 		".go-tops/baseline.json", "only `gotops baseline` writes it", "ledger leg", "`ubuntu` leg",
-		"`skip`", "gotops baseline --init", "`baseline` workflow", "gotops baseline`, which only lowers",
+		"`skip`", "gotops baseline --init", "workflow_dispatch", "go-tops-baseline", "gotops baseline`, which only lowers",
 		"--accept-regression", ".go-tops/survivors.yaml", ".go-tops/acks.yaml",
 	} {
 		if !strings.Contains(item, want) {
