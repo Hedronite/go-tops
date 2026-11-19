@@ -97,6 +97,10 @@ type Input struct {
 	// non-test file. A leg that is not the ledger leg needs them (ruling C3d).
 	LedgerFiles    map[string]bool
 	LedgerPackages map[string]bool
+	// LedgerUnread is why those three sets are empty when the source of the ledger
+	// build could not be read. The leg then holds everything to the cap and skips the
+	// ratchet, as any leg that is not the ledger leg does.
+	LedgerUnread string
 }
 
 // Failure is one thing that fails the ratchet.
@@ -167,6 +171,9 @@ func Judge(in Input) Judgment {
 // advise adds the lines that change no verdict.
 func (j *Judgment) advise(in Input) {
 	j.noteBuildChange(in)
+	if in.LedgerUnread != "" {
+		j.Advice = append(j.Advice, fmt.Sprintf("ratchet: could not find what the ledger build compiles (%s); this leg holds every function, finding and package to the cap and the floor\n", in.LedgerUnread))
+	}
 	if m := in.Base.Moved; m != nil {
 		j.Advice = append(j.Advice, fmt.Sprintf("ratchet: the baseline moved from %s at the diff base to %s here; judged against the base copy, never as a first ledger\n", m.From, m.To))
 	}
