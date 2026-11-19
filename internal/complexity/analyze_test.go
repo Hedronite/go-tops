@@ -2,6 +2,7 @@ package complexity_test
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"testing"
@@ -280,5 +281,153 @@ func TestFileOutsideTheRootIsAnError(t *testing.T) {
 	}
 	if _, err := complexity.Analyze(other, pkgs, complexity.Config{}); err == nil {
 		t.Error("files outside the root were made relative to it")
+	}
+}
+
+const cgoSource = `package m
+
+/*
+static int add(int a, int b) { return a + b; }
+*/
+import "C"
+
+// Add is in a cgo file: the package is type-checked from files cgo generates,
+// and the function must come back under the name of its source file.
+func Add(a, b int) int {
+	if a > 0 {
+		return int(C.add(C.int(a), C.int(b)))
+	}
+	return 0
+}
+
+func Plain() {}
+`
+
+func requireCC(t *testing.T) {
+	t.Helper()
+	cc := os.Getenv("CC")
+	if cc == "" {
+		cc = "cc"
+	}
+	if _, err := exec.LookPath(cc); err != nil {
+		t.Skipf("no C compiler (%s): the cgo fixture needs one", cc)
+	}
+}
+
+// A cgo package must analyze like any other: its functions come back under the
+// .go files, never the cache files cgo writes, and the glue functions cgo adds
+// are not the module's.
+func TestCgoPackages(t *testing.T) {
+	requireCC(t)
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "go.mod"), "module example.com/m\n\ngo 1.26\n")
+	writeFile(t, filepath.Join(dir, "c.go"), cgoSource)
+	writeFile(t, filepath.Join(dir, "plain.go"), "package m\n\nfunc Other() int { return 1 }\n")
+	pkgs, err := complexity.Load(dir, []string{"CGO_ENABLED=1"}, "./...")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, discount := range []bool{false, true} {
+		funcs, err := complexity.Analyze(dir, pkgs, complexity.Config{Discount: discount})
+		if err != nil {
+			t.Fatalf("discount %v: %v", discount, err)
+		}
+		type key struct {
+			file, name string
+			comp       int
+		}
+		var got []key
+		for _, f := range funcs {
+			got = append(got, key{f.File, f.Name, f.Complexity})
+		}
+		want := []key{{"c.go", "Add", 2}, {"c.go", "Plain", 1}, {"plain.go", "Other", 1}}
+		if !slices.Equal(got, want) {
+			t.Errorf("discount %v: functions %v, want %v", discount, got, want)
+		}
+	}
+}
+
+// With cgo off, a file that imports "C" is not compiled, so its functions are
+// not loaded; they are not reported as measured.
+func TestCgoFileIsNotLoadedWithCgoOff(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "go.mod"), "module example.com/m\n\ngo 1.26\n")
+	writeFile(t, filepath.Join(dir, "c.go"), cgoSource)
+	writeFile(t, filepath.Join(dir, "plain.go"), "package m\n\nfunc Other() int { return 1 }\n")
+	pkgs, err := complexity.Load(dir, []string{"CGO_ENABLED=0"}, "./...")
+	if err != nil {
+		t.Fatal(err)
+	}
+	funcs, err := complexity.Analyze(dir, pkgs, complexity.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range funcs {
+		if f.File == "c.go" {
+			t.Errorf("%s was analyzed with cgo off", f.Name)
+		}
+	}
+	var ignored []string
+	for _, p := range pkgs {
+		for _, f := range p.IgnoredFiles {
+			ignored = append(ignored, filepath.Base(f))
+		}
+	}
+	if !slices.Contains(ignored, "c.go") {
+		t.Errorf("c.go is not among the ignored files %v: a caller cannot tell it was not compiled", ignored)
+	}
+}
+
+// The build flags in the process environment must not leak into a load: the
+// build is the one the caller passed.
+func TestInheritedGoflagsDoNotLeak(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "go.mod"), "module example.com/m\n\ngo 1.26\n")
+	writeFile(t, filepath.Join(dir, "a.go"), "package m\n\nfunc A() {}\n")
+	writeFile(t, filepath.Join(dir, "b.go"), "//go:build extra\n\npackage m\n\nfunc B() {}\n")
+	t.Setenv("GOFLAGS", "-tags=extra")
+	pkgs, err := complexity.Load(dir, nil, "./...")
+	if err != nil {
+		t.Fatal(err)
+	}
+	funcs, err := complexity.Analyze(dir, pkgs, complexity.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(funcs) != 1 || funcs[0].Name != "A" {
+		t.Errorf("functions %v: an inherited -tags changed the build", funcs)
+	}
+	// The caller's own GOFLAGS entry is the one that counts.
+	pkgs, err = complexity.Load(dir, []string{"GOFLAGS=-tags=extra"}, "./...")
+	if err != nil {
+		t.Fatal(err)
+	}
+	funcs, err = complexity.Analyze(dir, pkgs, complexity.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(funcs) != 2 {
+		t.Errorf("functions %v, want A and B under the caller's tags", funcs)
+	}
+}
+
+// The race tag flips files; the caller passes it for a race test run.
+func TestRaceTagSelectsFiles(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "go.mod"), "module example.com/m\n\ngo 1.26\n")
+	writeFile(t, filepath.Join(dir, "norace.go"), "//go:build !race\n\npackage m\n\nfunc Plain() {}\n")
+	writeFile(t, filepath.Join(dir, "race.go"), "//go:build race\n\npackage m\n\nfunc Raced() {}\n")
+	for env, want := range map[string]string{"GOFLAGS=-count=1": "Plain", "GOFLAGS=-count=1 -tags=race": "Raced"} {
+		pkgs, err := complexity.Load(dir, []string{env}, "./...")
+		if err != nil {
+			t.Fatal(err)
+		}
+		funcs, err := complexity.Analyze(dir, pkgs, complexity.Config{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(funcs) != 1 || funcs[0].Name != want {
+			t.Errorf("%s: functions %v, want %s", env, funcs, want)
+		}
 	}
 }

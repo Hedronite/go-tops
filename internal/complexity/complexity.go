@@ -30,7 +30,9 @@ import (
 type Config struct {
 	// Discount is complexity.err_guard_discount: weigh an error guard that
 	// meets §6.3 at 0. When false no guard is discounted and no guard span is
-	// reported.
+	// reported. A discounted guard forgives its `if` only: a branch inside its
+	// return operands (a closure, `&&`, a second call that decides) still
+	// counts, while the whole body of the guard leaves coverage.
 	Discount bool
 	// WrapFunctions is complexity.wrap_functions: entries of the form
 	// "import/path.Name", each a function whose result wraps its error argument.
@@ -70,16 +72,28 @@ type Func struct {
 }
 
 // Load loads the packages matching patterns, relative to dir, with syntax and
-// type information. Test files are not loaded. env adds to the process
-// environment (GOOS, GOARCH, GOFLAGS); files that a build constraint excludes
-// under that environment are not loaded either. Any package error, syntax or
-// type, fails the load: a count over code that does not compile is no count.
+// type information. Test files are not loaded. A package error, syntax or type,
+// fails the load: a count over code that does not compile is no count.
+//
+// env is added to the process environment, and the build it describes decides
+// which files are loaded: files that a build constraint excludes under it are
+// not (see [packages.Package.IgnoredFiles]). The CRAP layer measures the files
+// the gate's test run compiled, so its caller passes that run's build: the
+// test layer's environment (CGO_ENABLED=1, GOFLAGS) plus the race tag, because
+// `go test -race` sets it and a wrong environment flips every `//go:build race`
+// and `//go:build !race` file. GOOS and GOARCH select another platform.
+//
+// GOFLAGS is always set, so that a -mod, -tags or -race inherited from the
+// process environment or from `go env -w` never leaks into the load: it is
+// env's GOFLAGS entry, or "-count=1" when env has none (an empty value would
+// not override `go env -w`). The build flags a caller wants go in that entry,
+// for example "GOFLAGS=-count=1 -tags=race".
 func Load(dir string, env []string, patterns ...string) ([]*packages.Package, error) {
 	cfg := &packages.Config{
 		Mode: packages.NeedName | packages.NeedFiles | packages.NeedCompiledGoFiles |
 			packages.NeedImports | packages.NeedTypes | packages.NeedSyntax | packages.NeedTypesInfo,
 		Dir: dir,
-		Env: append(os.Environ(), env...),
+		Env: append(append(os.Environ(), "GOFLAGS=-count=1"), env...),
 	}
 	pkgs, err := packages.Load(cfg, patterns...)
 	if err != nil {
@@ -111,8 +125,12 @@ func Analyze(root string, pkgs []*packages.Package, cfg Config) ([]Func, error) 
 		if cfg.Discount && p.TypesInfo == nil {
 			return nil, fmt.Errorf("package %s was loaded without type information", p.PkgPath)
 		}
+		goFiles := map[string]bool{}
+		for _, f := range p.GoFiles {
+			goFiles[f] = true
+		}
 		for _, file := range p.Syntax {
-			fa := fileAnalyzer{pkg: p, rel: rel}
+			fa := fileAnalyzer{pkg: p, rel: rel, goFiles: goFiles}
 			if cfg.Discount {
 				fa.guards = findGuards(file, p.TypesInfo, wrap)
 			}
@@ -140,9 +158,15 @@ func compareLine(a, b Pos) int {
 }
 
 type fileAnalyzer struct {
-	pkg    *packages.Package
-	rel    func(file string) (string, error)
-	guards map[*ast.IfStmt]*ast.BlockStmt // nil when the discount is off
+	pkg *packages.Package
+	rel func(file string) (string, error)
+	// goFiles holds the source files of the package, by the name go list gives
+	// them. A cgo package is type-checked from files cgo generates in the build
+	// cache, whose line directives map the translated sources back to the .go
+	// files; the generated glue maps to nothing in goFiles. Only a function
+	// whose position is in a source file is the module's.
+	goFiles map[string]bool
+	guards  map[*ast.IfStmt]*ast.BlockStmt // nil when the discount is off
 }
 
 func (a *fileAnalyzer) analyze(file *ast.File) ([]Func, error) {
@@ -150,12 +174,14 @@ func (a *fileAnalyzer) analyze(file *ast.File) ([]Func, error) {
 	for _, d := range file.Decls {
 		switch d := d.(type) {
 		case *ast.FuncDecl:
-			f, err := a.score(d, d.Recv, d.Name.Name)
+			f, ok, err := a.score(d, d.Recv, d.Name.Name)
 			if err != nil {
 				return nil, err
 			}
-			f.Decl = d
-			out = append(out, f)
+			if ok {
+				f.Decl = d
+				out = append(out, f)
+			}
 		case *ast.GenDecl:
 			lits, err := a.literals(d)
 			if err != nil {
@@ -183,11 +209,13 @@ func (a *fileAnalyzer) literals(d *ast.GenDecl) ([]Func, error) {
 		for i, v := range vs.Values {
 			name := vs.Names[min(i, len(vs.Names)-1)].Name
 			for _, lit := range outermostLiterals(v) {
-				f, err := a.score(lit, nil, name)
+				f, ok, err := a.score(lit, nil, name)
 				if err != nil {
 					return nil, err
 				}
-				out = append(out, f)
+				if ok {
+					out = append(out, f)
+				}
 			}
 		}
 	}
@@ -206,24 +234,33 @@ func outermostLiterals(e ast.Expr) []*ast.FuncLit {
 	return lits
 }
 
-func (a *fileAnalyzer) score(node ast.Node, recv *ast.FieldList, name string) (Func, error) {
+// score counts one function. ok is false for a function that is not in a
+// source file of the package (see fileAnalyzer.goFiles): it is not the module's.
+func (a *fileAnalyzer) score(node ast.Node, recv *ast.FieldList, name string) (f Func, ok bool, err error) {
 	fset := a.pkg.Fset
 	start := fset.Position(node.Pos())
+	if a.goFiles != nil && !a.goFiles[start.Filename] {
+		return Func{}, false, nil
+	}
 	file, err := a.rel(start.Filename)
 	if err != nil {
-		return Func{}, err
+		return Func{}, false, err
+	}
+	recvName, err := receiverName(recv)
+	if err != nil {
+		return Func{}, false, fmt.Errorf("%s: %w", file, err)
 	}
 	comp, guards := a.count(node)
 	return Func{
 		Pkg:        a.pkg.PkgPath,
 		PkgName:    a.pkg.Name,
-		Recv:       receiverName(recv),
+		Recv:       recvName,
 		Name:       name,
 		File:       file,
 		Span:       spanOf(fset, node),
 		Complexity: comp,
 		Guards:     guards,
-	}, nil
+	}, true, nil
 }
 
 // count is the §6.3 count of node, with the guards the run discounts.
@@ -256,16 +293,16 @@ func spanOf(fset *token.FileSet, n ast.Node) Span {
 }
 
 // receiverName is the base type name of a method receiver: `T`, `*T`, `T[K]`
-// and `*T[K, V]` all give "T".
-func receiverName(recv *ast.FieldList) string {
+// and `*T[K, V]` all give "T". A receiver of any other form is an error.
+func receiverName(recv *ast.FieldList) (string, error) {
 	if recv == nil || len(recv.List) == 0 {
-		return ""
+		return "", nil
 	}
 	e := recv.List[0].Type
 	for {
 		switch t := e.(type) {
 		case *ast.Ident:
-			return t.Name
+			return t.Name, nil
 		case *ast.StarExpr:
 			e = t.X
 		case *ast.ParenExpr:
@@ -275,7 +312,7 @@ func receiverName(recv *ast.FieldList) string {
 		case *ast.IndexListExpr:
 			e = t.X
 		default:
-			return "BADRECV"
+			return "", fmt.Errorf("a receiver of the form %T has no base type name", e)
 		}
 	}
 }
