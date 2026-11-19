@@ -114,5 +114,5 @@ done
 mkdir -p "$OUT"
 (cd "$ROOT" && CALIBRATION_WORK="$W" CALIBRATION_OUT="$OUT" CALIBRATION_XREPO="$XREPO" CALIBRATION_XDIR="$W/xcheck" \
 	CALIBRATION_PROBE="$HERE/../2026-11-probe/results.json" \
-	go test -tags calibration -count=1 -run TestCalibrate ./calibration/2026-11-crap/)
+	go test -tags calibration -count=1 -run "TestCalibrate|TestGazeFixtureMatchesTheContract" ./calibration/2026-11-crap/)
 echo "wrote $OUT/results.json and $OUT/tables.md"

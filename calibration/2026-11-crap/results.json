@@ -1,0 +1,5401 @@
+{
+  "go_version": "go1.27.4",
+  "platform": "darwin/arm64",
+  "caps": [
+    6,
+    8,
+    10
+  ],
+  "repos": [
+    {
+      "repo": "augur",
+      "commit": "fa72aa71aef2e86a4ece01d5188ecc50aced7b55",
+      "functions": [
+        {
+          "key": "github.com/Hedronite/augur/cmd/augur.main",
+          "file": "cmd/augur/main.go",
+          "comp": 1,
+          "cov": 0,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/cli.Execute",
+          "file": "internal/cli/cli.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/cli.decodeError",
+          "file": "internal/cli/evaluate.go",
+          "comp": 3,
+          "cov": 0.8333333333333334,
+          "crap": 3.0416666666666665
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/cli.execute",
+          "file": "internal/cli/cli.go",
+          "comp": 5,
+          "cov": 1,
+          "crap": 5
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/cli.exitError.Error",
+          "file": "internal/cli/exit.go",
+          "comp": 1,
+          "cov": 0,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/cli.loadAlerts",
+          "file": "internal/cli/evaluate.go",
+          "comp": 6,
+          "cov": 0.9230769230769231,
+          "crap": 6.0163859808830225
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/cli.loadPolicy",
+          "file": "internal/cli/evaluate.go",
+          "comp": 4,
+          "cov": 0.9,
+          "crap": 4.016
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/cli.newEvaluate",
+          "file": "internal/cli/cli.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/cli.newRoot",
+          "file": "internal/cli/cli.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/cli.newServe",
+          "file": "internal/cli/cli.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/cli.newValidate",
+          "file": "internal/cli/cli.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/cli.newVersion",
+          "file": "internal/cli/cli.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/cli.parseNow",
+          "file": "internal/cli/evaluate.go",
+          "comp": 3,
+          "cov": 1,
+          "crap": 3
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/cli.readCapped",
+          "file": "internal/cli/evaluate.go",
+          "comp": 4,
+          "cov": 0.9090909090909091,
+          "crap": 4.012021036814425
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/cli.runEvaluate",
+          "file": "internal/cli/evaluate.go",
+          "comp": 4,
+          "cov": 0.95,
+          "crap": 4.002
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/cli.runServe",
+          "file": "internal/cli/serve.go",
+          "comp": 12,
+          "cov": 0.9090909090909091,
+          "crap": 12.108189331329827
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/cli.runValidate",
+          "file": "internal/cli/evaluate.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/cli.severityExit",
+          "file": "internal/cli/evaluate.go",
+          "comp": 4,
+          "cov": 0.8,
+          "crap": 4.128
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/cli.unwrapPathError",
+          "file": "internal/cli/evaluate.go",
+          "comp": 2,
+          "cov": 0.75,
+          "crap": 2.0625
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/deadman.New",
+          "file": "internal/deadman/deadman.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/deadman.Tracker.Observe",
+          "file": "internal/deadman/deadman.go",
+          "comp": 9,
+          "cov": 1,
+          "crap": 9
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/deadman.sorted",
+          "file": "internal/deadman/deadman.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/decode.DecodeAM",
+          "file": "internal/decode/decode.go",
+          "comp": 7,
+          "cov": 0.9473684210526315,
+          "crap": 7.007143898527482
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/decode.ErrMalformed.Error",
+          "file": "internal/decode/decode.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/decode.ErrUnsupported.Error",
+          "file": "internal/decode/decode.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/decode.Sniff",
+          "file": "internal/decode/decode.go",
+          "comp": 5,
+          "cov": 0.8888888888888888,
+          "crap": 5.034293552812072
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/decode.alertPath",
+          "file": "internal/decode/decode.go",
+          "comp": 2,
+          "cov": 0.6666666666666666,
+          "crap": 2.1481481481481484
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/decode.boundName",
+          "file": "internal/decode/decode.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/decode.checkIDList",
+          "file": "internal/decode/decode.go",
+          "comp": 4,
+          "cov": 1,
+          "crap": 4
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/decode.checkString",
+          "file": "internal/decode/decode.go",
+          "comp": 3,
+          "cov": 1,
+          "crap": 3
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/decode.checkStringMap",
+          "file": "internal/decode/decode.go",
+          "comp": 6,
+          "cov": 1,
+          "crap": 6
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/decode.decodeAlert",
+          "file": "internal/decode/decode.go",
+          "comp": 16,
+          "cov": 0.9411764705882353,
+          "crap": 16.052106655811112
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/decode.decodeLabels",
+          "file": "internal/decode/decode.go",
+          "comp": 9,
+          "cov": 1,
+          "crap": 9
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/decode.decodeState",
+          "file": "internal/decode/decode.go",
+          "comp": 11,
+          "cov": 0.9444444444444444,
+          "crap": 11.020747599451303
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/decode.hasGrafanaMarkers",
+          "file": "internal/decode/decode.go",
+          "comp": 5,
+          "cov": 0.875,
+          "crap": 5.048828125
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/decode.idList",
+          "file": "internal/decode/decode.go",
+          "comp": 4,
+          "cov": 0.8333333333333334,
+          "crap": 4.074074074074074
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/decode.jsonString",
+          "file": "internal/decode/decode.go",
+          "comp": 4,
+          "cov": 1,
+          "crap": 4
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/decode.malformed",
+          "file": "internal/decode/decode.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/decode.optionalTime",
+          "file": "internal/decode/decode.go",
+          "comp": 4,
+          "cov": 1,
+          "crap": 4
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/decode.parseTimestamp",
+          "file": "internal/decode/decode.go",
+          "comp": 3,
+          "cov": 1,
+          "crap": 3
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/decode.requiredTime",
+          "file": "internal/decode/decode.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/decode.sniffObject",
+          "file": "internal/decode/decode.go",
+          "comp": 8,
+          "cov": 0.75,
+          "crap": 9
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/engine.Evaluate",
+          "file": "internal/engine/engine.go",
+          "comp": 20,
+          "cov": 0.9791666666666666,
+          "crap": 20.00361689814815
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/engine.anyMatch",
+          "file": "internal/engine/engine.go",
+          "comp": 3,
+          "cov": 1,
+          "crap": 3
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/engine.baseAlert",
+          "file": "internal/engine/engine.go",
+          "comp": 11,
+          "cov": 1,
+          "crap": 11
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/engine.evaluator.classify",
+          "file": "internal/engine/engine.go",
+          "comp": 16,
+          "cov": 1,
+          "crap": 16
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/engine.evaluator.escalate",
+          "file": "internal/engine/engine.go",
+          "comp": 10,
+          "cov": 1,
+          "crap": 10
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/engine.evaluator.escalationApplies",
+          "file": "internal/engine/engine.go",
+          "comp": 6,
+          "cov": 1,
+          "crap": 6
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/engine.evaluator.heartbeatAlert",
+          "file": "internal/engine/engine.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/engine.evaluator.holds",
+          "file": "internal/engine/engine.go",
+          "comp": 11,
+          "cov": 1,
+          "crap": 11
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/engine.evaluator.resolve",
+          "file": "internal/engine/engine.go",
+          "comp": 11,
+          "cov": 1,
+          "crap": 11
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/engine.isHeartbeat",
+          "file": "internal/engine/engine.go",
+          "comp": 3,
+          "cov": 1,
+          "crap": 3
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/engine.lostReplicas",
+          "file": "internal/engine/engine.go",
+          "comp": 6,
+          "cov": 1,
+          "crap": 6
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/engine.reasonKey",
+          "file": "internal/engine/engine.go",
+          "comp": 2,
+          "cov": 0,
+          "crap": 6
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/engine.sortAlerts",
+          "file": "internal/engine/engine.go",
+          "comp": 5,
+          "cov": 0.9090909090909091,
+          "crap": 5.018782870022539
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/engine.sortedReasons",
+          "file": "internal/engine/engine.go",
+          "comp": 3,
+          "cov": 1,
+          "crap": 3
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/engine.suppressed",
+          "file": "internal/engine/engine.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/engine.suppressionReasons",
+          "file": "internal/engine/engine.go",
+          "comp": 8,
+          "cov": 1,
+          "crap": 8
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/model.AllReasons",
+          "file": "internal/model/model.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/model.Match.Matches",
+          "file": "internal/model/model.go",
+          "comp": 5,
+          "cov": 0.8571428571428571,
+          "crap": 5.072886297376093
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/model.Matcher.Matches",
+          "file": "internal/model/model.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/model.ResolveSlug",
+          "file": "internal/model/model.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/model.Severity.Rank",
+          "file": "internal/model/model.go",
+          "comp": 4,
+          "cov": 1,
+          "crap": 4
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/model.Worse",
+          "file": "internal/model/model.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/policy.Parse",
+          "file": "internal/policy/policy.go",
+          "comp": 5,
+          "cov": 1,
+          "crap": 5
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/policy.checkYAMLFeatures",
+          "file": "internal/policy/policy.go",
+          "comp": 15,
+          "cov": 0.92,
+          "crap": 15.1152
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/policy.excerpt",
+          "file": "internal/policy/policy.go",
+          "comp": 4,
+          "cov": 1,
+          "crap": 4
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/policy.isEmptyDocument",
+          "file": "internal/policy/policy.go",
+          "comp": 5,
+          "cov": 0.6666666666666666,
+          "crap": 5.9259259259259265
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/policy.keyPath",
+          "file": "internal/policy/policy.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/policy.parseDateTime",
+          "file": "internal/policy/policy.go",
+          "comp": 3,
+          "cov": 0.8333333333333334,
+          "crap": 3.0416666666666665
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/policy.scalarIsString",
+          "file": "internal/policy/policy.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/policy.scalarText",
+          "file": "internal/policy/policy.go",
+          "comp": 3,
+          "cov": 1,
+          "crap": 3
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/policy.sha256Hex",
+          "file": "internal/policy/policy.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/policy.strictParse",
+          "file": "internal/policy/policy.go",
+          "comp": 10,
+          "cov": 0.9523809523809523,
+          "crap": 10.010797969981644
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/policy.validator.add",
+          "file": "internal/policy/policy.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/policy.validator.catalogue",
+          "file": "internal/policy/policy.go",
+          "comp": 4,
+          "cov": 0.8333333333333334,
+          "crap": 4.074074074074074
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/policy.validator.compile",
+          "file": "internal/policy/policy.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/policy.validator.document",
+          "file": "internal/policy/policy.go",
+          "comp": 24,
+          "cov": 0.9375,
+          "crap": 24.140625
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/policy.validator.duration",
+          "file": "internal/policy/policy.go",
+          "comp": 8,
+          "cov": 0.6,
+          "crap": 12.096000000000002
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/policy.validator.escalate",
+          "file": "internal/policy/policy.go",
+          "comp": 13,
+          "cov": 0.4642857142857143,
+          "crap": 38.98282616618075
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/policy.validator.hold",
+          "file": "internal/policy/policy.go",
+          "comp": 19,
+          "cov": 0.7560975609756098,
+          "crap": 24.23788105221921
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/policy.validator.holds",
+          "file": "internal/policy/policy.go",
+          "comp": 4,
+          "cov": 0.8,
+          "crap": 4.128
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/policy.validator.identifier",
+          "file": "internal/policy/policy.go",
+          "comp": 4,
+          "cov": 1,
+          "crap": 4
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/policy.validator.match",
+          "file": "internal/policy/policy.go",
+          "comp": 6,
+          "cov": 0.7619047619047619,
+          "crap": 6.485908649173956
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/policy.validator.matcher",
+          "file": "internal/policy/policy.go",
+          "comp": 8,
+          "cov": 0.7647058823529411,
+          "crap": 8.833706492977814
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/policy.validator.nonEmptyString",
+          "file": "internal/policy/policy.go",
+          "comp": 4,
+          "cov": 1,
+          "crap": 4
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/policy.validator.rule",
+          "file": "internal/policy/policy.go",
+          "comp": 11,
+          "cov": 0.7272727272727273,
+          "crap": 13.454545454545455
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/policy.validator.rules",
+          "file": "internal/policy/policy.go",
+          "comp": 4,
+          "cov": 0.8,
+          "crap": 4.128
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/policy.validator.schemaVersion",
+          "file": "internal/policy/policy.go",
+          "comp": 3,
+          "cov": 0.6,
+          "crap": 3.576
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/policy.validator.severity",
+          "file": "internal/policy/policy.go",
+          "comp": 5,
+          "cov": 0.8,
+          "crap": 5.2
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/policy.validator.slugList",
+          "file": "internal/policy/policy.go",
+          "comp": 9,
+          "cov": 0.8076923076923077,
+          "crap": 9.576069640418753
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/policy.validator.watchdog",
+          "file": "internal/policy/policy.go",
+          "comp": 6,
+          "cov": 0.75,
+          "crap": 6.5625
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/policy.yamlErrorLine",
+          "file": "internal/policy/policy.go",
+          "comp": 3,
+          "cov": 0.75,
+          "crap": 3.140625
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/render.Errors",
+          "file": "internal/render/errors.go",
+          "comp": 5,
+          "cov": 1,
+          "crap": 5
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/render.Human",
+          "file": "internal/render/human.go",
+          "comp": 3,
+          "cov": 1,
+          "crap": 3
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/render.JSON",
+          "file": "internal/render/json.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/render.errWriter.Write",
+          "file": "internal/render/errwriter.go",
+          "comp": 2,
+          "cov": 0.8,
+          "crap": 2.032
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/render.errWriter.printf",
+          "file": "internal/render/errwriter.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/render.excerpt",
+          "file": "internal/render/errors.go",
+          "comp": 7,
+          "cov": 1,
+          "crap": 7
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/render.joinReasons",
+          "file": "internal/render/human.go",
+          "comp": 3,
+          "cov": 1,
+          "crap": 3
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/render.newCanonical",
+          "file": "internal/render/json.go",
+          "comp": 3,
+          "cov": 1,
+          "crap": 3
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/render.nullableTime",
+          "file": "internal/render/json.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/render.reasonCell",
+          "file": "internal/render/human.go",
+          "comp": 3,
+          "cov": 0.8333333333333334,
+          "crap": 3.0416666666666665
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/render.rfc3339",
+          "file": "internal/render/json.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/render.ruleCell",
+          "file": "internal/render/human.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/render.sourcesLine",
+          "file": "internal/render/human.go",
+          "comp": 4,
+          "cov": 0.9,
+          "crap": 4.016
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/render.strList",
+          "file": "internal/render/json.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/render.strSlice",
+          "file": "internal/render/json.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/render.watchdogLine",
+          "file": "internal/render/human.go",
+          "comp": 3,
+          "cov": 0.8,
+          "crap": 3.072
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/serve.AlertsURL",
+          "file": "internal/serve/client.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/serve.CheckInterval",
+          "file": "internal/serve/config.go",
+          "comp": 3,
+          "cov": 1,
+          "crap": 3
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/serve.CheckOut",
+          "file": "internal/serve/config.go",
+          "comp": 8,
+          "cov": 1,
+          "crap": 8
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/serve.CleanStrayTemp",
+          "file": "internal/serve/writer.go",
+          "comp": 6,
+          "cov": 1,
+          "crap": 6
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/serve.DropStaleWatchdog",
+          "file": "internal/serve/loop.go",
+          "comp": 6,
+          "cov": 0.9230769230769231,
+          "crap": 6.0163859808830225
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/serve.MergeDeadman",
+          "file": "internal/serve/loop.go",
+          "comp": 5,
+          "cov": 1,
+          "crap": 5
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/serve.NewHTTPClient",
+          "file": "internal/serve/client.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/serve.ParseAlertmanagerURL",
+          "file": "internal/serve/config.go",
+          "comp": 16,
+          "cov": 1,
+          "crap": 16
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/serve.PollError.Error",
+          "file": "internal/serve/client.go",
+          "comp": 1,
+          "cov": 0,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/serve.RequestTimeout",
+          "file": "internal/serve/client.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/serve.Run",
+          "file": "internal/serve/loop.go",
+          "comp": 14,
+          "cov": 0.8484848484848485,
+          "crap": 14.681748615632912
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/serve.WriteAtomic",
+          "file": "internal/serve/writer.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/serve.classify",
+          "file": "internal/serve/client.go",
+          "comp": 5,
+          "cov": 0.875,
+          "crap": 5.048828125
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/serve.equalReasons",
+          "file": "internal/serve/loop.go",
+          "comp": 4,
+          "cov": 0.6666666666666666,
+          "crap": 4.592592592592593
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/serve.fetch",
+          "file": "internal/serve/client.go",
+          "comp": 11,
+          "cov": 0.9259259259259259,
+          "crap": 11.049179494995682
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/serve.joinPath",
+          "file": "internal/serve/client.go",
+          "comp": 3,
+          "cov": 1,
+          "crap": 3
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/serve.renderBytes",
+          "file": "internal/serve/loop.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/serve.server.logTracker",
+          "file": "internal/serve/loop.go",
+          "comp": 5,
+          "cov": 1,
+          "crap": 5
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/serve.server.poll",
+          "file": "internal/serve/loop.go",
+          "comp": 8,
+          "cov": 0.896551724137931,
+          "crap": 8.070851613432286
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/serve.server.verdict",
+          "file": "internal/serve/loop.go",
+          "comp": 4,
+          "cov": 1,
+          "crap": 4
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/vigilmap.Block.JSON",
+          "file": "internal/vigilmap/vigilmap.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/vigilmap.Entry.JSON",
+          "file": "internal/vigilmap/vigilmap.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/vigilmap.FromVerdictJSON",
+          "file": "internal/vigilmap/vigilmap.go",
+          "comp": 10,
+          "cov": 1,
+          "crap": 10
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/vigilmap.blockAlert",
+          "file": "internal/vigilmap/vigilmap.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/vigilmap.canonical",
+          "file": "internal/vigilmap/vigilmap.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/vigilmap.nonNil",
+          "file": "internal/vigilmap/vigilmap.go",
+          "comp": 2,
+          "cov": 0.6666666666666666,
+          "crap": 2.1481481481481484
+        },
+        {
+          "key": "github.com/Hedronite/augur/internal/vigilmap.sortAlerts",
+          "file": "internal/vigilmap/vigilmap.go",
+          "comp": 6,
+          "cov": 1,
+          "crap": 6
+        },
+        {
+          "key": "github.com/Hedronite/augur/scripts/mkarchive.collect",
+          "file": "scripts/mkarchive/main.go",
+          "comp": 10,
+          "cov": 0.9428571428571428,
+          "crap": 10.018658892128279
+        },
+        {
+          "key": "github.com/Hedronite/augur/scripts/mkarchive.copyFile",
+          "file": "scripts/mkarchive/main.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/augur/scripts/mkarchive.main",
+          "file": "scripts/mkarchive/main.go",
+          "comp": 2,
+          "cov": 0,
+          "crap": 6
+        },
+        {
+          "key": "github.com/Hedronite/augur/scripts/mkarchive.run",
+          "file": "scripts/mkarchive/main.go",
+          "comp": 24,
+          "cov": 0.782608695652174,
+          "crap": 29.917646091887892
+        }
+      ],
+      "not_measured": []
+    },
+    {
+      "repo": "simplex",
+      "commit": "873de8602a74b95bfe38af6d33a9d31594df5726",
+      "functions": [
+        {
+          "key": "github.com/Hedronite/simplex/cmd/simplex.colorFor",
+          "file": "cmd/simplex/check.go",
+          "comp": 5,
+          "cov": 0.5555555555555556,
+          "crap": 7.194787379972565
+        },
+        {
+          "key": "github.com/Hedronite/simplex/cmd/simplex.configFailure",
+          "file": "cmd/simplex/check.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/simplex/cmd/simplex.describe",
+          "file": "cmd/simplex/check.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/simplex/cmd/simplex.listenAllowed",
+          "file": "cmd/simplex/serve.go",
+          "comp": 5,
+          "cov": 0.8888888888888888,
+          "crap": 5.034293552812072
+        },
+        {
+          "key": "github.com/Hedronite/simplex/cmd/simplex.logRun",
+          "file": "cmd/simplex/serve.go",
+          "comp": 4,
+          "cov": 0.9,
+          "crap": 4.016
+        },
+        {
+          "key": "github.com/Hedronite/simplex/cmd/simplex.logWarnings",
+          "file": "cmd/simplex/serve.go",
+          "comp": 2,
+          "cov": 0.3333333333333333,
+          "crap": 3.1851851851851856
+        },
+        {
+          "key": "github.com/Hedronite/simplex/cmd/simplex.main",
+          "file": "cmd/simplex/main.go",
+          "comp": 1,
+          "cov": 0,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/simplex/cmd/simplex.marshalFindings",
+          "file": "cmd/simplex/validate.go",
+          "comp": 2,
+          "cov": 0.6666666666666666,
+          "crap": 2.1481481481481484
+        },
+        {
+          "key": "github.com/Hedronite/simplex/cmd/simplex.metricsHandler",
+          "file": "cmd/simplex/serve.go",
+          "comp": 4,
+          "cov": 0.875,
+          "crap": 4.03125
+        },
+        {
+          "key": "github.com/Hedronite/simplex/cmd/simplex.newCheck",
+          "file": "cmd/simplex/check.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/simplex/cmd/simplex.newRoot",
+          "file": "cmd/simplex/root.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/simplex/cmd/simplex.newServe",
+          "file": "cmd/simplex/serve.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/simplex/cmd/simplex.newValidate",
+          "file": "cmd/simplex/validate.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/simplex/cmd/simplex.newVersion",
+          "file": "cmd/simplex/version.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/simplex/cmd/simplex.noArgs",
+          "file": "cmd/simplex/root.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/simplex/cmd/simplex.outError.Error",
+          "file": "cmd/simplex/serve.go",
+          "comp": 1,
+          "cov": 0,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/simplex/cmd/simplex.outError.Unwrap",
+          "file": "cmd/simplex/serve.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/simplex/cmd/simplex.overlayFindings",
+          "file": "cmd/simplex/validate.go",
+          "comp": 5,
+          "cov": 0.9,
+          "crap": 5.025
+        },
+        {
+          "key": "github.com/Hedronite/simplex/cmd/simplex.realDeps",
+          "file": "cmd/simplex/root.go",
+          "comp": 1,
+          "cov": 0,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/simplex/cmd/simplex.resolveOverlayPath",
+          "file": "cmd/simplex/check.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/simplex/cmd/simplex.run",
+          "file": "cmd/simplex/root.go",
+          "comp": 3,
+          "cov": 1,
+          "crap": 3
+        },
+        {
+          "key": "github.com/Hedronite/simplex/cmd/simplex.runCheck",
+          "file": "cmd/simplex/check.go",
+          "comp": 9,
+          "cov": 0.8888888888888888,
+          "crap": 9.11111111111111
+        },
+        {
+          "key": "github.com/Hedronite/simplex/cmd/simplex.runClock",
+          "file": "cmd/simplex/check.go",
+          "comp": 3,
+          "cov": 1,
+          "crap": 3
+        },
+        {
+          "key": "github.com/Hedronite/simplex/cmd/simplex.runServe",
+          "file": "cmd/simplex/serve.go",
+          "comp": 27,
+          "cov": 0.92,
+          "crap": 27.373248
+        },
+        {
+          "key": "github.com/Hedronite/simplex/cmd/simplex.runValidate",
+          "file": "cmd/simplex/validate.go",
+          "comp": 18,
+          "cov": 0.925,
+          "crap": 18.1366875
+        },
+        {
+          "key": "github.com/Hedronite/simplex/cmd/simplex.startupFailure",
+          "file": "cmd/simplex/serve.go",
+          "comp": 2,
+          "cov": 0.75,
+          "crap": 2.0625
+        },
+        {
+          "key": "github.com/Hedronite/simplex/cmd/simplex.statusExit.Error",
+          "file": "cmd/simplex/root.go",
+          "comp": 1,
+          "cov": 0,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/simplex/cmd/simplex.wantsJSON",
+          "file": "cmd/simplex/root.go",
+          "comp": 4,
+          "cov": 1,
+          "crap": 4
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/check.ConfigFailure",
+          "file": "internal/check/check.go",
+          "comp": 5,
+          "cov": 0.8333333333333334,
+          "crap": 5.1157407407407405
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/check.Describe",
+          "file": "internal/check/check.go",
+          "comp": 4,
+          "cov": 1,
+          "crap": 4
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/check.OverlayFailure",
+          "file": "internal/check/check.go",
+          "comp": 6,
+          "cov": 0.9230769230769231,
+          "crap": 6.0163859808830225
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/check.Prepare",
+          "file": "internal/check/check.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/check.ResolveOverlayPath",
+          "file": "internal/check/check.go",
+          "comp": 5,
+          "cov": 1,
+          "crap": 5
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/check.Run",
+          "file": "internal/check/check.go",
+          "comp": 6,
+          "cov": 0.9545454545454546,
+          "crap": 6.0033809166040575
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/check.RunError.Error",
+          "file": "internal/check/check.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/check.RunError.Fields",
+          "file": "internal/check/check.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/check.RunError.Unwrap",
+          "file": "internal/check/check.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/check.SafePath",
+          "file": "internal/check/check.go",
+          "comp": 1,
+          "cov": 0,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/check.canaries",
+          "file": "internal/check/check.go",
+          "comp": 7,
+          "cov": 1,
+          "crap": 7
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/check.enrich",
+          "file": "internal/check/check.go",
+          "comp": 10,
+          "cov": 1,
+          "crap": 10
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/check.loadOverlay",
+          "file": "internal/check/check.go",
+          "comp": 3,
+          "cov": 1,
+          "crap": 3
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/check.peerCodes",
+          "file": "internal/check/check.go",
+          "comp": 6,
+          "cov": 1,
+          "crap": 6
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/check.prepare",
+          "file": "internal/check/check.go",
+          "comp": 6,
+          "cov": 1,
+          "crap": 6
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/check.safePath",
+          "file": "internal/check/check.go",
+          "comp": 11,
+          "cov": 1,
+          "crap": 11
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/config.Check.EffectivePath",
+          "file": "internal/config/config.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/config.Check.EffectivePort",
+          "file": "internal/config/config.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/config.Check.EffectiveTarget",
+          "file": "internal/config/config.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/config.Config.ActiveHolds",
+          "file": "internal/config/config.go",
+          "comp": 3,
+          "cov": 1,
+          "crap": 3
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/config.Config.EffectiveChecks",
+          "file": "internal/config/config.go",
+          "comp": 3,
+          "cov": 1,
+          "crap": 3
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/config.DefaultPath",
+          "file": "internal/config/config.go",
+          "comp": 3,
+          "cov": 1,
+          "crap": 3
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/config.DefaultPort",
+          "file": "internal/config/config.go",
+          "comp": 5,
+          "cov": 0.8333333333333334,
+          "crap": 5.1157407407407405
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/config.EffectiveTarget",
+          "file": "internal/config/config.go",
+          "comp": 3,
+          "cov": 1,
+          "crap": 3
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/config.Error.Error",
+          "file": "internal/config/config.go",
+          "comp": 3,
+          "cov": 0,
+          "crap": 12
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/config.Load",
+          "file": "internal/config/config.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/config.LoadWithClock",
+          "file": "internal/config/config.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/config.Parse",
+          "file": "internal/config/config.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/config.Tailscale.SocketPath",
+          "file": "internal/config/config.go",
+          "comp": 2,
+          "cov": 0.6666666666666666,
+          "crap": 2.1481481481481484
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/config.absoluteSocketPath",
+          "file": "internal/config/config.go",
+          "comp": 4,
+          "cov": 1,
+          "crap": 4
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/config.deref",
+          "file": "internal/config/config.go",
+          "comp": 4,
+          "cov": 0.4,
+          "crap": 7.4559999999999995
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/config.documentRoot",
+          "file": "internal/config/config.go",
+          "comp": 4,
+          "cov": 1,
+          "crap": 4
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/config.hasErrors",
+          "file": "internal/config/config.go",
+          "comp": 3,
+          "cov": 1,
+          "crap": 3
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/config.isAllowedPath",
+          "file": "internal/config/config.go",
+          "comp": 3,
+          "cov": 1,
+          "crap": 3
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/config.isKnownKind",
+          "file": "internal/config/config.go",
+          "comp": 3,
+          "cov": 1,
+          "crap": 3
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/config.lineOf",
+          "file": "internal/config/config.go",
+          "comp": 2,
+          "cov": 0.6666666666666666,
+          "crap": 2.1481481481481484
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/config.newError",
+          "file": "internal/config/config.go",
+          "comp": 4,
+          "cov": 0.8571428571428571,
+          "crap": 4.0466472303206995
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/config.nodeDesc",
+          "file": "internal/config/config.go",
+          "comp": 9,
+          "cov": 0.36363636363636365,
+          "crap": 29.873779113448535
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/config.parse",
+          "file": "internal/config/config.go",
+          "comp": 20,
+          "cov": 0.9824561403508771,
+          "crap": 20.002159908851848
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/config.parseCanaries",
+          "file": "internal/config/config.go",
+          "comp": 20,
+          "cov": 0.7560975609756098,
+          "crap": 25.80374631824843
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/config.parseChecks",
+          "file": "internal/config/config.go",
+          "comp": 29,
+          "cov": 0.8518518518518519,
+          "crap": 31.734542498602856
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/config.parseHolds",
+          "file": "internal/config/config.go",
+          "comp": 26,
+          "cov": 0.8076923076923077,
+          "crap": 30.807692307692307
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/config.parseHosts",
+          "file": "internal/config/config.go",
+          "comp": 15,
+          "cov": 0.75,
+          "crap": 18.515625
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/config.parseInt",
+          "file": "internal/config/config.go",
+          "comp": 4,
+          "cov": 0.6666666666666666,
+          "crap": 4.592592592592593
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/config.parseString",
+          "file": "internal/config/config.go",
+          "comp": 4,
+          "cov": 0.75,
+          "crap": 4.25
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/config.parseTailscale",
+          "file": "internal/config/config.go",
+          "comp": 12,
+          "cov": 0.8620689655172413,
+          "crap": 12.377875271638853
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/config.parseVantage",
+          "file": "internal/config/config.go",
+          "comp": 10,
+          "cov": 0.7272727272727273,
+          "crap": 12.02854996243426
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/config.validateRefs",
+          "file": "internal/config/config.go",
+          "comp": 15,
+          "cov": 0.975,
+          "crap": 15.003515625
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/config.yamlErrorLine",
+          "file": "internal/config/config.go",
+          "comp": 5,
+          "cov": 0.8,
+          "crap": 5.2
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/contract.ReasonCodes",
+          "file": "internal/contract/contract.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/document.Document.Encode",
+          "file": "internal/document/document.go",
+          "comp": 3,
+          "cov": 1,
+          "crap": 3
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/document.list",
+          "file": "internal/document/document.go",
+          "comp": 3,
+          "cov": 1,
+          "crap": 3
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/document.q",
+          "file": "internal/document/document.go",
+          "comp": 2,
+          "cov": 0.8333333333333334,
+          "crap": 2.0185185185185186
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/document.sep",
+          "file": "internal/document/document.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/exitcode.WritesDocument",
+          "file": "internal/exitcode/exitcode.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/failure.CodeOf",
+          "file": "internal/failure/failure.go",
+          "comp": 4,
+          "cov": 1,
+          "crap": 4
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/failure.Config",
+          "file": "internal/failure/failure.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/failure.Error.Error",
+          "file": "internal/failure/failure.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/failure.Error.Unwrap",
+          "file": "internal/failure/failure.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/failure.Report",
+          "file": "internal/failure/failure.go",
+          "comp": 3,
+          "cov": 0.875,
+          "crap": 3.017578125
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/failure.Runtime",
+          "file": "internal/failure/failure.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/loop.Loop.Run",
+          "file": "internal/loop/loop.go",
+          "comp": 5,
+          "cov": 1,
+          "crap": 5
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/loop.Loop.Store",
+          "file": "internal/loop/loop.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/loop.Loop.once",
+          "file": "internal/loop/loop.go",
+          "comp": 5,
+          "cov": 1,
+          "crap": 5
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/loop.New",
+          "file": "internal/loop/loop.go",
+          "comp": 5,
+          "cov": 1,
+          "crap": 5
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/loop.Store.Errors",
+          "file": "internal/loop/loop.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/loop.Store.Load",
+          "file": "internal/loop/loop.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/loop.Store.fail",
+          "file": "internal/loop/loop.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/loop.Store.set",
+          "file": "internal/loop/loop.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/metrics.String",
+          "file": "internal/metrics/metrics.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/metrics.Write",
+          "file": "internal/metrics/metrics.go",
+          "comp": 3,
+          "cov": 0.9,
+          "crap": 3.009
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/metrics.checkLabels",
+          "file": "internal/metrics/metrics.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/metrics.documentAge",
+          "file": "internal/metrics/metrics.go",
+          "comp": 3,
+          "cov": 0.7142857142857143,
+          "crap": 3.2099125364431487
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/metrics.encoder.document",
+          "file": "internal/metrics/metrics.go",
+          "comp": 16,
+          "cov": 1,
+          "crap": 16
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/metrics.encoder.family",
+          "file": "internal/metrics/metrics.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/metrics.encoder.sample",
+          "file": "internal/metrics/metrics.go",
+          "comp": 4,
+          "cov": 1,
+          "crap": 4
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/metrics.encoder.write",
+          "file": "internal/metrics/metrics.go",
+          "comp": 2,
+          "cov": 0.6666666666666666,
+          "crap": 2.1481481481481484
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/metrics.escapeHelp",
+          "file": "internal/metrics/metrics.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/metrics.escapeLabel",
+          "file": "internal/metrics/metrics.go",
+          "comp": 6,
+          "cov": 0.18181818181818182,
+          "crap": 25.717505634861002
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/metrics.hasReason",
+          "file": "internal/metrics/metrics.go",
+          "comp": 3,
+          "cov": 1,
+          "crap": 3
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/metrics.severityValue",
+          "file": "internal/metrics/metrics.go",
+          "comp": 4,
+          "cov": 0.8,
+          "crap": 4.128
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/metrics.unixSeconds",
+          "file": "internal/metrics/metrics.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/outfile.Write",
+          "file": "internal/outfile/outfile.go",
+          "comp": 3,
+          "cov": 1,
+          "crap": 3
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/overlay.Error.Error",
+          "file": "internal/overlay/loader.go",
+          "comp": 3,
+          "cov": 0.6666666666666666,
+          "crap": 3.3333333333333335
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/overlay.Load",
+          "file": "internal/overlay/loader.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/overlay.MissingSlugsError.Error",
+          "file": "internal/overlay/loader.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/overlay.Overlay.Resolve",
+          "file": "internal/overlay/loader.go",
+          "comp": 14,
+          "cov": 1,
+          "crap": 14
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/overlay.Parse",
+          "file": "internal/overlay/loader.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/overlay.deref",
+          "file": "internal/overlay/loader.go",
+          "comp": 4,
+          "cov": 0.4,
+          "crap": 7.4559999999999995
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/overlay.documentRoot",
+          "file": "internal/overlay/loader.go",
+          "comp": 4,
+          "cov": 1,
+          "crap": 4
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/overlay.hasErrors",
+          "file": "internal/overlay/loader.go",
+          "comp": 3,
+          "cov": 1,
+          "crap": 3
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/overlay.isAllowedPath",
+          "file": "internal/overlay/loader.go",
+          "comp": 3,
+          "cov": 1,
+          "crap": 3
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/overlay.isKnownKind",
+          "file": "internal/overlay/loader.go",
+          "comp": 3,
+          "cov": 1,
+          "crap": 3
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/overlay.joinSlugs",
+          "file": "internal/overlay/loader.go",
+          "comp": 3,
+          "cov": 0.8333333333333334,
+          "crap": 3.0416666666666665
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/overlay.lineOf",
+          "file": "internal/overlay/loader.go",
+          "comp": 2,
+          "cov": 0.6666666666666666,
+          "crap": 2.1481481481481484
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/overlay.newError",
+          "file": "internal/overlay/loader.go",
+          "comp": 4,
+          "cov": 0.8571428571428571,
+          "crap": 4.0466472303206995
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/overlay.nodeDesc",
+          "file": "internal/overlay/loader.go",
+          "comp": 9,
+          "cov": 0.2727272727272727,
+          "crap": 40.15852742299024
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/overlay.parse",
+          "file": "internal/overlay/loader.go",
+          "comp": 12,
+          "cov": 0.9428571428571428,
+          "crap": 12.026868804664723
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/overlay.parseHosts",
+          "file": "internal/overlay/loader.go",
+          "comp": 16,
+          "cov": 0.925,
+          "crap": 16.108
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/overlay.parseInt",
+          "file": "internal/overlay/loader.go",
+          "comp": 4,
+          "cov": 0.5,
+          "crap": 6
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/overlay.parseOverrides",
+          "file": "internal/overlay/loader.go",
+          "comp": 27,
+          "cov": 0.8235294117647058,
+          "crap": 31.00630979035213
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/overlay.parseString",
+          "file": "internal/overlay/loader.go",
+          "comp": 4,
+          "cov": 0.5,
+          "crap": 6
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/overlay.yamlErrorLine",
+          "file": "internal/overlay/loader.go",
+          "comp": 5,
+          "cov": 0.8,
+          "crap": 5.2
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/probe.Default",
+          "file": "internal/probe/probe.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/probe.New",
+          "file": "internal/probe/probe.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/probe.Options.attempt",
+          "file": "internal/probe/probe.go",
+          "comp": 4,
+          "cov": 0.9,
+          "crap": 4.016
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/probe.Options.client",
+          "file": "internal/probe/http.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/probe.Options.dial",
+          "file": "internal/probe/tcp.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/probe.Options.probe",
+          "file": "internal/probe/probe.go",
+          "comp": 4,
+          "cov": 1,
+          "crap": 4
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/probe.Options.probeHTTP",
+          "file": "internal/probe/http.go",
+          "comp": 10,
+          "cov": 0.7619047619047619,
+          "crap": 11.349746247705433
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/probe.Options.probeSSH",
+          "file": "internal/probe/ssh.go",
+          "comp": 7,
+          "cov": 0.8666666666666667,
+          "crap": 7.116148148148148
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/probe.Options.probeTCP",
+          "file": "internal/probe/tcp.go",
+          "comp": 5,
+          "cov": 1,
+          "crap": 5
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/probe.Options.url",
+          "file": "internal/probe/http.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/probe.Options.withDefaults",
+          "file": "internal/probe/probe.go",
+          "comp": 8,
+          "cov": 1,
+          "crap": 8
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/probe.Runner.Options",
+          "file": "internal/probe/probe.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/probe.Runner.Run",
+          "file": "internal/probe/probe.go",
+          "comp": 4,
+          "cov": 1,
+          "crap": 4
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/probe.SystemClock.After",
+          "file": "internal/probe/probe.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/probe.SystemClock.Now",
+          "file": "internal/probe/probe.go",
+          "comp": 1,
+          "cov": 0,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/probe.TCPDialer.DialContext",
+          "file": "internal/probe/probe.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/probe.acquire",
+          "file": "internal/probe/probe.go",
+          "comp": 4,
+          "cov": 1,
+          "crap": 4
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/probe.classifyDial",
+          "file": "internal/probe/tcp.go",
+          "comp": 5,
+          "cov": 1,
+          "crap": 5
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/probe.classifyHTTPError",
+          "file": "internal/probe/http.go",
+          "comp": 9,
+          "cov": 0.6,
+          "crap": 14.184000000000001
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/probe.classifyStatus",
+          "file": "internal/probe/http.go",
+          "comp": 10,
+          "cov": 1,
+          "crap": 10
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/probe.guardedDialContext",
+          "file": "internal/probe/http.go",
+          "comp": 4,
+          "cov": 1,
+          "crap": 4
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/probe.isTimeout",
+          "file": "internal/probe/ssh.go",
+          "comp": 3,
+          "cov": 0.75,
+          "crap": 3.140625
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/probe.noRedirect",
+          "file": "internal/probe/http.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/probe.readBanner",
+          "file": "internal/probe/ssh.go",
+          "comp": 8,
+          "cov": 0.9473684210526315,
+          "crap": 8.009330806239976
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/probe.readBuildInfo",
+          "file": "internal/probe/http.go",
+          "comp": 5,
+          "cov": 0.9090909090909091,
+          "crap": 5.018782870022539
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/severity.Evaluate",
+          "file": "internal/severity/severity.go",
+          "comp": 18,
+          "cov": 1,
+          "crap": 18
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/severity.ExitCode",
+          "file": "internal/severity/severity.go",
+          "comp": 4,
+          "cov": 1,
+          "crap": 4
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/severity.deriveHosts",
+          "file": "internal/severity/severity.go",
+          "comp": 8,
+          "cov": 1,
+          "crap": 8
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/severity.holdMatches",
+          "file": "internal/severity/severity.go",
+          "comp": 7,
+          "cov": 1,
+          "crap": 7
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/severity.isOutcome",
+          "file": "internal/severity/severity.go",
+          "comp": 3,
+          "cov": 0.75,
+          "crap": 3.140625
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/severity.less",
+          "file": "internal/severity/severity.go",
+          "comp": 3,
+          "cov": 1,
+          "crap": 3
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/severity.pairPass",
+          "file": "internal/severity/severity.go",
+          "comp": 13,
+          "cov": 1,
+          "crap": 13
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/severity.rank",
+          "file": "internal/severity/severity.go",
+          "comp": 3,
+          "cov": 0.75,
+          "crap": 3.140625
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/severity.sortedUnique",
+          "file": "internal/severity/severity.go",
+          "comp": 3,
+          "cov": 1,
+          "crap": 3
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/severity.validate",
+          "file": "internal/severity/severity.go",
+          "comp": 8,
+          "cov": 0.5714285714285714,
+          "crap": 13.03790087463557
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/severity.validateEnrichment",
+          "file": "internal/severity/severity.go",
+          "comp": 11,
+          "cov": 1,
+          "crap": 11
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/severity.worse",
+          "file": "internal/severity/severity.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/table.Render",
+          "file": "internal/table/table.go",
+          "comp": 14,
+          "cov": 1,
+          "crap": 14
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/table.reasonsCell",
+          "file": "internal/table/table.go",
+          "comp": 4,
+          "cov": 1,
+          "crap": 4
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/table.severityColor",
+          "file": "internal/table/table.go",
+          "comp": 4,
+          "cov": 0.4,
+          "crap": 7.4559999999999995
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/tailscale.Client.Status",
+          "file": "internal/tailscale/client.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/tailscale.Client.get",
+          "file": "internal/tailscale/client.go",
+          "comp": 9,
+          "cov": 0.9,
+          "crap": 9.081
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/tailscale.New",
+          "file": "internal/tailscale/client.go",
+          "comp": 1,
+          "cov": 0.8333333333333334,
+          "crap": 1.0046296296296295
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/tailscale.Status.Match",
+          "file": "internal/tailscale/client.go",
+          "comp": 2,
+          "cov": 0.75,
+          "crap": 2.0625
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/tailscale.Status.Peers",
+          "file": "internal/tailscale/client.go",
+          "comp": 2,
+          "cov": 0.6666666666666666,
+          "crap": 2.1481481481481484
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/tailscale.ValidateSocketPath",
+          "file": "internal/tailscale/client.go",
+          "comp": 7,
+          "cov": 1,
+          "crap": 7
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/tailscale.classifyTransportError",
+          "file": "internal/tailscale/client.go",
+          "comp": 3,
+          "cov": 1,
+          "crap": 3
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/tailscale.decodeStatus",
+          "file": "internal/tailscale/decode.go",
+          "comp": 10,
+          "cov": 1,
+          "crap": 10
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/tailscale.isSpace",
+          "file": "internal/tailscale/client.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/tailscale.normalise",
+          "file": "internal/tailscale/decode.go",
+          "comp": 3,
+          "cov": 1,
+          "crap": 3
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/vantage.Default",
+          "file": "internal/vantage/vantage.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/vantage.IsTailnetAddress",
+          "file": "internal/vantage/vantage.go",
+          "comp": 5,
+          "cov": 0.8333333333333334,
+          "crap": 5.1157407407407405
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/vantage.NetworkLister.HasTailnetAddress",
+          "file": "internal/vantage/net.go",
+          "comp": 9,
+          "cov": 0,
+          "crap": 90
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/vantage.New",
+          "file": "internal/vantage/vantage.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/simplex/internal/vantage.Prober.Status",
+          "file": "internal/vantage/vantage.go",
+          "comp": 6,
+          "cov": 1,
+          "crap": 6
+        }
+      ],
+      "not_measured": []
+    },
+    {
+      "repo": "vigil",
+      "commit": "4a71f03ff8e52736963731b2dd088db643c13e03",
+      "functions": [
+        {
+          "key": "github.com/Hedronite/vigil/cmd/vigil.classifyUsage",
+          "file": "cmd/vigil/cli.go",
+          "comp": 6,
+          "cov": 0.75,
+          "crap": 6.5625
+        },
+        {
+          "key": "github.com/Hedronite/vigil/cmd/vigil.clock",
+          "file": "cmd/vigil/wire.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/vigil/cmd/vigil.configFailure",
+          "file": "cmd/vigil/wire.go",
+          "comp": 4,
+          "cov": 0.8888888888888888,
+          "crap": 4.021947873799726
+        },
+        {
+          "key": "github.com/Hedronite/vigil/cmd/vigil.defaultHandlers",
+          "file": "cmd/vigil/cli.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/vigil/cmd/vigil.grafanaHealth",
+          "file": "cmd/vigil/wire.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/vigil/cmd/vigil.group",
+          "file": "cmd/vigil/cli.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/vigil/cmd/vigil.listSources",
+          "file": "cmd/vigil/wire.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/vigil/cmd/vigil.liveHandlers",
+          "file": "cmd/vigil/wire.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/vigil/cmd/vigil.loadDocuments",
+          "file": "cmd/vigil/wire.go",
+          "comp": 6,
+          "cov": 1,
+          "crap": 6
+        },
+        {
+          "key": "github.com/Hedronite/vigil/cmd/vigil.main",
+          "file": "cmd/vigil/main.go",
+          "comp": 1,
+          "cov": 0,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/vigil/cmd/vigil.newRoot",
+          "file": "cmd/vigil/cli.go",
+          "comp": 14,
+          "cov": 1,
+          "crap": 14
+        },
+        {
+          "key": "github.com/Hedronite/vigil/cmd/vigil.notImplemented",
+          "file": "cmd/vigil/cli.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/vigil/cmd/vigil.plainPath",
+          "file": "cmd/vigil/cli.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/vigil/cmd/vigil.printHealth",
+          "file": "cmd/vigil/wire.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/vigil/cmd/vigil.printQuery",
+          "file": "cmd/vigil/wire.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/vigil/cmd/vigil.printSources",
+          "file": "cmd/vigil/wire.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/vigil/cmd/vigil.printTargets",
+          "file": "cmd/vigil/wire.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/vigil/cmd/vigil.promQuery",
+          "file": "cmd/vigil/wire.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/vigil/cmd/vigil.promTargets",
+          "file": "cmd/vigil/wire.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/vigil/cmd/vigil.run",
+          "file": "cmd/vigil/cli.go",
+          "comp": 3,
+          "cov": 1,
+          "crap": 3
+        },
+        {
+          "key": "github.com/Hedronite/vigil/cmd/vigil.runRecovered",
+          "file": "cmd/vigil/main.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/vigil/cmd/vigil.runRecoveredWith",
+          "file": "cmd/vigil/main.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/vigil/cmd/vigil.usage",
+          "file": "cmd/vigil/cli.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/vigil/cmd/vigil.vcsRevision",
+          "file": "cmd/vigil/main.go",
+          "comp": 5,
+          "cov": 0.5555555555555556,
+          "crap": 7.194787379972565
+        },
+        {
+          "key": "github.com/Hedronite/vigil/cmd/vigil.versionLine",
+          "file": "cmd/vigil/main.go",
+          "comp": 3,
+          "cov": 1,
+          "crap": 3
+        },
+        {
+          "key": "github.com/Hedronite/vigil/cmd/vigil.writeError",
+          "file": "cmd/vigil/cli.go",
+          "comp": 2,
+          "cov": 0.8,
+          "crap": 2.032
+        },
+        {
+          "key": "github.com/Hedronite/vigil/internal/config.Config.Backend",
+          "file": "internal/config/config.go",
+          "comp": 3,
+          "cov": 1,
+          "crap": 3
+        },
+        {
+          "key": "github.com/Hedronite/vigil/internal/config.Config.Query",
+          "file": "internal/config/config.go",
+          "comp": 3,
+          "cov": 1,
+          "crap": 3
+        },
+        {
+          "key": "github.com/Hedronite/vigil/internal/config.Config.validate",
+          "file": "internal/config/config.go",
+          "comp": 37,
+          "cov": 0.8472222222222222,
+          "crap": 41.88184531464335
+        },
+        {
+          "key": "github.com/Hedronite/vigil/internal/config.Error.Error",
+          "file": "internal/config/config.go",
+          "comp": 2,
+          "cov": 0,
+          "crap": 6
+        },
+        {
+          "key": "github.com/Hedronite/vigil/internal/config.Load",
+          "file": "internal/config/config.go",
+          "comp": 3,
+          "cov": 1,
+          "crap": 3
+        },
+        {
+          "key": "github.com/Hedronite/vigil/internal/config.LoadOverlay",
+          "file": "internal/config/config.go",
+          "comp": 3,
+          "cov": 1,
+          "crap": 3
+        },
+        {
+          "key": "github.com/Hedronite/vigil/internal/config.Overlay.Address",
+          "file": "internal/config/config.go",
+          "comp": 3,
+          "cov": 1,
+          "crap": 3
+        },
+        {
+          "key": "github.com/Hedronite/vigil/internal/config.Overlay.Bind",
+          "file": "internal/config/config.go",
+          "comp": 5,
+          "cov": 0.8571428571428571,
+          "crap": 5.072886297376093
+        },
+        {
+          "key": "github.com/Hedronite/vigil/internal/config.Overlay.SlugFor",
+          "file": "internal/config/config.go",
+          "comp": 4,
+          "cov": 1,
+          "crap": 4
+        },
+        {
+          "key": "github.com/Hedronite/vigil/internal/config.Overlay.validate",
+          "file": "internal/config/config.go",
+          "comp": 12,
+          "cov": 0.9,
+          "crap": 12.144
+        },
+        {
+          "key": "github.com/Hedronite/vigil/internal/config.checkAddress",
+          "file": "internal/config/config.go",
+          "comp": 11,
+          "cov": 0.8,
+          "crap": 11.968
+        },
+        {
+          "key": "github.com/Hedronite/vigil/internal/config.checkListen",
+          "file": "internal/config/config.go",
+          "comp": 8,
+          "cov": 1,
+          "crap": 8
+        },
+        {
+          "key": "github.com/Hedronite/vigil/internal/config.checkLocator",
+          "file": "internal/config/config.go",
+          "comp": 6,
+          "cov": 1,
+          "crap": 6
+        },
+        {
+          "key": "github.com/Hedronite/vigil/internal/config.startupErr",
+          "file": "internal/config/config.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/vigil/internal/config.usageErr",
+          "file": "internal/config/config.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/vigil/internal/exitcode.As",
+          "file": "internal/exitcode/error.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/vigil/internal/exitcode.Error.Error",
+          "file": "internal/exitcode/error.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/vigil/internal/exitcode.FromSeverity",
+          "file": "internal/exitcode/exitcode.go",
+          "comp": 4,
+          "cov": 1,
+          "crap": 4
+        },
+        {
+          "key": "github.com/Hedronite/vigil/internal/exitcode.IsVerdict",
+          "file": "internal/exitcode/exitcode.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/vigil/internal/exitcode.New",
+          "file": "internal/exitcode/error.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/vigil/internal/exitcode.Newf",
+          "file": "internal/exitcode/error.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/vigil/internal/grafana.Check",
+          "file": "internal/grafana/grafana.go",
+          "comp": 9,
+          "cov": 0.8571428571428571,
+          "crap": 9.236151603498543
+        },
+        {
+          "key": "github.com/Hedronite/vigil/internal/grafana.Health",
+          "file": "internal/grafana/grafana.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/vigil/internal/grafana.grafanaBackend",
+          "file": "internal/grafana/grafana.go",
+          "comp": 5,
+          "cov": 1,
+          "crap": 5
+        },
+        {
+          "key": "github.com/Hedronite/vigil/internal/grafana.stamp",
+          "file": "internal/grafana/grafana.go",
+          "comp": 2,
+          "cov": 0.6666666666666666,
+          "crap": 2.1481481481481484
+        },
+        {
+          "key": "github.com/Hedronite/vigil/internal/httpx.Client.Get",
+          "file": "internal/httpx/httpx.go",
+          "comp": 14,
+          "cov": 0.9459459459459459,
+          "crap": 14.030955718318758
+        },
+        {
+          "key": "github.com/Hedronite/vigil/internal/httpx.Code",
+          "file": "internal/httpx/httpx.go",
+          "comp": 2,
+          "cov": 0.75,
+          "crap": 2.0625
+        },
+        {
+          "key": "github.com/Hedronite/vigil/internal/httpx.Error.Error",
+          "file": "internal/httpx/httpx.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/vigil/internal/httpx.ForBackend",
+          "file": "internal/httpx/registry.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/vigil/internal/httpx.New",
+          "file": "internal/httpx/httpx.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/vigil/internal/httpx.Response.Err",
+          "file": "internal/httpx/httpx.go",
+          "comp": 3,
+          "cov": 1,
+          "crap": 3
+        },
+        {
+          "key": "github.com/Hedronite/vigil/internal/httpx.capBody",
+          "file": "internal/httpx/httpx.go",
+          "comp": 3,
+          "cov": 1,
+          "crap": 3
+        },
+        {
+          "key": "github.com/Hedronite/vigil/internal/httpx.capTimeout",
+          "file": "internal/httpx/httpx.go",
+          "comp": 3,
+          "cov": 1,
+          "crap": 3
+        },
+        {
+          "key": "github.com/Hedronite/vigil/internal/httpx.classify",
+          "file": "internal/httpx/httpx.go",
+          "comp": 5,
+          "cov": 0.8571428571428571,
+          "crap": 5.072886297376093
+        },
+        {
+          "key": "github.com/Hedronite/vigil/internal/httpx.ctxError",
+          "file": "internal/httpx/httpx.go",
+          "comp": 2,
+          "cov": 0.6666666666666666,
+          "crap": 2.1481481481481484
+        },
+        {
+          "key": "github.com/Hedronite/vigil/internal/httpx.forBackend",
+          "file": "internal/httpx/registry.go",
+          "comp": 3,
+          "cov": 1,
+          "crap": 3
+        },
+        {
+          "key": "github.com/Hedronite/vigil/internal/httpx.hasDotSegment",
+          "file": "internal/httpx/httpx.go",
+          "comp": 4,
+          "cov": 1,
+          "crap": 4
+        },
+        {
+          "key": "github.com/Hedronite/vigil/internal/httpx.newClient",
+          "file": "internal/httpx/httpx.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/vigil/internal/httpx.parseBase",
+          "file": "internal/httpx/httpx.go",
+          "comp": 12,
+          "cov": 1,
+          "crap": 12
+        },
+        {
+          "key": "github.com/Hedronite/vigil/internal/httpx.resetRegistry",
+          "file": "internal/httpx/registry.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/vigil/internal/httpx.validPath",
+          "file": "internal/httpx/httpx.go",
+          "comp": 14,
+          "cov": 1,
+          "crap": 14
+        },
+        {
+          "key": "github.com/Hedronite/vigil/internal/promclient.Query",
+          "file": "internal/promclient/promclient.go",
+          "comp": 23,
+          "cov": 0.9454545454545454,
+          "crap": 23.085848234410218
+        },
+        {
+          "key": "github.com/Hedronite/vigil/internal/promclient.Targets",
+          "file": "internal/promclient/promclient.go",
+          "comp": 8,
+          "cov": 0.88,
+          "crap": 8.110592
+        },
+        {
+          "key": "github.com/Hedronite/vigil/internal/promclient.apiError",
+          "file": "internal/promclient/promclient.go",
+          "comp": 3,
+          "cov": 0.75,
+          "crap": 3.140625
+        },
+        {
+          "key": "github.com/Hedronite/vigil/internal/promclient.healthWord",
+          "file": "internal/promclient/promclient.go",
+          "comp": 2,
+          "cov": 0.6666666666666666,
+          "crap": 2.1481481481481484
+        },
+        {
+          "key": "github.com/Hedronite/vigil/internal/promclient.httpxError",
+          "file": "internal/promclient/promclient.go",
+          "comp": 2,
+          "cov": 0.6666666666666666,
+          "crap": 2.1481481481481484
+        },
+        {
+          "key": "github.com/Hedronite/vigil/internal/promclient.jobWord",
+          "file": "internal/promclient/promclient.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/vigil/internal/promclient.knownHost",
+          "file": "internal/promclient/promclient.go",
+          "comp": 4,
+          "cov": 1,
+          "crap": 4
+        },
+        {
+          "key": "github.com/Hedronite/vigil/internal/promclient.mapInstance",
+          "file": "internal/promclient/promclient.go",
+          "comp": 4,
+          "cov": 0.8571428571428571,
+          "crap": 4.0466472303206995
+        },
+        {
+          "key": "github.com/Hedronite/vigil/internal/promclient.mapJob",
+          "file": "internal/promclient/promclient.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/vigil/internal/promclient.newClient",
+          "file": "internal/promclient/promclient.go",
+          "comp": 3,
+          "cov": 0.7142857142857143,
+          "crap": 3.2099125364431487
+        },
+        {
+          "key": "github.com/Hedronite/vigil/internal/promclient.optionalStamp",
+          "file": "internal/promclient/promclient.go",
+          "comp": 3,
+          "cov": 1,
+          "crap": 3
+        },
+        {
+          "key": "github.com/Hedronite/vigil/internal/promclient.parseTimeout",
+          "file": "internal/promclient/promclient.go",
+          "comp": 3,
+          "cov": 0.75,
+          "crap": 3.140625
+        },
+        {
+          "key": "github.com/Hedronite/vigil/internal/promclient.promBackend",
+          "file": "internal/promclient/promclient.go",
+          "comp": 5,
+          "cov": 0.875,
+          "crap": 5.048828125
+        },
+        {
+          "key": "github.com/Hedronite/vigil/internal/promclient.sample",
+          "file": "internal/promclient/promclient.go",
+          "comp": 4,
+          "cov": 0.75,
+          "crap": 4.25
+        },
+        {
+          "key": "github.com/Hedronite/vigil/internal/promclient.stamp",
+          "file": "internal/promclient/promclient.go",
+          "comp": 2,
+          "cov": 0.6666666666666666,
+          "crap": 2.1481481481481484
+        },
+        {
+          "key": "github.com/Hedronite/vigil/internal/promclient.vantage",
+          "file": "internal/promclient/promclient.go",
+          "comp": 2,
+          "cov": 0.6666666666666666,
+          "crap": 2.1481481481481484
+        },
+        {
+          "key": "github.com/Hedronite/vigil/internal/reasons.Valid",
+          "file": "internal/reasons/reasons.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/vigil/internal/render.Health",
+          "file": "internal/render/render.go",
+          "comp": 3,
+          "cov": 1,
+          "crap": 3
+        },
+        {
+          "key": "github.com/Hedronite/vigil/internal/render.JSON",
+          "file": "internal/render/render.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/vigil/internal/render.Query",
+          "file": "internal/render/render.go",
+          "comp": 6,
+          "cov": 1,
+          "crap": 6
+        },
+        {
+          "key": "github.com/Hedronite/vigil/internal/render.Sources",
+          "file": "internal/render/render.go",
+          "comp": 6,
+          "cov": 1,
+          "crap": 6
+        },
+        {
+          "key": "github.com/Hedronite/vigil/internal/render.Targets",
+          "file": "internal/render/render.go",
+          "comp": 3,
+          "cov": 1,
+          "crap": 3
+        },
+        {
+          "key": "github.com/Hedronite/vigil/internal/render.anyJob",
+          "file": "internal/render/render.go",
+          "comp": 3,
+          "cov": 1,
+          "crap": 3
+        },
+        {
+          "key": "github.com/Hedronite/vigil/internal/render.anySource",
+          "file": "internal/render/render.go",
+          "comp": 3,
+          "cov": 1,
+          "crap": 3
+        },
+        {
+          "key": "github.com/Hedronite/vigil/internal/render.cell",
+          "file": "internal/render/render.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/vigil/internal/render.cellStr",
+          "file": "internal/render/render.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/vigil/internal/render.newTabWriter",
+          "file": "internal/render/render.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/vigil/internal/render.writef",
+          "file": "internal/render/render.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/vigil/internal/sources.Sources",
+          "file": "internal/sources/sources.go",
+          "comp": 5,
+          "cov": 0.9473684210526315,
+          "crap": 5.003644846187491
+        },
+        {
+          "key": "github.com/Hedronite/vigil/internal/sources.promReady",
+          "file": "internal/sources/sources.go",
+          "comp": 7,
+          "cov": 0.75,
+          "crap": 7.765625
+        },
+        {
+          "key": "github.com/Hedronite/vigil/internal/sources.ptr",
+          "file": "internal/sources/sources.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/vigil/internal/sources.stamp",
+          "file": "internal/sources/sources.go",
+          "comp": 2,
+          "cov": 0.6666666666666666,
+          "crap": 2.1481481481481484
+        },
+        {
+          "key": "github.com/Hedronite/vigil/internal/sources.vantage",
+          "file": "internal/sources/sources.go",
+          "comp": 2,
+          "cov": 0.6666666666666666,
+          "crap": 2.1481481481481484
+        }
+      ],
+      "not_measured": []
+    },
+    {
+      "repo": "cubit",
+      "commit": "7f6a776932e816842b6d60c949560d6084caebfe",
+      "functions": [
+        {
+          "key": "github.com/Hedronite/cubit/cmd/cubit.errReason",
+          "file": "cmd/cubit/cli.go",
+          "comp": 2,
+          "cov": 0.75,
+          "crap": 2.0625
+        },
+        {
+          "key": "github.com/Hedronite/cubit/cmd/cubit.execute",
+          "file": "cmd/cubit/cli.go",
+          "comp": 5,
+          "cov": 1,
+          "crap": 5
+        },
+        {
+          "key": "github.com/Hedronite/cubit/cmd/cubit.exitCode",
+          "file": "cmd/cubit/cli.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/cubit/cmd/cubit.exitError.Error",
+          "file": "cmd/cubit/cli.go",
+          "comp": 1,
+          "cov": 0,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/cubit/cmd/cubit.exitForSignal",
+          "file": "cmd/cubit/signals.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/cubit/cmd/cubit.home",
+          "file": "cmd/cubit/cli.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/cubit/cmd/cubit.load",
+          "file": "cmd/cubit/cli.go",
+          "comp": 7,
+          "cov": 1,
+          "crap": 7
+        },
+        {
+          "key": "github.com/Hedronite/cubit/cmd/cubit.main",
+          "file": "cmd/cubit/main.go",
+          "comp": 1,
+          "cov": 0,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/cubit/cmd/cubit.newRoot",
+          "file": "cmd/cubit/cli.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/cubit/cmd/cubit.oneShotMetrics",
+          "file": "cmd/cubit/textfile.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/cubit/cmd/cubit.openTextfile",
+          "file": "cmd/cubit/textfile.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/cubit/cmd/cubit.parseLevel",
+          "file": "cmd/cubit/cli.go",
+          "comp": 5,
+          "cov": 0.5,
+          "crap": 8.125
+        },
+        {
+          "key": "github.com/Hedronite/cubit/cmd/cubit.preflightMessage",
+          "file": "cmd/cubit/textfile.go",
+          "comp": 11,
+          "cov": 0.6,
+          "crap": 18.744000000000003
+        },
+        {
+          "key": "github.com/Hedronite/cubit/cmd/cubit.raiseFileLimit",
+          "file": "cmd/cubit/rlimit_unix.go",
+          "comp": 5,
+          "cov": 0.5,
+          "crap": 8.125
+        },
+        {
+          "key": "github.com/Hedronite/cubit/cmd/cubit.run",
+          "file": "cmd/cubit/main.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/cubit/cmd/cubit.scanCmd",
+          "file": "cmd/cubit/cli.go",
+          "comp": 12,
+          "cov": 0.8571428571428571,
+          "crap": 12.419825072886297
+        },
+        {
+          "key": "github.com/Hedronite/cubit/cmd/cubit.serveCmd",
+          "file": "cmd/cubit/cli.go",
+          "comp": 8,
+          "cov": 0.8,
+          "crap": 8.512
+        },
+        {
+          "key": "github.com/Hedronite/cubit/cmd/cubit.textfileSink",
+          "file": "cmd/cubit/cli.go",
+          "comp": 2,
+          "cov": 0.6666666666666666,
+          "crap": 2.1481481481481484
+        },
+        {
+          "key": "github.com/Hedronite/cubit/cmd/cubit.usageErr",
+          "file": "cmd/cubit/cli.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/cubit/cmd/cubit.validateCmd",
+          "file": "cmd/cubit/cli.go",
+          "comp": 8,
+          "cov": 1,
+          "crap": 8
+        },
+        {
+          "key": "github.com/Hedronite/cubit/cmd/cubit.versionCmd",
+          "file": "cmd/cubit/cli.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/cubit/cmd/cubit.watchSignals",
+          "file": "cmd/cubit/signals.go",
+          "comp": 3,
+          "cov": 1,
+          "crap": 3
+        },
+        {
+          "key": "github.com/Hedronite/cubit/cmd/cubit.writeFailure",
+          "file": "cmd/cubit/textfile.go",
+          "comp": 2,
+          "cov": 0.75,
+          "crap": 2.0625
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/collect.Collector.Gauges",
+          "file": "internal/collect/collect.go",
+          "comp": 2,
+          "cov": 0.8333333333333334,
+          "crap": 2.0185185185185186
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/collect.Collector.Metrics",
+          "file": "internal/collect/collect.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/collect.Collector.Update",
+          "file": "internal/collect/collect.go",
+          "comp": 8,
+          "cov": 1,
+          "crap": 8
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/collect.Collector.aliases",
+          "file": "internal/collect/collect.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/collect.Collector.publish",
+          "file": "internal/collect/collect.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/collect.Collector.render",
+          "file": "internal/collect/collect.go",
+          "comp": 23,
+          "cov": 1,
+          "crap": 23
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/collect.Collector.restore",
+          "file": "internal/collect/collect.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/collect.Collector.snapshotState",
+          "file": "internal/collect/collect.go",
+          "comp": 4,
+          "cov": 1,
+          "crap": 4
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/collect.Collector.state",
+          "file": "internal/collect/collect.go",
+          "comp": 3,
+          "cov": 1,
+          "crap": 3
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/collect.New",
+          "file": "internal/collect/collect.go",
+          "comp": 3,
+          "cov": 0.8333333333333334,
+          "crap": 3.0416666666666665
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/collect.b01",
+          "file": "internal/collect/collect.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/collect.escape",
+          "file": "internal/collect/collect.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/collect.escapeHelp",
+          "file": "internal/collect/collect.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/collect.family.add",
+          "file": "internal/collect/collect.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/collect.ftoa",
+          "file": "internal/collect/collect.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/collect.itoa",
+          "file": "internal/collect/collect.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/collect.join",
+          "file": "internal/collect/collect.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/collect.label",
+          "file": "internal/collect/collect.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/config.Check",
+          "file": "internal/config/check.go",
+          "comp": 32,
+          "cov": 0.8591549295774648,
+          "crap": 34.8610464612711
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/config.Config.EffectiveInterval",
+          "file": "internal/config/config.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/config.Config.EffectiveWorkers",
+          "file": "internal/config/config.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/config.Config.Line",
+          "file": "internal/config/config.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/config.Config.Refuser",
+          "file": "internal/config/check.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/config.Config.excerpt",
+          "file": "internal/config/config.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/config.Config.lineFor",
+          "file": "internal/config/config.go",
+          "comp": 4,
+          "cov": 0.875,
+          "crap": 4.03125
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/config.Duration.UnmarshalYAML",
+          "file": "internal/config/config.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/config.ExpandPath",
+          "file": "internal/config/check.go",
+          "comp": 7,
+          "cov": 1,
+          "crap": 7
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/config.HasErrors",
+          "file": "internal/config/check.go",
+          "comp": 3,
+          "cov": 1,
+          "crap": 3
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/config.Label",
+          "file": "internal/config/label.go",
+          "comp": 8,
+          "cov": 1,
+          "crap": 8
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/config.Parse",
+          "file": "internal/config/config.go",
+          "comp": 15,
+          "cov": 0.8863636363636364,
+          "crap": 15.33016763711495
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/config.ParseDuration",
+          "file": "internal/config/config.go",
+          "comp": 11,
+          "cov": 1,
+          "crap": 11
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/config.Root.EffectiveDiscoveryDepth",
+          "file": "internal/config/config.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/config.Root.EffectiveMaxDuration",
+          "file": "internal/config/config.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/config.Root.EffectiveMaxFiles",
+          "file": "internal/config/config.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/config.Root.EffectiveMaxWorkspaces",
+          "file": "internal/config/config.go",
+          "comp": 2,
+          "cov": 0.6666666666666666,
+          "crap": 2.1481481481481484
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/config.Root.EmitProfiles",
+          "file": "internal/config/config.go",
+          "comp": 4,
+          "cov": 1,
+          "crap": 4
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/config.Root.WorkspaceName",
+          "file": "internal/config/config.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/config.Suffixed",
+          "file": "internal/config/label.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/config.checkKeys",
+          "file": "internal/config/config.go",
+          "comp": 6,
+          "cov": 1,
+          "crap": 6
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/config.checkNames",
+          "file": "internal/config/check.go",
+          "comp": 9,
+          "cov": 1,
+          "crap": 9
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/config.classify",
+          "file": "internal/config/findings.go",
+          "comp": 26,
+          "cov": 0.9767441860465116,
+          "crap": 26.008502396015444
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/config.closest",
+          "file": "internal/config/findings.go",
+          "comp": 5,
+          "cov": 0.8571428571428571,
+          "crap": 5.072886297376093
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/config.compiled",
+          "file": "internal/config/config.go",
+          "comp": 4,
+          "cov": 0.6923076923076923,
+          "crap": 4.466090122894856
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/config.editDistance",
+          "file": "internal/config/findings.go",
+          "comp": 5,
+          "cov": 1,
+          "crap": 5
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/config.elsewhere",
+          "file": "internal/config/findings.go",
+          "comp": 9,
+          "cov": 0.7692307692307693,
+          "crap": 9.995448338643603
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/config.errClass",
+          "file": "internal/config/check.go",
+          "comp": 1,
+          "cov": 0,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/config.escapePtr",
+          "file": "internal/config/findings.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/config.excerptLine",
+          "file": "internal/config/config.go",
+          "comp": 4,
+          "cov": 1,
+          "crap": 4
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/config.finish",
+          "file": "internal/config/check.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/config.isWorkspace",
+          "file": "internal/config/check.go",
+          "comp": 4,
+          "cov": 1,
+          "crap": 4
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/config.joinField",
+          "file": "internal/config/findings.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/config.keysAt",
+          "file": "internal/config/findings.go",
+          "comp": 6,
+          "cov": 0.5714285714285714,
+          "crap": 8.833819241982509
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/config.lastName",
+          "file": "internal/config/findings.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/config.looksLikeTarget",
+          "file": "internal/config/check.go",
+          "comp": 4,
+          "cov": 1,
+          "crap": 4
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/config.missingFix",
+          "file": "internal/config/findings.go",
+          "comp": 6,
+          "cov": 0.5714285714285714,
+          "crap": 8.833819241982509
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/config.namesFindings",
+          "file": "internal/config/findings.go",
+          "comp": 9,
+          "cov": 0.9473684210526315,
+          "crap": 9.011809301647471
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/config.nested",
+          "file": "internal/config/check.go",
+          "comp": 3,
+          "cov": 1,
+          "crap": 3
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/config.noAliases",
+          "file": "internal/config/config.go",
+          "comp": 5,
+          "cov": 1,
+          "crap": 5
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/config.parentPtr",
+          "file": "internal/config/findings.go",
+          "comp": 2,
+          "cov": 0.6666666666666666,
+          "crap": 2.1481481481481484
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/config.patternFinding",
+          "file": "internal/config/findings.go",
+          "comp": 8,
+          "cov": 0.875,
+          "crap": 8.125
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/config.pointerPath",
+          "file": "internal/config/config.go",
+          "comp": 5,
+          "cov": 1,
+          "crap": 5
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/config.ptr",
+          "file": "internal/config/check.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/config.rangeFinding",
+          "file": "internal/config/findings.go",
+          "comp": 5,
+          "cov": 0.7777777777777778,
+          "crap": 5.274348422496571
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/config.schemaFindings",
+          "file": "internal/config/findings.go",
+          "comp": 7,
+          "cov": 1,
+          "crap": 7
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/config.sortFindings",
+          "file": "internal/config/findings.go",
+          "comp": 3,
+          "cov": 1,
+          "crap": 3
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/config.suggestSlug",
+          "file": "internal/config/findings.go",
+          "comp": 9,
+          "cov": 1,
+          "crap": 9
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/config.toInt",
+          "file": "internal/config/findings.go",
+          "comp": 5,
+          "cov": 0.5,
+          "crap": 8.125
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/config.toJSON",
+          "file": "internal/config/config.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/config.unknownKey",
+          "file": "internal/config/findings.go",
+          "comp": 17,
+          "cov": 0.9310344827586207,
+          "crap": 17.094796834638565
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/config.valueAt",
+          "file": "internal/config/findings.go",
+          "comp": 8,
+          "cov": 0.8461538461538461,
+          "crap": 8.233045061447429
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/config.walkLines",
+          "file": "internal/config/config.go",
+          "comp": 7,
+          "cov": 1,
+          "crap": 7
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/config.yamlFinding",
+          "file": "internal/config/config.go",
+          "comp": 5,
+          "cov": 0.9166666666666666,
+          "crap": 5.014467592592593
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/contain.Child",
+          "file": "internal/contain/root.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/contain.ChildWith",
+          "file": "internal/contain/root.go",
+          "comp": 6,
+          "cov": 0.8125,
+          "crap": 6.2373046875
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/contain.Components",
+          "file": "internal/contain/refuse.go",
+          "comp": 3,
+          "cov": 1,
+          "crap": 3
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/contain.IsEscape",
+          "file": "internal/contain/root.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/contain.NewRefuser",
+          "file": "internal/contain/refuse.go",
+          "comp": 5,
+          "cov": 1,
+          "crap": 5
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/contain.Open",
+          "file": "internal/contain/root.go",
+          "comp": 4,
+          "cov": 1,
+          "crap": 4
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/contain.OpenRoot",
+          "file": "internal/contain/root.go",
+          "comp": 7,
+          "cov": 0.6818181818181818,
+          "crap": 8.578418482344103
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/contain.RefusedError.Error",
+          "file": "internal/contain/resolve.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/contain.RefusedError.Is",
+          "file": "internal/contain/resolve.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/contain.Refuser.Inside",
+          "file": "internal/contain/refuse.go",
+          "comp": 3,
+          "cov": 1,
+          "crap": 3
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/contain.Refuser.Refused",
+          "file": "internal/contain/refuse.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/contain.Refuser.Under",
+          "file": "internal/contain/refuse.go",
+          "comp": 9,
+          "cov": 0.9375,
+          "crap": 9.019775390625
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/contain.Refuser.match",
+          "file": "internal/contain/refuse.go",
+          "comp": 7,
+          "cov": 0.9,
+          "crap": 7.049
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/contain.Resolve",
+          "file": "internal/contain/resolve.go",
+          "comp": 11,
+          "cov": 1,
+          "crap": 11
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/contain.ResolvePath",
+          "file": "internal/contain/resolve.go",
+          "comp": 11,
+          "cov": 1,
+          "crap": 11
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/contain.SingleComponent",
+          "file": "internal/contain/root.go",
+          "comp": 4,
+          "cov": 1,
+          "crap": 4
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/contain.SkipReason",
+          "file": "internal/contain/root.go",
+          "comp": 10,
+          "cov": 1,
+          "crap": 10
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/contain.entry.matches",
+          "file": "internal/contain/refuse.go",
+          "comp": 8,
+          "cov": 1,
+          "crap": 8
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/contain.parseEntry",
+          "file": "internal/contain/refuse.go",
+          "comp": 11,
+          "cov": 1,
+          "crap": 11
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/contain.splitComps",
+          "file": "internal/contain/resolve.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/reason.MakesPartial",
+          "file": "internal/reason/reason.go",
+          "comp": 3,
+          "cov": 1,
+          "crap": 3
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/report.Findings",
+          "file": "internal/report/report.go",
+          "comp": 5,
+          "cov": 1,
+          "crap": 5
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/report.Human",
+          "file": "internal/report/report.go",
+          "comp": 7,
+          "cov": 1,
+          "crap": 7
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/report.Summary",
+          "file": "internal/report/report.go",
+          "comp": 10,
+          "cov": 1,
+          "crap": 10
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/report.Table",
+          "file": "internal/report/report.go",
+          "comp": 8,
+          "cov": 1,
+          "crap": 8
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/report.children",
+          "file": "internal/report/report.go",
+          "comp": 5,
+          "cov": 1,
+          "crap": 5
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/report.fixFor",
+          "file": "internal/report/report.go",
+          "comp": 3,
+          "cov": 0.5,
+          "crap": 4.125
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/report.notes",
+          "file": "internal/report/report.go",
+          "comp": 10,
+          "cov": 0.9473684210526315,
+          "crap": 10.014579384749963
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/report.pad",
+          "file": "internal/report/report.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/report.padLeft",
+          "file": "internal/report/report.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/scan.Decode",
+          "file": "internal/scan/document.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/scan.Document.ExitCode",
+          "file": "internal/scan/document.go",
+          "comp": 8,
+          "cov": 1,
+          "crap": 8
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/scan.Document.JSON",
+          "file": "internal/scan/document.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/scan.FromConfig",
+          "file": "internal/scan/scan.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/scan.Normalize",
+          "file": "internal/scan/document.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/scan.Scan",
+          "file": "internal/scan/scan.go",
+          "comp": 9,
+          "cov": 0.8275862068965517,
+          "crap": 9.415146172454795
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/scan.labelWorkspaces",
+          "file": "internal/scan/label.go",
+          "comp": 20,
+          "cov": 0.9807692307692307,
+          "crap": 20.002844788347748
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/scan.measure",
+          "file": "internal/scan/scan.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/scan.measureUnit",
+          "file": "internal/scan/scan.go",
+          "comp": 13,
+          "cov": 0.7,
+          "crap": 17.563000000000002
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/scan.mergeSkips",
+          "file": "internal/scan/scan.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/scan.openUnit",
+          "file": "internal/scan/scan.go",
+          "comp": 6,
+          "cov": 1,
+          "crap": 6
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/scan.rfc3339",
+          "file": "internal/scan/document.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/scan.round3",
+          "file": "internal/scan/document.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/scan.scanRoot",
+          "file": "internal/scan/scan.go",
+          "comp": 36,
+          "cov": 0.9120879120879121,
+          "crap": 36.880543439171625
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/scan.skipList",
+          "file": "internal/scan/scan.go",
+          "comp": 3,
+          "cov": 1,
+          "crap": 3
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/scan.walkStat",
+          "file": "internal/scan/scan.go",
+          "comp": 3,
+          "cov": 0.8,
+          "crap": 3.072
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/serve.CheckBind",
+          "file": "internal/serve/bind.go",
+          "comp": 14,
+          "cov": 1,
+          "crap": 14
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/serve.Jitter",
+          "file": "internal/serve/serve.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/serve.ListenError.Error",
+          "file": "internal/serve/bind.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/serve.RefusedError.Error",
+          "file": "internal/serve/bind.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/serve.Run",
+          "file": "internal/serve/serve.go",
+          "comp": 12,
+          "cov": 0.9545454545454546,
+          "crap": 12.013523666416228
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/serve.handler",
+          "file": "internal/serve/serve.go",
+          "comp": 6,
+          "cov": 1,
+          "crap": 6
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/serve.isLoopback",
+          "file": "internal/serve/serve.go",
+          "comp": 2,
+          "cov": 0.6666666666666666,
+          "crap": 2.1481481481481484
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/serve.listen",
+          "file": "internal/serve/bind.go",
+          "comp": 7,
+          "cov": 0.8461538461538461,
+          "crap": 7.178425125170687
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/serve.logScan",
+          "file": "internal/serve/serve.go",
+          "comp": 9,
+          "cov": 1,
+          "crap": 9
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/serve.loop",
+          "file": "internal/serve/serve.go",
+          "comp": 7,
+          "cov": 0.9411764705882353,
+          "crap": 7.009973539588846
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/serve.refuse",
+          "file": "internal/serve/bind.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/serve.resolver",
+          "file": "internal/serve/bind.go",
+          "comp": 2,
+          "cov": 0,
+          "crap": 6
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/serve.writeTextfile",
+          "file": "internal/serve/serve.go",
+          "comp": 10,
+          "cov": 0.9523809523809523,
+          "crap": 10.010797969981644
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/textfile.DirModeError.Error",
+          "file": "internal/textfile/textfile.go",
+          "comp": 1,
+          "cov": 0,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/textfile.DirModeError.Is",
+          "file": "internal/textfile/textfile.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/textfile.Errno",
+          "file": "internal/textfile/textfile.go",
+          "comp": 3,
+          "cov": 1,
+          "crap": 3
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/textfile.Open",
+          "file": "internal/textfile/textfile.go",
+          "comp": 30,
+          "cov": 0.7592592592592593,
+          "crap": 42.55715592135344
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/textfile.RefusedError.Error",
+          "file": "internal/textfile/textfile.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/textfile.RefusedError.Is",
+          "file": "internal/textfile/textfile.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/textfile.Text",
+          "file": "internal/textfile/textfile.go",
+          "comp": 4,
+          "cov": 0.3,
+          "crap": 9.488
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/textfile.WriteError.Error",
+          "file": "internal/textfile/textfile.go",
+          "comp": 1,
+          "cov": 0,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/textfile.WriteError.Unwrap",
+          "file": "internal/textfile/textfile.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/textfile.Writer.Close",
+          "file": "internal/textfile/textfile.go",
+          "comp": 3,
+          "cov": 1,
+          "crap": 3
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/textfile.Writer.Moved",
+          "file": "internal/textfile/textfile.go",
+          "comp": 4,
+          "cov": 0.7272727272727273,
+          "crap": 4.324567993989482
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/textfile.Writer.Write",
+          "file": "internal/textfile/textfile.go",
+          "comp": 17,
+          "cov": 0.7419354838709677,
+          "crap": 21.966869188681144
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/textfile.absolute",
+          "file": "internal/textfile/textfile.go",
+          "comp": 4,
+          "cov": 0.8571428571428571,
+          "crap": 4.0466472303206995
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/textfile.flock",
+          "file": "internal/textfile/lock_unix.go",
+          "comp": 6,
+          "cov": 0.625,
+          "crap": 7.8984375
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/textfile.fsyncFile",
+          "file": "internal/textfile/textfile.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/textfile.ownerUID",
+          "file": "internal/textfile/lock_unix.go",
+          "comp": 2,
+          "cov": 0.75,
+          "crap": 2.0625
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/textfile.refusal",
+          "file": "internal/textfile/textfile.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/version.Get",
+          "file": "internal/version/version.go",
+          "comp": 6,
+          "cov": 0.625,
+          "crap": 7.8984375
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/version.Info.JSON",
+          "file": "internal/version/version.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/version.Info.Line",
+          "file": "internal/version/version.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/walk.Budget.Alive",
+          "file": "internal/walk/budget.go",
+          "comp": 4,
+          "cov": 1,
+          "crap": 4
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/walk.Budget.DeadlineExceeded",
+          "file": "internal/walk/budget.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/walk.Budget.Entered",
+          "file": "internal/walk/budget.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/walk.Budget.Entries",
+          "file": "internal/walk/budget.go",
+          "comp": 3,
+          "cov": 1,
+          "crap": 3
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/walk.Budget.FilesExceeded",
+          "file": "internal/walk/budget.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/walk.ClassifyProfile",
+          "file": "internal/walk/profile.go",
+          "comp": 4,
+          "cov": 1,
+          "crap": 4
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/walk.Config.Discover",
+          "file": "internal/walk/discover.go",
+          "comp": 2,
+          "cov": 0.9,
+          "crap": 2.004
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/walk.Config.Measure",
+          "file": "internal/walk/walk.go",
+          "comp": 2,
+          "cov": 0.8888888888888888,
+          "crap": 2.0054869684499312
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/walk.Config.fail",
+          "file": "internal/walk/log.go",
+          "comp": 4,
+          "cov": 1,
+          "crap": 4
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/walk.Config.stat",
+          "file": "internal/walk/walk.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/walk.Logger.Done",
+          "file": "internal/walk/log.go",
+          "comp": 4,
+          "cov": 1,
+          "crap": 4
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/walk.Logger.Swap",
+          "file": "internal/walk/log.go",
+          "comp": 1,
+          "cov": 0,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/walk.Logger.fds",
+          "file": "internal/walk/log.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/walk.Logger.swap",
+          "file": "internal/walk/log.go",
+          "comp": 3,
+          "cov": 1,
+          "crap": 3
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/walk.NewBudget",
+          "file": "internal/walk/budget.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/walk.NewBudgetAt",
+          "file": "internal/walk/budget.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/walk.Profile.String",
+          "file": "internal/walk/profile.go",
+          "comp": 3,
+          "cov": 0,
+          "crap": 12
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/walk.StatOf",
+          "file": "internal/walk/stat_unix.go",
+          "comp": 3,
+          "cov": 0.75,
+          "crap": 3.140625
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/walk.Tally.skip",
+          "file": "internal/walk/walk.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/walk.childProfile",
+          "file": "internal/walk/profile.go",
+          "comp": 4,
+          "cov": 1,
+          "crap": 4
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/walk.discoverer.admit",
+          "file": "internal/walk/discover.go",
+          "comp": 8,
+          "cov": 0.5217391304347826,
+          "crap": 15.00123284293581
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/walk.discoverer.child",
+          "file": "internal/walk/discover.go",
+          "comp": 8,
+          "cov": 0.6923076923076923,
+          "crap": 9.864360491579427
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/walk.discoverer.dir",
+          "file": "internal/walk/discover.go",
+          "comp": 13,
+          "cov": 0.6666666666666666,
+          "crap": 19.259259259259263
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/walk.discoverer.read",
+          "file": "internal/walk/discover.go",
+          "comp": 6,
+          "cov": 0.8421052631578947,
+          "crap": 6.141711619769646
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/walk.discoverer.symlinked",
+          "file": "internal/walk/discover.go",
+          "comp": 5,
+          "cov": 1,
+          "crap": 5
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/walk.discoverer.workspace",
+          "file": "internal/walk/discover.go",
+          "comp": 10,
+          "cov": 0.8823529411764706,
+          "crap": 10.16283329940973
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/walk.topProfile",
+          "file": "internal/walk/profile.go",
+          "comp": 4,
+          "cov": 1,
+          "crap": 4
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/walk.u64",
+          "file": "internal/walk/stat_unix.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/walk.walker.add",
+          "file": "internal/walk/walk.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/walk.walker.entry",
+          "file": "internal/walk/walk.go",
+          "comp": 12,
+          "cov": 0.9459459459459459,
+          "crap": 12.022742976723984
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/walk.walker.listing",
+          "file": "internal/walk/walk.go",
+          "comp": 6,
+          "cov": 0.8823529411764706,
+          "crap": 6.058619987787503
+        },
+        {
+          "key": "github.com/Hedronite/cubit/internal/walk.walker.tree",
+          "file": "internal/walk/walk.go",
+          "comp": 9,
+          "cov": 0.6111111111111112,
+          "crap": 13.763888888888888
+        },
+        {
+          "key": "github.com/Hedronite/cubit/scripts/relhelper.addFile",
+          "file": "scripts/relhelper/main.go",
+          "comp": 2,
+          "cov": 0.9,
+          "crap": 2.004
+        },
+        {
+          "key": "github.com/Hedronite/cubit/scripts/relhelper.main",
+          "file": "scripts/relhelper/main.go",
+          "comp": 2,
+          "cov": 0,
+          "crap": 6
+        },
+        {
+          "key": "github.com/Hedronite/cubit/scripts/relhelper.parseMember",
+          "file": "scripts/relhelper/main.go",
+          "comp": 7,
+          "cov": 1,
+          "crap": 7
+        },
+        {
+          "key": "github.com/Hedronite/cubit/scripts/relhelper.run",
+          "file": "scripts/relhelper/main.go",
+          "comp": 4,
+          "cov": 0,
+          "crap": 20
+        },
+        {
+          "key": "github.com/Hedronite/cubit/scripts/relhelper.writeArchive",
+          "file": "scripts/relhelper/main.go",
+          "comp": 11,
+          "cov": 0.8709677419354839,
+          "crap": 11.259944278473364
+        },
+        {
+          "key": "github.com/Hedronite/cubit/scripts/relhelper.writeSums",
+          "file": "scripts/relhelper/main.go",
+          "comp": 6,
+          "cov": 0.9523809523809523,
+          "crap": 6.003887269193392
+        }
+      ],
+      "not_measured": []
+    },
+    {
+      "repo": "scry",
+      "commit": "a33d4de203f6fc06f60982736947ec2e0c9099f5",
+      "functions": [
+        {
+          "key": "github.com/Hedronite/scry/cmd/scry.main",
+          "file": "cmd/scry/main.go",
+          "comp": 1,
+          "cov": 0,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/scry/hack/mkarchive.addFile",
+          "file": "hack/mkarchive/main.go",
+          "comp": 3,
+          "cov": 1,
+          "crap": 3
+        },
+        {
+          "key": "github.com/Hedronite/scry/hack/mkarchive.main",
+          "file": "hack/mkarchive/main.go",
+          "comp": 2,
+          "cov": 0,
+          "crap": 6
+        },
+        {
+          "key": "github.com/Hedronite/scry/hack/mkarchive.multi.Set",
+          "file": "hack/mkarchive/main.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/scry/hack/mkarchive.multi.String",
+          "file": "hack/mkarchive/main.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/scry/hack/mkarchive.run",
+          "file": "hack/mkarchive/main.go",
+          "comp": 23,
+          "cov": 0.8260869565217391,
+          "crap": 25.782608695652172
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/cli.Common.Validate",
+          "file": "internal/cli/cli.go",
+          "comp": 6,
+          "cov": 1,
+          "crap": 6
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/cli.Common.bind",
+          "file": "internal/cli/cli.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/cli.CurrentVersion",
+          "file": "internal/cli/commands.go",
+          "comp": 7,
+          "cov": 0.7,
+          "crap": 8.323
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/cli.Execute",
+          "file": "internal/cli/cli.go",
+          "comp": 5,
+          "cov": 1,
+          "crap": 5
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/cli.NewRoot",
+          "file": "internal/cli/cli.go",
+          "comp": 1,
+          "cov": 0.8571428571428571,
+          "crap": 1.0029154518950438
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/cli.clusterOf",
+          "file": "internal/cli/run.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/cli.emit",
+          "file": "internal/cli/run.go",
+          "comp": 7,
+          "cov": 0.9166666666666666,
+          "crap": 7.028356481481482
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/cli.failureDoc",
+          "file": "internal/cli/run.go",
+          "comp": 2,
+          "cov": 0.75,
+          "crap": 2.0625
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/cli.finishStatus",
+          "file": "internal/cli/run.go",
+          "comp": 8,
+          "cov": 1,
+          "crap": 8
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/cli.marshalDoc",
+          "file": "internal/cli/run.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/cli.newObserver",
+          "file": "internal/cli/run.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/cli.newStatus",
+          "file": "internal/cli/commands.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/cli.newVersion",
+          "file": "internal/cli/commands.go",
+          "comp": 3,
+          "cov": 0.9230769230769231,
+          "crap": 3.0040964952207556
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/cli.newWait",
+          "file": "internal/cli/commands.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/cli.outOpt.validate",
+          "file": "internal/cli/run.go",
+          "comp": 7,
+          "cov": 1,
+          "crap": 7
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/cli.publishable",
+          "file": "internal/cli/run.go",
+          "comp": 3,
+          "cov": 0.75,
+          "crap": 3.140625
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/cli.resolve",
+          "file": "internal/cli/run.go",
+          "comp": 8,
+          "cov": 0.96,
+          "crap": 8.004096
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/cli.runStatus",
+          "file": "internal/cli/run.go",
+          "comp": 6,
+          "cov": 0.9090909090909091,
+          "crap": 6.027047332832457
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/cli.runWait",
+          "file": "internal/cli/run.go",
+          "comp": 6,
+          "cov": 0.9285714285714286,
+          "crap": 6.013119533527696
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/cli.samePath",
+          "file": "internal/cli/run.go",
+          "comp": 6,
+          "cov": 1,
+          "crap": 6
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/cli.usage",
+          "file": "internal/cli/cli.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/config.Config.Lookup",
+          "file": "internal/config/config.go",
+          "comp": 4,
+          "cov": 1,
+          "crap": 4
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/config.Load",
+          "file": "internal/config/config.go",
+          "comp": 3,
+          "cov": 0.8888888888888888,
+          "crap": 3.0123456790123457
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/config.Parse",
+          "file": "internal/config/config.go",
+          "comp": 7,
+          "cov": 1,
+          "crap": 7
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/config.validate",
+          "file": "internal/config/config.go",
+          "comp": 9,
+          "cov": 1,
+          "crap": 9
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/exitcode.All",
+          "file": "internal/exitcode/exitcode.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/exitcode.CodeOf",
+          "file": "internal/exitcode/exitcode.go",
+          "comp": 3,
+          "cov": 1,
+          "crap": 3
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/exitcode.Error.Error",
+          "file": "internal/exitcode/exitcode.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/exitcode.Error.Is",
+          "file": "internal/exitcode/exitcode.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/exitcode.Error.Unwrap",
+          "file": "internal/exitcode/exitcode.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/exitcode.ForReason",
+          "file": "internal/exitcode/exitcode.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/exitcode.New",
+          "file": "internal/exitcode/exitcode.go",
+          "comp": 2,
+          "cov": 0.75,
+          "crap": 2.0625
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/exitcode.Of",
+          "file": "internal/exitcode/exitcode.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/exitcode.Wrap",
+          "file": "internal/exitcode/exitcode.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/fakecluster.New",
+          "file": "internal/fakecluster/fakecluster.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/fakecluster.NewClientCert",
+          "file": "internal/fakecluster/fakecluster.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/fakecluster.NodeList",
+          "file": "internal/fakecluster/fakecluster.go",
+          "comp": 5,
+          "cov": 0.8666666666666667,
+          "crap": 5.059259259259259
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/fakecluster.Options.reply",
+          "file": "internal/fakecluster/fakecluster.go",
+          "comp": 5,
+          "cov": 0.8333333333333334,
+          "crap": 5.1157407407407405
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/fakecluster.Server.CAPEM",
+          "file": "internal/fakecluster/fakecluster.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/fakecluster.Server.Close",
+          "file": "internal/fakecluster/fakecluster.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/fakecluster.Server.Connections",
+          "file": "internal/fakecluster/fakecluster.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/fakecluster.Server.Count",
+          "file": "internal/fakecluster/fakecluster.go",
+          "comp": 3,
+          "cov": 1,
+          "crap": 3
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/fakecluster.Server.Kubeconfig",
+          "file": "internal/fakecluster/fakecluster.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/fakecluster.Server.Paths",
+          "file": "internal/fakecluster/fakecluster.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/fakecluster.Server.Requests",
+          "file": "internal/fakecluster/fakecluster.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/fakecluster.Server.URL",
+          "file": "internal/fakecluster/fakecluster.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/fakecluster.Server.record",
+          "file": "internal/fakecluster/fakecluster.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/fakecluster.Server.serve",
+          "file": "internal/fakecluster/fakecluster.go",
+          "comp": 9,
+          "cov": 0.9130434782608695,
+          "crap": 9.053258814826991
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/fakecluster.serverCertificate",
+          "file": "internal/fakecluster/fakecluster.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/fakecluster.withDefault",
+          "file": "internal/fakecluster/fakecluster.go",
+          "comp": 3,
+          "cov": 1,
+          "crap": 3
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/kube.Client.Cluster",
+          "file": "internal/kube/config.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/kube.Client.Observe",
+          "file": "internal/kube/observe.go",
+          "comp": 8,
+          "cov": 1,
+          "crap": 8
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/kube.Client.get",
+          "file": "internal/kube/observe.go",
+          "comp": 3,
+          "cov": 1,
+          "crap": 3
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/kube.Client.getOnce",
+          "file": "internal/kube/observe.go",
+          "comp": 4,
+          "cov": 0.8695652173913043,
+          "crap": 4.035505876551327
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/kube.Client.nodes",
+          "file": "internal/kube/observe.go",
+          "comp": 11,
+          "cov": 0.9545454545454546,
+          "crap": 11.011363636363637
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/kube.Client.server",
+          "file": "internal/kube/observe.go",
+          "comp": 6,
+          "cov": 0.8461538461538461,
+          "crap": 6.131087847064179
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/kube.New",
+          "file": "internal/kube/config.go",
+          "comp": 9,
+          "cov": 0.875,
+          "crap": 9.158203125
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/kube.allowed",
+          "file": "internal/kube/transport.go",
+          "comp": 7,
+          "cov": 1,
+          "crap": 7
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/kube.allowedTransport.RoundTrip",
+          "file": "internal/kube/transport.go",
+          "comp": 6,
+          "cov": 1,
+          "crap": 6
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/kube.authMessage",
+          "file": "internal/kube/observe.go",
+          "comp": 2,
+          "cov": 0.6666666666666666,
+          "crap": 2.1481481481481484
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/kube.authProviderRefused",
+          "file": "internal/kube/config.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/kube.authReason",
+          "file": "internal/kube/observe.go",
+          "comp": 3,
+          "cov": 0.75,
+          "crap": 3.140625
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/kube.certificateExpired",
+          "file": "internal/kube/classify.go",
+          "comp": 2,
+          "cov": 0.75,
+          "crap": 2.0625
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/kube.checkRefusals",
+          "file": "internal/kube/config.go",
+          "comp": 9,
+          "cov": 0.8823529411764706,
+          "crap": 9.13189497252188
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/kube.clampString",
+          "file": "internal/kube/readyz.go",
+          "comp": 4,
+          "cov": 0.875,
+          "crap": 4.03125
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/kube.classifyTLS",
+          "file": "internal/kube/classify.go",
+          "comp": 8,
+          "cov": 0.65,
+          "crap": 10.744
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/kube.classifyTransportError",
+          "file": "internal/kube/classify.go",
+          "comp": 7,
+          "cov": 0.8888888888888888,
+          "crap": 7.06721536351166
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/kube.connectFailed",
+          "file": "internal/kube/classify.go",
+          "comp": 3,
+          "cov": 0.8,
+          "crap": 3.072
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/kube.deny",
+          "file": "internal/kube/transport.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/kube.dialTraceFrom",
+          "file": "internal/kube/transport.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/kube.execRefused",
+          "file": "internal/kube/config.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/kube.hasDotSegment",
+          "file": "internal/kube/transport.go",
+          "comp": 4,
+          "cov": 1,
+          "crap": 4
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/kube.insecureTLSRefused",
+          "file": "internal/kube/config.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/kube.kubeconfigError",
+          "file": "internal/kube/config.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/kube.livezVerdict",
+          "file": "internal/kube/observe.go",
+          "comp": 4,
+          "cov": 0.6666666666666666,
+          "crap": 4.592592592592593
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/kube.load",
+          "file": "internal/kube/config.go",
+          "comp": 9,
+          "cov": 0.8333333333333334,
+          "crap": 9.375
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/kube.loadingRules",
+          "file": "internal/kube/config.go",
+          "comp": 5,
+          "cov": 0.8888888888888888,
+          "crap": 5.034293552812072
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/kube.missingContext",
+          "file": "internal/kube/config.go",
+          "comp": 3,
+          "cov": 0.9,
+          "crap": 3.009
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/kube.nodeListFailure",
+          "file": "internal/kube/observe.go",
+          "comp": 4,
+          "cov": 0.3333333333333333,
+          "crap": 8.740740740740742
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/kube.parseReadyz",
+          "file": "internal/kube/readyz.go",
+          "comp": 13,
+          "cov": 1,
+          "crap": 13
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/kube.parseReadyzLine",
+          "file": "internal/kube/readyz.go",
+          "comp": 7,
+          "cov": 0.9166666666666666,
+          "crap": 7.028356481481482
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/kube.pathOf",
+          "file": "internal/kube/transport.go",
+          "comp": 2,
+          "cov": 0.6666666666666666,
+          "crap": 2.1481481481481484
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/kube.printableToken",
+          "file": "internal/kube/transport.go",
+          "comp": 4,
+          "cov": 0.7142857142857143,
+          "crap": 4.373177842565598
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/kube.refuseRedirect",
+          "file": "internal/kube/transport.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/kube.sortedKeys",
+          "file": "internal/kube/config.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/kube.splitCheck",
+          "file": "internal/kube/readyz.go",
+          "comp": 2,
+          "cov": 1,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/kube.splitPathList",
+          "file": "internal/kube/config.go",
+          "comp": 3,
+          "cov": 1,
+          "crap": 3
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/kube.tlsMaterialError",
+          "file": "internal/kube/config.go",
+          "comp": 1,
+          "cov": 0,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/kube.traceDial",
+          "file": "internal/kube/transport.go",
+          "comp": 4,
+          "cov": 1,
+          "crap": 4
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/kube.withDialTrace",
+          "file": "internal/kube/transport.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/outfile.Write",
+          "file": "internal/outfile/outfile.go",
+          "comp": 9,
+          "cov": 0.7307692307692307,
+          "crap": 10.580735093309059
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/outfile.scrub",
+          "file": "internal/outfile/outfile.go",
+          "comp": 3,
+          "cov": 0.75,
+          "crap": 3.140625
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/outfile.syncDir",
+          "file": "internal/outfile/outfile.go",
+          "comp": 2,
+          "cov": 0.6666666666666666,
+          "crap": 2.1481481481481484
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/report.Build",
+          "file": "internal/report/build.go",
+          "comp": 4,
+          "cov": 1,
+          "crap": 4
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/report.Document.ExitCode",
+          "file": "internal/report/doc.go",
+          "comp": 9,
+          "cov": 0.9166666666666666,
+          "crap": 9.046875
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/report.Document.MarshalJSON",
+          "file": "internal/report/doc.go",
+          "comp": 6,
+          "cov": 0.5384615384615384,
+          "crap": 9.539371870732818
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/report.Render",
+          "file": "internal/report/table.go",
+          "comp": 20,
+          "cov": 0.9607843137254902,
+          "crap": 20.024123451764403
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/report.ResolveAlias",
+          "file": "internal/report/doc.go",
+          "comp": 3,
+          "cov": 1,
+          "crap": 3
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/report.Timestamp.MarshalJSON",
+          "file": "internal/report/doc.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/report.Timestamp.UnmarshalJSON",
+          "file": "internal/report/doc.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/report.ValidAlias",
+          "file": "internal/report/doc.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/report.apiserverLine",
+          "file": "internal/report/table.go",
+          "comp": 6,
+          "cov": 1,
+          "crap": 6
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/report.clampMessage",
+          "file": "internal/report/build.go",
+          "comp": 4,
+          "cov": 0.875,
+          "crap": 4.03125
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/report.ind",
+          "file": "internal/report/table.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/report.rank",
+          "file": "internal/report/build.go",
+          "comp": 4,
+          "cov": 0.8,
+          "crap": 4.128
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/report.readyzLine",
+          "file": "internal/report/table.go",
+          "comp": 6,
+          "cov": 0.5833333333333334,
+          "crap": 8.604166666666666
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/report.row",
+          "file": "internal/report/table.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/report.verdict",
+          "file": "internal/report/build.go",
+          "comp": 16,
+          "cov": 0.967741935483871,
+          "crap": 16.008593199288377
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/schematest.Status",
+          "file": "internal/schematest/schematest.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/schematest.StatusReasons",
+          "file": "internal/schematest/schematest.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/schematest.Version",
+          "file": "internal/schematest/schematest.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/schematest.compile",
+          "file": "internal/schematest/schematest.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/schematest.validate",
+          "file": "internal/schematest/schematest.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/wait.Delay",
+          "file": "internal/wait/wait.go",
+          "comp": 3,
+          "cov": 1,
+          "crap": 3
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/wait.Ready",
+          "file": "internal/wait/wait.go",
+          "comp": 4,
+          "cov": 1,
+          "crap": 4
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/wait.RealClock.Now",
+          "file": "internal/wait/wait.go",
+          "comp": 1,
+          "cov": 0,
+          "crap": 2
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/wait.RealClock.Sleep",
+          "file": "internal/wait/wait.go",
+          "comp": 3,
+          "cov": 0,
+          "crap": 12
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/wait.Refusal",
+          "file": "internal/wait/wait.go",
+          "comp": 1,
+          "cov": 1,
+          "crap": 1
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/wait.Run",
+          "file": "internal/wait/wait.go",
+          "comp": 9,
+          "cov": 0.9090909090909091,
+          "crap": 9.060856498873028
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/wait.failFast",
+          "file": "internal/wait/wait.go",
+          "comp": 6,
+          "cov": 0.7777777777777778,
+          "crap": 6.395061728395062
+        },
+        {
+          "key": "github.com/Hedronite/scry/internal/wait.timedOut",
+          "file": "internal/wait/wait.go",
+          "comp": 3,
+          "cov": 1,
+          "crap": 3
+        }
+      ],
+      "not_measured": []
+    }
+  ]
+}

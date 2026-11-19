@@ -4,6 +4,7 @@ package calibration
 
 import (
 	"github.com/Hedronite/go-tops/internal/crap"
+	"github.com/Hedronite/go-tops/internal/gobuild"
 	"github.com/Hedronite/go-tops/internal/layers/tests"
 )
 
@@ -14,7 +15,13 @@ import (
 // directory touches internal/crap. The knobs are the profile defaults of the
 // launch classes: the error-guard discount on and no wrap functions.
 func scoreModule(dir, profile string) ([]scored, []unmeasured, error) {
-	rep, err := crap.Score(dir, profile, crap.Options{ErrGuardDiscount: true, Build: tests.Build})
+	// The layer names the platform the go command picks before it scores, so that
+	// a not-measured function is typed under another one; so does the calibration.
+	build, err := gobuild.Resolve(dir, tests.Build)
+	if err != nil {
+		return nil, nil, err
+	}
+	rep, err := crap.Score(dir, profile, crap.Options{ErrGuardDiscount: true, Build: build})
 	if err != nil {
 		return nil, nil, err
 	}
