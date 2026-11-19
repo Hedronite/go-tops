@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/Hedronite/go-tops/internal/gate"
+	"github.com/Hedronite/go-tops/internal/gobuild"
 )
 
 // IDs of the two layers.
@@ -38,13 +39,16 @@ var Command = []string{
 	"-coverprofile=" + ProfilePath, "-coverpkg=./...", "./...",
 }
 
-// Env is added to the environment of the test run. CGO_ENABLED=1 because -race
-// needs cgo. GOFLAGS is set to the one flag the run already passes: the go
-// command takes an inherited GOFLAGS, from the environment or from `go env -w`,
-// and would apply -skip, -short, -vet=off or -run to the gate's own run, so
-// tests would be hidden from it. An empty GOFLAGS does not override a `go env
-// -w` setting; a non-empty one does.
-var Env = []string{"CGO_ENABLED=1", "GOFLAGS=-count=1"}
+// Build is the build of the one test run: cgo on, because -race needs it, and
+// the platform and tags of the go command's own environment. The CRAP layer
+// loads the module under this same build (internal/gobuild), so the files it
+// scores are the files the profile covers.
+var Build = gobuild.Build{CGOEnabled: true}
+
+// Env is added to the environment of the test run: CGO_ENABLED=1 because -race
+// needs cgo, and GOFLAGS set to the one flag the run already passes, so that an
+// inherited GOFLAGS never reaches it (see gobuild.Build.Env).
+var Env = Build.Env()
 
 // Tests is gate 2.
 type Tests struct{}

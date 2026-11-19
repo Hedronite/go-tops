@@ -57,6 +57,10 @@ func With(msg string, err error) error { return fmt.Errorf("%s: %w", msg, err) }
 
 func Other(err error) error { return fmt.Errorf("o: %w", err) }
 
+func Gen[T any](err error) error { return fmt.Errorf("g: %w", err) }
+
+func Gen2[T, U any](err error) error { return fmt.Errorf("g2: %w", err) }
+
 type W struct{}
 
 func (W) Wrap(err error) error { return Wrap(err) }
@@ -92,6 +96,11 @@ var oracleCases = []oracleCase{
 	{name: "WrapFunction", comp: 1, guards: 1, wrap: true, src: `func FN() error { err := mk(); if err != nil { return wrap.Wrap(err) }; return nil }`},
 	{name: "WrapFunctionErrNotFirst", comp: 1, guards: 1, wrap: true, src: `func FN() error { err := mk(); if err != nil { return wrap.With("ctx", err) }; return nil }`},
 	{name: "WrapFunctionSamePackage", comp: 1, guards: 1, wrap: true, src: `func FN() error { err := mk(); if err != nil { return wrapIt(err) }; return nil }`},
+	{name: "WrapFunctionInstantiated", comp: 1, guards: 1, wrap: true, src: `func FN() error { err := mk(); if err != nil { return wrap.Gen[int](err) }; return nil }`},
+	{name: "WrapFunctionTwoTypeArguments", comp: 1, guards: 1, wrap: true, src: `func FN() error { err := mk(); if err != nil { return wrap.Gen2[int, string](err) }; return nil }`},
+	{name: "RawStringFormat", comp: 1, guards: 1, src: "func FN() error { err := mk(); if err != nil { return fmt.Errorf(`ctx: %w`, err) }; return nil }"},
+	{name: "InSelectCase", comp: 2, guards: 1, src: `func FN(c chan int) error { select { case <-c: err := mk(); if err != nil { return err } }; return nil }`},
+	{name: "MoreVerbsThanOperands", comp: 1, guards: 1, src: `func FN() error { err := mk(); if err != nil { return fmt.Errorf("%w %w", err) }; return nil }`},
 
 	// Non-qualifying guards: each counts as an ordinary `if`.
 	{name: "PercentV", comp: 2, src: `func FN() error { err := mk(); if err != nil { return fmt.Errorf("x: %v", err) }; return nil }`},
@@ -118,9 +127,21 @@ var oracleCases = []oracleCase{
 	{name: "Parameter", comp: 2, src: `func FN(err error) error { if err != nil { return err }; return nil }`},
 	{name: "WrapFunctionNotListed", comp: 2, src: `func FN() error { err := mk(); if err != nil { return wrap.Other(err) }; return nil }`},
 	{name: "WrapMethodIsNotAFunction", comp: 2, src: `func FN() error { err := mk(); if err != nil { return wrap.W{}.Wrap(err) }; return nil }`},
+	{name: "WrapVerbHasNoOperand", comp: 2, src: `func FN() error { err := mk(); if err != nil { return fmt.Errorf("%v %w", err) }; return nil }`},
+	{name: "WrapVerbWithNoOperands", comp: 2, src: `func FN() error { err := mk(); if err != nil { return fmt.Errorf("%w") }; return nil }`},
+	{name: "WrapVerbIndexPastTheOperands", comp: 2, src: `func FN() error { err := mk(); if err != nil { return fmt.Errorf("%[3]w", err) }; return nil }`},
+	{name: "OverflowingOperandIndex", comp: 2, src: `func FN() error { err := mk(); if err != nil { return fmt.Errorf("%[9223372036854775807]*.*w", err) }; return nil }`},
+	{name: "OperandIndexPastTheLimit", comp: 2, src: `func FN() error { err := mk(); if err != nil { return fmt.Errorf("%[65537]w", err) }; return nil }`},
+	{name: "UnparsableFormat", comp: 2, src: `func FN() error { err := mk(); if err != nil { return fmt.Errorf("%[x]w", err) }; return nil }`},
+	{name: "CompareWithACall", comp: 2, src: `func FN() error { err := mk(); if err != mk() { return err }; return nil }`},
+	{name: "FunctionValueIsNotAWrapFunction", comp: 2, src: `func FN() error { f := wrap.Wrap; err := mk(); if err != nil { return f(err) }; return nil }`},
+	{name: "FunctionLiteralCall", comp: 2, src: `func FN() error { err := mk(); if err != nil { return func(e error) error { return e }(err) }; return nil }`},
+	{name: "VarWithoutValue", comp: 2, src: `func FN() error { var err error; if err != nil { return err }; return nil }`},
+	{name: "AssignedByAnotherDeclaration", comp: 2, src: `func FN() error { err := mk(); var other = mk(); if err != nil { return err }; return other }`},
+	{name: "ConstBefore", comp: 2, src: `func FN() error { err := mk(); const c = 1; if err != nil { return err }; return nil }`},
 }
 
-const oracleWrapList = "example.com/oracle/wrap.Wrap,example.com/oracle/wrap.With,example.com/oracle.wrapIt"
+const oracleWrapList = "example.com/oracle/wrap.Wrap,example.com/oracle/wrap.With,example.com/oracle/wrap.Gen,example.com/oracle/wrap.Gen2,example.com/oracle.wrapIt"
 
 func writeOracle(t *testing.T) string {
 	t.Helper()

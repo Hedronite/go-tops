@@ -90,6 +90,7 @@ linters:
             # or missing from it (the go/ syntax and type packages the complexity
             # count reads, GO_TOPS.md §6.3).
             - go/ast
+            - go/build
             - go/parser
             - go/token
             - go/types

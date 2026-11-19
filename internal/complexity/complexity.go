@@ -69,6 +69,8 @@ type Func struct {
 	Complexity int           // §6.3, with the Config the run used
 	Guards     []Span        // bodies of the discounted guards inside the function, in source order
 	Decl       *ast.FuncDecl // nil for a package-level function literal
+	// HasStatements reports whether the body holds at least one statement.
+	HasStatements bool
 }
 
 // Load loads the packages matching patterns, relative to dir, with syntax and
@@ -91,7 +93,7 @@ type Func struct {
 func Load(dir string, env []string, patterns ...string) ([]*packages.Package, error) {
 	cfg := &packages.Config{
 		Mode: packages.NeedName | packages.NeedFiles | packages.NeedCompiledGoFiles |
-			packages.NeedImports | packages.NeedTypes | packages.NeedSyntax | packages.NeedTypesInfo,
+			packages.NeedImports | packages.NeedModule | packages.NeedTypes | packages.NeedSyntax | packages.NeedTypesInfo,
 		Dir: dir,
 		Env: append(append(os.Environ(), "GOFLAGS=-count=1"), env...),
 	}
@@ -130,7 +132,7 @@ func Analyze(root string, pkgs []*packages.Package, cfg Config) ([]Func, error) 
 			goFiles[f] = true
 		}
 		for _, file := range p.Syntax {
-			fa := fileAnalyzer{pkg: p, rel: rel, goFiles: goFiles}
+			fa := fileAnalyzer{fset: p.Fset, pkgPath: p.PkgPath, pkgName: p.Name, rel: rel, goFiles: goFiles}
 			if cfg.Discount {
 				fa.guards = findGuards(file, p.TypesInfo, wrap)
 			}
@@ -150,6 +152,18 @@ func Analyze(root string, pkgs []*packages.Package, cfg Config) ([]Func, error) 
 	return out, nil
 }
 
+// AnalyzeSyntax scores the functions of one parsed file without type
+// information, so the error-guard discount is off. It is for enumerating the
+// functions of a file that no build in hand compiles. The file is reported as
+// name, in the package pkgPath; fset is the file set the file was parsed with.
+func AnalyzeSyntax(fset *token.FileSet, file *ast.File, pkgPath, name string) ([]Func, error) {
+	fa := fileAnalyzer{
+		fset: fset, pkgPath: pkgPath, pkgName: file.Name.Name,
+		rel: func(string) (string, error) { return name, nil },
+	}
+	return fa.analyze(file)
+}
+
 func compareLine(a, b Pos) int {
 	if a.Line != b.Line {
 		return a.Line - b.Line
@@ -158,7 +172,10 @@ func compareLine(a, b Pos) int {
 }
 
 type fileAnalyzer struct {
-	pkg *packages.Package
+	fset    *token.FileSet
+	pkgPath string
+	pkgName string
+	// rel maps the file name a position gives to Func.File.
 	rel func(file string) (string, error)
 	// goFiles holds the source files of the package, by the name go list gives
 	// them. A cgo package is type-checked from files cgo generates in the build
@@ -237,7 +254,7 @@ func outermostLiterals(e ast.Expr) []*ast.FuncLit {
 // score counts one function. ok is false for a function that is not in a
 // source file of the package (see fileAnalyzer.goFiles): it is not the module's.
 func (a *fileAnalyzer) score(node ast.Node, recv *ast.FieldList, name string) (f Func, ok bool, err error) {
-	fset := a.pkg.Fset
+	fset := a.fset
 	start := fset.Position(node.Pos())
 	if a.goFiles != nil && !a.goFiles[start.Filename] {
 		return Func{}, false, nil
@@ -252,14 +269,16 @@ func (a *fileAnalyzer) score(node ast.Node, recv *ast.FieldList, name string) (f
 	}
 	comp, guards := a.count(node)
 	return Func{
-		Pkg:        a.pkg.PkgPath,
-		PkgName:    a.pkg.Name,
+		Pkg:        a.pkgPath,
+		PkgName:    a.pkgName,
 		Recv:       recvName,
 		Name:       name,
 		File:       file,
 		Span:       spanOf(fset, node),
 		Complexity: comp,
 		Guards:     guards,
+
+		HasStatements: hasStatements(node),
 	}, true, nil
 }
 
@@ -269,7 +288,7 @@ func (a *fileAnalyzer) count(node ast.Node) (int, []Span) {
 	var guards []Span
 	ast.Inspect(node, func(n ast.Node) bool {
 		if body, ok := a.guardBody(n); ok {
-			guards = append(guards, spanOf(a.pkg.Fset, body))
+			guards = append(guards, spanOf(a.fset, body))
 			return true
 		}
 		comp += weight(n)
@@ -369,3 +388,13 @@ func physical(p string) (string, error) {
 }
 
 var errorType = types.Universe.Lookup("error").Type()
+
+func hasStatements(node ast.Node) bool {
+	switch n := node.(type) {
+	case *ast.FuncDecl:
+		return n.Body != nil && len(n.Body.List) > 0
+	case *ast.FuncLit:
+		return len(n.Body.List) > 0
+	}
+	return false
+}
