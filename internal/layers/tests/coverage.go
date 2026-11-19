@@ -56,18 +56,18 @@ func summarizeProfile(env *gate.Env) (cover.Summary, int, error) {
 	case errors.Is(err, fs.ErrNotExist):
 		return cover.Summary{}, 0, fmt.Errorf("the coverage profile %s does not exist: the test run wrote none", ProfilePath)
 	case err != nil:
-		return cover.Summary{}, 0, fmt.Errorf("cannot read %s: %v", ProfilePath, err)
+		return cover.Summary{}, 0, fmt.Errorf("cannot read %s: %w", ProfilePath, err)
 	case len(strings.TrimSpace(string(raw))) == 0:
 		return cover.Summary{}, 0, fmt.Errorf("the coverage profile %s is empty", ProfilePath)
 	}
 	prof, err := cover.Parse(strings.NewReader(string(raw)))
 	if err != nil {
-		return cover.Summary{}, 0, fmt.Errorf("%s: %v", ProfilePath, err)
+		return cover.Summary{}, 0, fmt.Errorf("%s: %w", ProfilePath, err)
 	}
 	cc := env.Config.Coverage
 	sum, err := prof.Summarize(cover.Options{Module: env.Config.Module, Dir: env.Dir, ExcludeGenerated: cc.ExcludeGenerated})
 	if err != nil {
-		return cover.Summary{}, 0, fmt.Errorf("%s: %v", ProfilePath, err)
+		return cover.Summary{}, 0, fmt.Errorf("%s: %w", ProfilePath, err)
 	}
 	return sum, len(raw), nil
 }

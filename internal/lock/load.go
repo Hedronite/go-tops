@@ -153,11 +153,11 @@ func validate(l *Lock) []string {
 func lockSchema() (*jsonschema.Schema, error) {
 	raw, err := fs.ReadFile(gotops.Files(), "schema/lock.schema.json")
 	if err != nil {
-		return nil, fmt.Errorf("cannot read the embedded lock schema: %v", err)
+		return nil, fmt.Errorf("cannot read the embedded lock schema: %w", err)
 	}
 	sch, err := compile(raw)
 	if err != nil {
-		return nil, fmt.Errorf("cannot compile the embedded lock schema: %v", err)
+		return nil, fmt.Errorf("cannot compile the embedded lock schema: %w", err)
 	}
 	return sch, nil
 }
