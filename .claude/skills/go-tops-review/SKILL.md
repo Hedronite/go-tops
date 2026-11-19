@@ -28,7 +28,7 @@ Run `go-tops-gate` first: `diff` reads its `.go-tops/report.json` and fails with
 
 `status` is `ok`, `finding` or `n/a`. A `finding` needs a note. `answers` gives `ok: false` for a missing or unknown ID. Report each `finding` as a review finding.
 
-`data.report.ratchet` is the report's ratchet outcome. A `skip` is allowed only when the run's build differs from the ledger's build (ruling C3b); a `skip` on the ledger's own build is a failure, and `go-tops-gate` says so.
+`data.report.ratchet` is the report's ratchet outcome. A `skip` is allowed only when the run's build differs from the ledger's build (ruling C3b); a `skip` on the ledger's own build is a failure, and `go-tops-gate` says so. CI's judge requires `pass` on the ledger leg; the skills do not know which leg they run on and allow a skip on another build.
 
 By default the range is the fork point with `--base` plus the working tree: tracked edits and untracked files. `--committed-only` omits the working tree. Functions are found by the gofmt column-0 rule, so run gofmt first.
 

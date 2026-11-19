@@ -18,7 +18,7 @@ nu go-tops-adopt.nu check [--path .] [--gotops "<argv>"]
 
 `data.steps` has each command's exit code and output tail; `data.ledger` has the ledger's `build` and `on_ledger_leg_build`; `data.commit_ledger` says whether the ledger may be committed.
 
-A ratchet `skip` is judged by build (ruling C3b), and the ledger leg's build is the one that judges the ratchet: a skip on the ledger's own build fails. A ledger written on another build (a Mac) is never committed: it would make the ledger leg skip the ratchet and CI would fail. The script gives `ok: false` for it and says how to write the ledger on the ledger leg: run the drop-in workflow by hand with `mode` `init`, then commit the file it uploads. `--allow-host-ledger` is for a dry run on this host; commit nothing it wrote under `.go-tops/`.
+A ratchet `skip` is judged by build (ruling C3b), and the ledger leg's build is the one that judges the ratchet: a skip on the ledger's own build fails. CI's judge requires `pass` on the ledger leg, which a skip on another build never is; these scripts do not know which leg they run on and allow that skip. A ledger written on another build (a Mac) is never committed: it would make the ledger leg skip the ratchet and CI would fail. The script gives `ok: false` for it and says how to write the ledger on the ledger leg: run the drop-in workflow by hand with `mode` `init`, then commit the file it uploads. `--allow-host-ledger` is for a dry run on this host; commit nothing it wrote under `.go-tops/`.
 
 `gotops` is found from `--gotops`, then `$GOTOPS`, then the module's `tools/go.mod` (`go tool -modfile=tools/go.mod gotops`), then PATH. A missing `gotops` is `ok: false`.
 
