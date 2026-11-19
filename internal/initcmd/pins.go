@@ -13,8 +13,7 @@ const (
 	// protocolFloorMinor is the minor release of the language floor (§2).
 	protocolFloorMinor = 26
 
-	// The dates on which the layers that land later stop being off (§3.3).
-	expiresM2 = "2027-01-31"
+	// The date on which the layer that lands later stops being off (§3.3).
 	expiresM4 = "2027-03-01"
 )
 
