@@ -395,6 +395,12 @@ func partialCoverage(l report.Layer, p Partial) report.Layer {
 }
 
 func partialHygiene(l report.Layer, p Partial) report.Layer {
+	// Findings are nil when the lint output could not be read. A layer that failed
+	// on findings then has nothing that says they are within the ledger, so it stays
+	// failed rather than becoming "not judged".
+	if p.Findings == nil && lintFindingCount(l) > 0 {
+		return l
+	}
 	var standing []Failure
 	for _, name := range slices.Sorted(maps.Keys(p.Findings)) {
 		for _, file := range slices.Sorted(maps.Keys(p.Findings[name])) {
@@ -421,4 +427,13 @@ func (l *Ledger) holdsFinding(name, file string) bool {
 	}
 	_, ok := l.Findings[name][file]
 	return ok
+}
+
+// lintFindingCount is the number of lint findings the hygiene layer reports.
+func lintFindingCount(l report.Layer) int {
+	lint, ok := l.Details["lint"].(map[string]any)
+	if !ok {
+		return 0
+	}
+	return number(lint["findings"])
 }
