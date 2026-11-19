@@ -93,29 +93,33 @@ jobs:
       # ledger on its default branch and cannot run the workflow by hand until the
       # workflow is on that branch, so the ubuntu leg, the ledger leg, writes the first
       # ledger on a pull request. `baseline --status` prints one JSON line and exits 0
-      # for first-ledger-due (neither the base nor this tree has a ledger), 1 for
-      # present, deleted or advisory, and 2 with state error when it cannot tell. The
+      # for first-ledger-due (enforce is ratchet and neither the base nor this tree has a
+      # ledger), 1 for present, deleted or not-ratchet (enforce is advisory or hard), and
+      # 2 with state error when it cannot tell. The
       # step reads the state from that line and acts only on a code and a state that
       # agree: due writes the ledger on this leg's own build, uploads it as
       # go-tops-baseline and fails the run until that file is committed, unchanged;
       # proceed runs the gate and its judge; anything else, a missing or unknown state
-      # included, fails the run. The base ref reaches the command through the
-      # environment, never through the script text.
+      # included, fails the run on the ubuntu leg. The macOS leg asks too, and while a
+      # first ledger is due it runs no gate, which would only fail on the missing ledger:
+      # the ubuntu leg fails the run. The step records the exit code with set +e, so
+      # bash -e does not abort on the status exit 1 or 2. The base ref reaches the
+      # command through the environment, never through the script text.
       - name: is a first ledger due (baseline --status)
         id: status
-        if: matrix.leg == 'ubuntu' && github.event_name == 'pull_request'
+        if: matrix.leg != 'floor' && github.event_name == 'pull_request'
         env:
           GOTOOLCHAIN: local
           BASE_REF: ${{ github.base_ref }}
         run: |
           set +e
           line="$(go tool -modfile=tools/go.mod gotops baseline --status --base "origin/$BASE_REF")"
-          code=$?
+          code=$?  # 0 due, 1 not due, 2 cannot tell: read before any later command
           echo "$line"
           state="$(printf '%s\n' "$line" | jq -e -r .state 2>/dev/null)" || state=""
           case "$code:$state" in
             0:first-ledger-due) action=due ;;
-            1:present | 1:deleted | 1:advisory) action=proceed ;;
+            1:present | 1:deleted | 1:not-ratchet) action=proceed ;;
             *) action=stop ;;
           esac
           {
@@ -133,12 +137,12 @@ jobs:
           echo "::error::gotops baseline --status exited '$STATUS_CODE' with the state '$STATUS_STATE': it could not tell whether a first ledger is due, so the run fails closed"
           exit 1
       - name: write the first ledger on the ledger leg
-        if: steps.status.outputs.action == 'due'
+        if: matrix.leg == 'ubuntu' && steps.status.outputs.action == 'due'
         env:
           GOTOOLCHAIN: local
         run: go tool -modfile=tools/go.mod gotops baseline --init
       - name: upload the first ledger as go-tops-baseline
-        if: steps.status.outputs.action == 'due'
+        if: matrix.leg == 'ubuntu' && steps.status.outputs.action == 'due'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: go-tops-baseline
@@ -146,8 +150,12 @@ jobs:
           path: .go-tops/baseline.json
           include-hidden-files: true
           if-no-files-found: error
+      - name: a first ledger is due, and the ubuntu leg writes it
+        if: matrix.leg == 'macos' && steps.status.outputs.action == 'due'
+        run: |
+          echo "::notice::this repository has no ledger yet: the ubuntu leg writes the first one and fails the run until it is committed, so this leg runs no gate"
       - name: the first ledger is written, not committed
-        if: steps.status.outputs.action == 'due'
+        if: matrix.leg == 'ubuntu' && steps.status.outputs.action == 'due'
         run: |
           echo "::error::this repository has no ledger. The ledger leg wrote one and uploaded it as the go-tops-baseline artifact of this run: download it, commit .go-tops/baseline.json unchanged and push. The run fails until that file is committed."
           exit 1

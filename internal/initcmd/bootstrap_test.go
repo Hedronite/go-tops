@@ -61,9 +61,9 @@ func TestFirstLedgerStepsFollowTheStatus(t *testing.T) {
 	steps := workflowSteps(t, dir)
 	const (
 		status, tell, write, upload, notCommitted = "baseline --status)", "could not tell", "write the first ledger", "upload the first ledger", "written, not committed"
-		judge                                     = "judge the gate"
+		judge, notice                             = "judge the gate", "the ubuntu leg writes it"
 	)
-	names := []string{status, tell, write, upload, notCommitted, judge}
+	names := []string{status, tell, write, upload, notCommitted, notice, judge}
 	for _, c := range []struct {
 		name       string
 		event, leg string
@@ -75,8 +75,11 @@ func TestFirstLedgerStepsFollowTheStatus(t *testing.T) {
 		{"a ledger is present", "pull_request", "ubuntu", "proceed", []string{status, judge}, true},
 		{"the status could not tell", "pull_request", "ubuntu", "stop", []string{status, tell, judge}, true},
 		{"the status recorded nothing", "pull_request", "ubuntu", "", []string{status, tell, judge}, true},
-		{"the macOS leg asks nothing", "pull_request", "macos", "", []string{judge}, true},
-		{"the floor leg asks nothing", "pull_request", "floor", "", nil, false},
+		{"the macOS leg asks and a ledger is present", "pull_request", "macos", "proceed", []string{status, judge}, true},
+		{"the macOS leg skips the gate while a first ledger is due", "pull_request", "macos", "due", []string{status, notice}, false},
+		{"the macOS leg runs its gate when the status cannot tell", "pull_request", "macos", "stop", []string{status, judge}, true},
+		{"the macOS leg asks nothing on a push", "push", "macos", "", []string{judge}, true},
+		{"the floor leg asks nothing and has no gate", "pull_request", "floor", "", nil, false},
 		{"a push asks nothing", "push", "ubuntu", "", []string{judge}, true},
 		{"a manual run asks nothing", "workflow_dispatch", "ubuntu", "", nil, false},
 	} {
@@ -119,7 +122,8 @@ func TestStatusStepActsOnACodeAndAStateThatAgree(t *testing.T) {
 		{0, `{"state":"first-ledger-due","tree":false,"base":false}`, "first-ledger-due", "due"},
 		{1, `{"state":"present","tree":true,"base":null}`, "present", "proceed"},
 		{1, `{"state":"deleted","tree":false,"base":true}`, "deleted", "proceed"},
-		{1, `{"state":"advisory","tree":false,"base":null}`, "advisory", "proceed"},
+		{1, `{"state":"not-ratchet","tree":false,"base":null}`, "not-ratchet", "proceed"},
+		{1, `{"state":"advisory"}`, "advisory", "stop"}, // the old name is unknown now
 		{2, `{"state":"error","tree":false,"base":null,"reason":"no base"}`, "error", "stop"},
 		{0, `{"state":"present"}`, "present", "stop"},                   // a code and a state that disagree
 		{1, `{"state":"first-ledger-due"}`, "first-ledger-due", "stop"}, // the other way round
