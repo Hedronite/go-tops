@@ -57,6 +57,9 @@ func Collect(f Feeds) (Measure, error) {
 	if m.Nolint, m.Ack, err = scanSuppressions(f.Dir, f.Acks); err != nil {
 		return m, err
 	}
+	// TODO(G2): stand-in. Replace with the live exemption count internal/exempt
+	// exposes (records in force today, §6.8) when G2 merges. The configuration's
+	// records are all unexpired here, because `check` rejects an expired one.
 	m.Exemptions = len(f.Config.Exemptions)
 	m.JudgedLaws = f.Report.Laws.ApplicableJudged
 	m.Build = f.Build
