@@ -3,6 +3,7 @@ module github.com/Hedronite/go-tops/tools
 go 1.26.0
 
 tool (
+	github.com/fzipp/gocyclo/cmd/gocyclo
 	github.com/google/go-licenses/v2
 	golang.org/x/vuln/cmd/govulncheck
 	gotest.tools/gotestsum
@@ -14,6 +15,7 @@ require (
 	github.com/dnephin/pflag v1.0.7 // indirect
 	github.com/fatih/color v1.18.0 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
+	github.com/fzipp/gocyclo v0.6.0 // indirect
 	github.com/go-logr/logr v1.2.0 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/google/go-licenses/v2 v2.0.1 // indirect
