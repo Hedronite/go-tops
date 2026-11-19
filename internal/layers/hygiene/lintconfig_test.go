@@ -120,6 +120,9 @@ func TestRealLinterWithAConfigUnderGoTops(t *testing.T) {
 			f.override["golangci-lint run"] = func(argv []string) (gate.Output, error) {
 				cmd := exec.CommandContext(context.Background(), "golangci-lint", argv[1:]...)
 				cmd.Dir = f.dir
+				// golangci-lint refuses to run beside another run that shares its lock file in the
+				// temp directory, and other packages' tests run it too: this run has its own.
+				cmd.Env = append(os.Environ(), "TMPDIR="+t.TempDir())
 				out, err := cmd.CombinedOutput()
 				var exit *exec.ExitError
 				if err != nil && !errors.As(err, &exit) {
