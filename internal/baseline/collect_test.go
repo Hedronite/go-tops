@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Hedronite/go-tops/internal/baseline"
 	"github.com/Hedronite/go-tops/internal/gate"
@@ -129,7 +130,11 @@ func (f *feeds) dropLayer(id string) {
 
 func TestCollectMeasuresARunWhoseThresholdsAreRed(t *testing.T) {
 	f := newFeeds(t)
-	f.in.Config.Exemptions = []report.Exemption{{Path: "a/**", Layer: "crap"}, {Path: "b/**", Layer: "crap"}}
+	f.in.Now = func() time.Time { return time.Date(2026, 11, 19, 12, 0, 0, 0, time.UTC) }
+	f.in.Config.Exemptions = []report.Exemption{
+		{Path: "a/**", Layer: "crap", Expires: "2027-03-01"},
+		{Path: "b/**", Layer: "mutation", Expires: "2026-11-20"},
+	}
 	got, err := baseline.Collect(f.in)
 	if err != nil {
 		t.Fatal(err)
@@ -455,5 +460,25 @@ func TestCollectRefusesACrapRowItCannotRecord(t *testing.T) {
 		if !errors.As(err, &ref) {
 			t.Errorf("%s: err %v, want a refusal", name, err)
 		}
+	}
+}
+
+// §6.8: the exemptions count of the ledger is the records in force on the day of
+// the run. A record is in force while today is before its expiry.
+func TestCollectCountsOnlyTheExemptionsInForce(t *testing.T) {
+	f := newFeeds(t)
+	f.in.Now = func() time.Time { return time.Date(2026, 11, 19, 23, 59, 0, 0, time.UTC) }
+	f.in.Config.Exemptions = []report.Exemption{
+		{Path: "a/**", Layer: "crap", Expires: "2026-11-20"},     // in force today
+		{Path: "b/**", Layer: "crap", Expires: "2026-11-19"},     // expires today: out
+		{Path: "c/**", Layer: "mutation", Expires: "2027-01-01"}, // another layer, still counted
+		{Path: "d/**", Layer: "crap", Expires: "2026-01-01"},     // long expired
+	}
+	got, err := baseline.Collect(f.in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Exemptions != 2 {
+		t.Errorf("exemptions %d, want 2", got.Exemptions)
 	}
 }

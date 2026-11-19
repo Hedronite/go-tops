@@ -10,8 +10,10 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/Hedronite/go-tops/internal/cover"
+	"github.com/Hedronite/go-tops/internal/exempt"
 	"github.com/Hedronite/go-tops/internal/gate"
 	"github.com/Hedronite/go-tops/internal/layers/hygiene"
 	"github.com/Hedronite/go-tops/internal/layers/tests"
@@ -32,6 +34,9 @@ type Feeds struct {
 	Acks string
 	// Build is the build this run measured (ruling C3).
 	Build Build
+	// Now is the clock for the exemptions in force today (§6.8); nil is the real
+	// one.
+	Now func() time.Time
 }
 
 // Collect measures a run for the ledger (§6.7). It refuses, with a
@@ -57,13 +62,18 @@ func Collect(f Feeds) (Measure, error) {
 	if m.Nolint, m.Ack, err = scanSuppressions(f.Dir, f.Acks); err != nil {
 		return m, err
 	}
-	// TODO(G2): stand-in. Replace with the live exemption count internal/exempt
-	// exposes (records in force today, §6.8) when G2 merges. The configuration's
-	// records are all unexpired here, because `check` rejects an expired one.
-	m.Exemptions = len(f.Config.Exemptions)
+	m.Exemptions = exempt.Count(f.Config.Exemptions, f.today())
 	m.JudgedLaws = f.Report.Laws.ApplicableJudged
 	m.Build = f.Build
 	return m, nil
+}
+
+// today is the day the run measures: the clock, or the real one.
+func (f Feeds) today() time.Time {
+	if f.Now != nil {
+		return f.Now()
+	}
+	return time.Now()
 }
 
 func (f Feeds) layer(id string) (report.Layer, bool) {
