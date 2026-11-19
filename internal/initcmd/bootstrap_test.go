@@ -67,13 +67,13 @@ func TestFirstLedgerStepsFollowTheStatus(t *testing.T) {
 	for _, c := range []struct {
 		name       string
 		event, leg string
-		code       string
+		action     string
 		want       []string // the steps of names that run
 		gateRuns   bool
 	}{
-		{"a first ledger is due", "pull_request", "ubuntu", "0", []string{status, write, upload, notCommitted}, false},
-		{"a ledger is present", "pull_request", "ubuntu", "1", []string{status, judge}, true},
-		{"the status could not tell", "pull_request", "ubuntu", "2", []string{status, tell, judge}, true},
+		{"a first ledger is due", "pull_request", "ubuntu", "due", []string{status, write, upload, notCommitted}, false},
+		{"a ledger is present", "pull_request", "ubuntu", "proceed", []string{status, judge}, true},
+		{"the status could not tell", "pull_request", "ubuntu", "stop", []string{status, tell, judge}, true},
 		{"the status recorded nothing", "pull_request", "ubuntu", "", []string{status, tell, judge}, true},
 		{"the macOS leg asks nothing", "pull_request", "macos", "", []string{judge}, true},
 		{"the floor leg asks nothing", "pull_request", "floor", "", nil, false},
@@ -81,7 +81,7 @@ func TestFirstLedgerStepsFollowTheStatus(t *testing.T) {
 		{"a manual run asks nothing", "workflow_dispatch", "ubuntu", "", nil, false},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			ctx := map[string]string{"matrix.leg": c.leg, "github.event_name": c.event, "steps.status.outputs.code": c.code}
+			ctx := map[string]string{"matrix.leg": c.leg, "github.event_name": c.event, "steps.status.outputs.action": c.action}
 			got := ran(t, steps, ctx, names...)
 			for _, n := range names {
 				want := false
@@ -100,22 +100,41 @@ func TestFirstLedgerStepsFollowTheStatus(t *testing.T) {
 	}
 }
 
-// The status step records the exit code of baseline --status and never fails: the
-// steps after it act on the code, and a code of 2 fails the run there, closed.
-func TestStatusStepRecordsItsExitCodeWithoutFailing(t *testing.T) {
+// The status step reads the exit code and the state of the one JSON line, records
+// both and the action they agree on, and never fails: the steps after it act, and
+// anything but a code and a state that agree fails the run there, closed.
+func TestStatusStepActsOnACodeAndAStateThatAgree(t *testing.T) {
 	needTools(t)
 	dir := newModule(t, "github.com/acme/demo", "1.26")
 	if code, _, errs := run(opts(dir, "binary-cli")); code != ExitOK {
 		t.Fatal(errs)
 	}
 	s := stepNamed(t, workflowSteps(t, dir), "baseline --status)")
-	for _, code := range []int{0, 1, 2, 3} {
+	for _, c := range []struct {
+		code   int
+		stdout string
+		state  string
+		action string
+	}{
+		{0, `{"state":"first-ledger-due","tree":false,"base":false}`, "first-ledger-due", "due"},
+		{1, `{"state":"present","tree":true,"base":null}`, "present", "proceed"},
+		{1, `{"state":"deleted","tree":false,"base":true}`, "deleted", "proceed"},
+		{1, `{"state":"advisory","tree":false,"base":null}`, "advisory", "proceed"},
+		{2, `{"state":"error","tree":false,"base":null,"reason":"no base"}`, "error", "stop"},
+		{0, `{"state":"present"}`, "present", "stop"},                   // a code and a state that disagree
+		{1, `{"state":"first-ledger-due"}`, "first-ledger-due", "stop"}, // the other way round
+		{0, `{"state":"something-new"}`, "something-new", "stop"},       // an unknown state
+		{0, `{"tree":false}`, "", "stop"},                               // no state
+		{0, `not json`, "", "stop"},                                     // not a JSON line
+		{0, ``, "", "stop"},                                             // no output
+		{3, `{"state":"present"}`, "present", "stop"},                   // another exit code
+	} {
 		work := t.TempDir()
 		bin := filepath.Join(work, "bin")
 		if err := os.MkdirAll(bin, 0o755); err != nil {
 			t.Fatal(err)
 		}
-		fake := "#!/bin/sh\necho \"$@\" > \"" + filepath.Join(work, "argv") + "\"\nexit " + strconv.Itoa(code) + "\n"
+		fake := "#!/bin/sh\necho \"$@\" > \"" + filepath.Join(work, "argv") + "\"\nprintf '%s\\n' '" + c.stdout + "'\nexit " + strconv.Itoa(c.code) + "\n"
 		if err := os.WriteFile(filepath.Join(bin, "go"), []byte(fake), 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -124,11 +143,12 @@ func TestStatusStepRecordsItsExitCodeWithoutFailing(t *testing.T) {
 		cmd.Dir = work
 		cmd.Env = append(os.Environ(), "PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"), "GITHUB_OUTPUT="+out, "BASE_REF=release/1.x")
 		if b, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("status exit %d: the step failed: %v\n%s", code, err, b)
+			t.Fatalf("status exit %d %s: the step failed: %v\n%s", c.code, c.stdout, err, b)
 		}
 		got, err := os.ReadFile(out)
-		if err != nil || strings.TrimSpace(string(got)) != "code="+strconv.Itoa(code) {
-			t.Errorf("status exit %d: output %q (%v)", code, got, err)
+		want := "code=" + strconv.Itoa(c.code) + "\nstate=" + c.state + "\naction=" + c.action
+		if err != nil || strings.TrimSpace(string(got)) != want {
+			t.Errorf("status exit %d %s: output %q, want %q (%v)", c.code, c.stdout, got, want, err)
 		}
 		argv, err := os.ReadFile(filepath.Join(work, "argv"))
 		if err != nil || strings.TrimSpace(string(argv)) != "tool -modfile=tools/go.mod gotops baseline --status --base origin/release/1.x" {

@@ -3,11 +3,12 @@
 # read by the gate and is never written or changed by gotops init: the gate counts
 # findings under these rules, and the repository's own lint job keeps its own. The
 # errcheck settings match the law pass. Paths in the findings are relative to the
-# directory the gate runs in, whatever the directory of this file.
+# module (gomod), whatever the directory of this file or the one the gate runs in:
+# an anchored exclusion applies only under gomod.
 version: "2"
 
 run:
-  relative-path-mode: wd
+  relative-path-mode: gomod
 
 linters:
   default: standard

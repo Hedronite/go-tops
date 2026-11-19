@@ -259,7 +259,7 @@ func ifRunsCtx(t *testing.T, expr string, ctx map[string]string) bool {
 
 // knownNames are the context names a condition may read, besides the ones a test
 // gives a value: an unset one is the empty string.
-var knownNames = map[string]bool{"steps.status.outputs.code": true, "inputs.mode": true}
+var knownNames = map[string]bool{"steps.status.outputs.action": true, "inputs.mode": true}
 
 func workflowOn(t *testing.T, dir string) (map[string]any, int) {
 	t.Helper()

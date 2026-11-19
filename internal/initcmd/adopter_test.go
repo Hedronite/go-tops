@@ -31,8 +31,8 @@ func TestInitLeavesTheAdoptersLintConfigAlone(t *testing.T) {
 		t.Errorf("gates.hygiene.golangci_lint.config = %v, want .go-tops/golangci.yml", lint["config"])
 	}
 	kit := asMap(t, decodeYAML(t, read(t, dir, ".go-tops/golangci.yml")))
-	if got := asMap(t, kit["run"])["relative-path-mode"]; got != "wd" {
-		t.Errorf("run.relative-path-mode = %v, want wd: finding paths are relative to the directory the gate runs in", got)
+	if got := asMap(t, kit["run"])["relative-path-mode"]; got != "gomod" {
+		t.Errorf("run.relative-path-mode = %v, want gomod: finding paths are relative to the module, and an anchored exclusion applies only under gomod", got)
 	}
 	if asMap(t, asMap(t, kit["linters"])["settings"])["errcheck"] == nil {
 		t.Error("the kit config lost its errcheck settings")
