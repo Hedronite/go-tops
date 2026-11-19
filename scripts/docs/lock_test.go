@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,6 +13,29 @@ import (
 // The lock schema and its example are the protocol's own files, two levels up.
 // Each plant edits the example once and the schema must refuse the result.
 const lockExample = "../../config/go-tops.example.lock"
+
+// lockProtocol is the protocol the lock schema pins. A lock these tests build
+// carries it, so a bump of the schema never leaves a fixture on the old version,
+// where a test would fail on /protocol alone and pass whether or not the rule it
+// is about works.
+func lockProtocol(t *testing.T) string {
+	t.Helper()
+	raw, err := os.ReadFile("../../schema/lock.schema.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var s struct {
+		Properties struct {
+			Protocol struct {
+				Const string `json:"const"`
+			} `json:"protocol"`
+		} `json:"properties"`
+	}
+	if err := json.Unmarshal(raw, &s); err != nil || s.Properties.Protocol.Const == "" {
+		t.Fatalf("the lock schema has no protocol const: %v", err)
+	}
+	return s.Properties.Protocol.Const
+}
 
 func validateLock(t *testing.T, data string) error {
 	t.Helper()
@@ -43,6 +67,7 @@ func TestLockSchemaRefusesPlantedDefects(t *testing.T) {
 		t.Fatal(err)
 	}
 	ex := string(raw)
+	proto := lockProtocol(t)
 	const sha = "d1e409481a8ca846c4bc97e781eb5cb1bd5c23353a0b3977a1cbda1b1b6447d5"
 	cases := []struct{ name, old, new string }{
 		{"unknown-top-level-key", "toolchain: go1.27.4", "toolchain: go1.27.4\nbogus_key: 1"},
@@ -62,7 +87,7 @@ func TestLockSchemaRefusesPlantedDefects(t *testing.T) {
 		{"trust-mode", "mode: checksum", "mode: trust-me"},
 		{"trust-note-empty", "note: archive SHA-256 values copied from the upstream release checksum file; executable SHA-256 values computed from those verified archives", `note: ""`},
 		{"trust-missing", "trust:\n  mode: checksum\n  note: archive SHA-256 values copied from the upstream release checksum file; executable SHA-256 values computed from those verified archives\n", ""},
-		{"protocol-const", `protocol: "0.4.3"`, `protocol: "0.4.1"`},
+		{"protocol-const", `protocol: "` + proto + `"`, `protocol: "0.0.1"`},
 		{"trust-note-blank", "note: archive SHA-256 values copied from the upstream release checksum file; executable SHA-256 values computed from those verified archives", `note: "   "`},
 		{"executable-hash-without-extract", "    extract: golangci-lint-{version}-{os}-{arch}/golangci-lint\n", ""},
 		{"short-executable-hash", "darwin/arm64: 71b89744ef6dd92dad9026b70489d1ad660da79ef90dfb5aabe995d916bec8a9", "darwin/arm64: 71b89744ef6d"},
@@ -112,10 +137,44 @@ func TestLockExtractNeedsTheExecutableHash(t *testing.T) {
 
 // A lock with no binary pins nothing: the whole list, absent or empty, fails.
 func TestLockWithNoBinariesFails(t *testing.T) {
-	head := "protocol: \"0.4.3\"\ntoolchain: go1.27.4\ntrust:\n  mode: tofu\n  note: none yet\n"
+	head := "protocol: \"" + lockProtocol(t) + "\"\ntoolchain: go1.27.4\ntrust:\n  mode: tofu\n  note: none yet\n"
+	raw, err := os.ReadFile(lockExample)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ex := string(raw)
+	// The control: the same head with the example's binaries is a valid lock, so
+	// the two documents below fail for the binaries alone and for no other reason.
+	if err := validateLock(t, head+ex[strings.Index(ex, "binaries:"):]); err != nil {
+		t.Fatalf("the control must validate: %v", err)
+	}
 	for name, doc := range map[string]string{"empty-list": head + "binaries: []\n", "absent": head} {
-		if err := validateLock(t, doc); err == nil {
+		err := validateLock(t, doc)
+		if err == nil {
 			t.Errorf("%s validated", name)
+			continue
+		}
+		if strings.Contains(err.Error(), "protocol") {
+			t.Errorf("%s failed on the protocol, not the binaries: %v", name, err)
+		}
+	}
+}
+
+// A self-test that spells out the current protocol goes stale at the next bump and
+// can then pass for the wrong reason. The version comes from the schema.
+func TestNoSelfTestHardCodesTheCurrentProtocol(t *testing.T) {
+	proto := lockProtocol(t)
+	files, err := filepath.Glob("*_test.go")
+	if err != nil || len(files) == 0 {
+		t.Fatalf("no self-tests found: %v", err)
+	}
+	for _, f := range files {
+		b, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(b), `"`+proto+`"`) || strings.Contains(string(b), `\"`+proto+`\"`) {
+			t.Errorf("%s spells out the protocol %s: read it from the schema", f, proto)
 		}
 	}
 }
