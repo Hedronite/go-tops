@@ -7,7 +7,7 @@ A written spec, a JSON Schema, per-class profiles, a laws layer of `go/analysis`
 
 ## Status
 
-Draft. Protocol **0.4.3**. The package is unreleased (0.0.0), and no tag exists.
+Draft. Protocol **0.4.4**. The package is unreleased (0.0.0), and no tag exists.
 
 Milestones M1 and M2 are done: the `gotops` CLI (`version`, `check`, `init`, `gate`, `report`, `lock`, `doctor`, `baseline`) judges hygiene, tests, coverage and native CRAP at tier 1, and under `ratchet` it holds a legacy repo to a debt ledger, `.go-tops/baseline.json`. This repo's own CI gates it with `go run ./cmd/gotops gate`. Go-TOPS runs `advisory` on itself until its laws layer lands at M5 (§6.7), and its CI asserts the gates that exist. The next milestone is M3: the first adopter, `vigil`, gated under `ratchet`. Mutation and the laws layer do not run yet, no adopter has used the kit, and nothing here is released or ready to copy into CI.
 
@@ -46,7 +46,7 @@ The full list is in [`CHANGELOG.md`](CHANGELOG.md).
 
 | Path | What it is |
 |---|---|
-| [`GO_TOPS.md`](GO_TOPS.md) | The protocol, 0.4.3 |
+| [`GO_TOPS.md`](GO_TOPS.md) | The protocol, 0.4.4 |
 | [`schema/`](schema/) | The JSON Schemas: configuration, gate report, tool lock, and the shared core definitions |
 | [`cmd/gotops/`](cmd/gotops/), [`internal/`](internal/) | The `gotops` CLI: one file per command, and the layers, runner, lock, report and `init` packages behind them |
 | [`go-tops.yaml`](go-tops.yaml), [`go-tops.lock`](go-tops.lock), [`tools/`](tools/) | Go-TOPS gating itself: its configuration, its tool pins and its pinned module tools |
