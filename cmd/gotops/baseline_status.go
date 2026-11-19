@@ -14,7 +14,7 @@ import (
 // Exit codes of `baseline --status`: the answer to "is a first ledger due?".
 const (
 	statusDue     = 0 // a first ledger is due
-	statusNotDue  = 1 // present, deleted or advisory
+	statusNotDue  = 1 // present, deleted or not-ratchet
 	statusUnknown = 2 // the base cannot be read, or the configuration is invalid
 )
 
@@ -61,12 +61,14 @@ func status(ctx context.Context, a baselineArgs) (statusLine, int) {
 	return dueOrDeleted(ctx, dir, line)
 }
 
-// treeState is what the tree alone says: advisory writes no ledger, a ledger in
-// the tree is present, and one the head tracks that the tree lost is deleted
-// (`baseline --init` refuses it too). "" means the tree has none and head had none.
+// treeState is what the tree alone says. Only enforce: ratchet reads a ledger, so
+// under advisory (none is written) and hard (the floor and the cap are the
+// thresholds) none is ever due: not-ratchet. Under ratchet a ledger in the tree is
+// present, and one the head tracks that the tree lost is deleted (`baseline --init`
+// refuses it too). "" means the tree has none and head had none.
 func treeState(enforce, dir, rel string) string {
-	if enforce == "advisory" {
-		return "advisory"
+	if enforce != "ratchet" {
+		return "not-ratchet"
 	}
 	if _, err := os.Stat(filepath.Join(dir, filepath.FromSlash(rel))); err == nil {
 		return "present"

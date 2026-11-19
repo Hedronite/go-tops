@@ -55,7 +55,8 @@ The only command that writes .go-tops/baseline.json (GO_TOPS.md §6.7).
   --status               write nothing: print one JSON line saying whether a first ledger is
                          due, which is when neither the diff base (--base, default
                          origin/main) nor the tree has one. Exit 0 when it is due, 1 when
-                         it is not (present, deleted, advisory), 2 when the base cannot be
+                         it is not (present, deleted, or not-ratchet: only enforce: ratchet reads a
+                         ledger), 2 when the base cannot be
                          read (a shallow clone, an unknown ref, a copy that does not
                          parse) or the configuration is invalid.
 Every write is refused under enforce: advisory.

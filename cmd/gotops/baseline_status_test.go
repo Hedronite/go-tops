@@ -241,11 +241,25 @@ func TestStatusCannotTellFailsClosed(t *testing.T) {
 	})
 }
 
-// Under advisory no ledger is written, so none is ever due.
-func TestStatusAdvisoryHasNoLedgerDue(t *testing.T) {
-	_, mod := statusRepo(t, advisoryConfig(t), "", "")
-	code, got, _ := statusIn(t, mod)
-	wantStatus(t, code, got, 1, "advisory")
+// Only enforce: ratchet reads a ledger. Under advisory none is written, and under
+// hard the thresholds are the floor and the cap, so none is ever due: the answer is
+// not-ratchet, exit 1, whatever the tree or the base hold.
+func TestStatusOutsideRatchetHasNoLedgerDue(t *testing.T) {
+	for name, cfg := range map[string]func(*testing.T) string{"advisory": advisoryConfig, "hard": goodConfig} {
+		t.Run(name, func(t *testing.T) {
+			_, mod := statusRepo(t, cfg(t), "", "")
+			code, got, _ := statusIn(t, mod)
+			wantStatus(t, code, got, 1, "not-ratchet")
+			if got.Tree || got.Base != nil || got.Build != nil {
+				t.Errorf("tree %v base %v build %v: nothing was read for a mode with no ledger", got.Tree, got.Base, got.Build)
+			}
+		})
+	}
+	t.Run("hard with a ledger in the tree", func(t *testing.T) {
+		_, mod := statusRepo(t, goodConfig(t), "", statusLedger())
+		code, got, _ := statusIn(t, mod)
+		wantStatus(t, code, got, 1, "not-ratchet")
+	})
 }
 
 // --base names the diff base: the ratchet's --base of `gate`. A ref the repository
