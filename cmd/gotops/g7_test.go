@@ -301,6 +301,7 @@ func updateIn(t *testing.T, dir, body string, args ...string) (code int, stdout,
 	old := fetchLock
 	t.Cleanup(func() { fetchLock = old })
 	fetchLock = func(string) ([]byte, error) { return []byte(body), nil }
+	t.Setenv("CI", "") // --update is refused under CI; the gate's own test run sets it
 	t.Chdir(dir)
 	var o, e bytes.Buffer
 	code = runLock(cli.NewEnv(&o, &e), append([]string{"--update"}, args...))
