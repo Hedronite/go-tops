@@ -4,10 +4,11 @@
 # 16 required laws stay `not-evaluated`, and a required law that is not
 # evaluated fails the gate (§3.3), so a `hard` run would be red by construction.
 # The kit's CI holds the gates that exist to the bar anyway: it fails unless
-# hygiene, tests and coverage are `pass`, CRAP and mutation are `skip` with an
+# hygiene, tests, coverage and CRAP are `pass`, mutation is `skip` with an
 # unexpired `expires`, and every required law is `not-evaluated` for `no_reader`
-# (.github/workflows/ci.yml, "assert the report"). At M5 this file switches to
-# `enforce: hard` and the `advisory` key goes.
+# (.github/workflows/ci.yml, "assert the report"). CRAP has been on since M2: every
+# function meets the cap, but the two exemptions at the end of this file. At M5
+# this file switches to `enforce: hard` and the `advisory` key goes.
 protocol: "0.4.3"
 version: "0.1.0"
 module: github.com/Hedronite/go-tops
@@ -37,9 +38,6 @@ gates:
     statements_floor: 70
     exclude_generated: true
   crap:
-    enabled: false
-    reason: native CRAP and the complexity count land at M2
-    expires: "2027-01-31"
     cap: 10
   mutation:
     enabled: false
@@ -50,8 +48,8 @@ layers:
   fuzz:  { targets: ["./internal/config:FuzzLoad"] }
   bench: { enabled: false, reason: "binary-cli does not gate benchmarks" }
 
-# Exemptions (GO_TOPS.md section 6.8). Every kit function meets the CRAP cap at
-# M2 except these two, which the ratchet hook changes now and the laws layer
+# Exemptions (GO_TOPS.md section 6.8). Every kit function meets the CRAP cap
+# except these two, which the ratchet hook changed at M2 and the laws layer
 # reworks at M5. Each expires on or before the M5 date, the expiry of the
 # advisory record above.
 exemptions:
