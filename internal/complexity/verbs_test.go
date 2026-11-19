@@ -37,7 +37,16 @@ func TestWrapOperands(t *testing.T) {
 		{"%[1]v %w", []int{1}},
 		{"%[3]*.[2]*[1]w", []int{0}},
 		{"%.[1]*w", []int{1}},
+		// An operand index may be up to maxOperand, and no further.
+		{"%[65536]w", []int{65535}},
+		{"%[65536]*w", []int{65536}},
 		// Formats that cannot be read.
+		{"%[65537]w", nil},
+		{"%[9223372036854775807]w", nil},
+		{"%[9223372036854775807]*.*w", nil},
+		{"%[99999999999999999999]w", nil},
+		{"%[65536]*.*w", nil},
+		{"%[1]*.[65537]*w", nil},
 		{"%", nil},
 		{"100%", nil},
 		{"%w %", nil},
