@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 // The drop-in judges the gate the way ruling C9 defines passing at M2: until the
@@ -107,11 +108,14 @@ type gateDoc struct {
 	outcome           string   // summary.outcome; "" derives it from failed
 	ran               int      // layer_counts.ran; 0 means every layer in range
 	sameBuild         bool     // a ratchet skip on the ledger's own build
+	offUntil          string   // expires of a skipped mutation layer; "" a future day, "-" none
+	survived          int      // survived_unexplained of a mutation layer that passed
+	noCounts          bool     // a mutation layer that passed without its details
 }
 
 func (g gateDoc) json(t *testing.T) string {
 	t.Helper()
-	layers := []map[string]string{}
+	layers := []map[string]any{}
 	for _, id := range []string{"hygiene", "tests", "coverage", "crap", "mutation", "allocs"} {
 		out := "pass"
 		if id == "mutation" || id == "allocs" {
@@ -120,7 +124,11 @@ func (g gateDoc) json(t *testing.T) string {
 		if o, ok := g.layers[id]; ok {
 			out = o
 		}
-		layers = append(layers, map[string]string{"id": id, "outcome": out})
+		layer := map[string]any{"id": id, "outcome": out}
+		if id == "mutation" {
+			g.mutationFields(layer)
+		}
+		layers = append(layers, layer)
 	}
 	outcome := g.outcome
 	if outcome == "" {
@@ -152,6 +160,25 @@ func (g gateDoc) json(t *testing.T) string {
 		t.Fatal(err)
 	}
 	return string(b)
+}
+
+// mutationFields adds what the mutation layer carries for its outcome (GO_TOPS.md
+// section 12.3): the date of an off switch, or the counts of a run.
+func (g gateDoc) mutationFields(layer map[string]any) {
+	switch layer["outcome"] {
+	case "skip":
+		if g.offUntil != "-" {
+			until := g.offUntil
+			if until == "" {
+				until = "2099-01-01"
+			}
+			layer["expires"] = until
+		}
+	case "pass":
+		if !g.noCounts {
+			layer["details"] = map[string]any{"mutants": 3, "killed": 3 - g.survived, "survived_explained": 0, "survived_unexplained": g.survived}
+		}
+	}
 }
 
 // reportedExit is the summary exit_code of the report (GO_TOPS.md section 12.3): 1
@@ -263,6 +290,21 @@ func judgeCases() []judgeCase {
 		{"a skip on another build", "macos", "0", clean.with(func(g *gateDoc) { g.ratchet = "skip" }), false},
 		{"a skip on the ledger's own build", "macos", "0", clean.with(func(g *gateDoc) { g.ratchet = "skip"; g.sameBuild = true }), true},
 		{"C9 with a skip on the ledger's own build", "macos", "1", c9().with(func(g *gateDoc) { g.ratchet = "skip"; g.sameBuild = true }), true},
+		// the mutation layer (section 6.4): pass or vacuous, and off only until a day
+		{"mutation pass with no unexplained survivor", "ubuntu", "1", c9().with(func(g *gateDoc) { g.layers = map[string]string{"mutation": "pass"} }), false},
+		{"mutation vacuous", "ubuntu", "1", c9().with(func(g *gateDoc) { g.layers = map[string]string{"mutation": "vacuous"} }), false},
+		{"mutation vacuous at exit 0", "macos", "0", clean.with(func(g *gateDoc) { g.layers = map[string]string{"mutation": "vacuous"} }), false},
+		{"vacuous on another layer", "ubuntu", "1", c9().with(func(g *gateDoc) { g.layers = map[string]string{"crap": "vacuous"} }), true},
+		{"mutation pass that counts an unexplained survivor", "ubuntu", "1", c9().with(func(g *gateDoc) { g.layers = map[string]string{"mutation": "pass"}; g.survived = 1 }), true},
+		{"mutation pass without its counts", "ubuntu", "1", c9().with(func(g *gateDoc) { g.layers = map[string]string{"mutation": "pass"}; g.noCounts = true }), true},
+		{"mutation failed on a survivor", "ubuntu", "1", c9().with(func(g *gateDoc) {
+			g.layers = map[string]string{"mutation": "fail"}
+			g.failed = []string{"mutation", "laws"}
+		}), true},
+		{"mutation off with no date", "ubuntu", "1", c9().with(func(g *gateDoc) { g.offUntil = "-" }), true},
+		{"mutation off past its date", "ubuntu", "1", c9().with(func(g *gateDoc) { g.offUntil = "2000-01-01" }), true},
+		{"mutation off until today", "macos", "1", c9().with(func(g *gateDoc) { g.offUntil = time.Now().UTC().Format(time.DateOnly) }), true},
+		{"mutation off until a word", "ubuntu", "1", c9().with(func(g *gateDoc) { g.offUntil = "never" }), true},
 		// any other exit code fails directly, whatever the report says
 		{"exit 2", "ubuntu", "2", c9(), true},
 		{"exit 3", "macos", "3", clean, true},

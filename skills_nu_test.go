@@ -321,6 +321,67 @@ var gateCases = []gateCase{
 	{"exit 3", nil, "3", nil, false, "exited 3"},
 	{"exit 4", nil, "4", nil, false, "exited 4"},
 	{"exit 64", nil, "64", nil, false, "exited 64"},
+	// the mutation layer (GO_TOPS.md section 6.4)
+	{"an unexplained survivor", both(setMutation("fail", survivorDetails(1)), failedItems("mutation", "laws")), "1", nil, false, survivorRowKey},
+	{"mutation fail with no history", both(setMutation("fail", map[string]any{"error": "no merge base: check out with fetch-depth: 0"}), failedItems("mutation", "laws")), "1", nil, false, "fetch-depth: 0"},
+	{"mutation vacuous", setMutation("vacuous", survivorDetails(0)), "1", nil, true, ""},
+	{"mutation pass", setMutation("pass", survivorDetails(0)), "1", nil, true, ""},
+	{"mutation pass that counts an unexplained survivor", setMutation("pass", survivorDetails(1)), "1", nil, false, "unexplained survivor"},
+	{"mutation off until a passed day", func(r report) { r.layer("mutation")["expires"] = "2001-01-01" }, "1", nil, false, "after today"},
+	{"vacuous on another layer", setLayer("coverage", "vacuous"), "1", nil, false, "coverage"},
+}
+
+var survivorRowKey = "internal/x/x.go:Limit:CONDITIONALS_BOUNDARY:" + strings.Repeat("a", 64)
+
+// survivorDetails are the details of a mutation layer with n unexplained
+// survivors of the one key, beside one the ledger explains.
+func survivorDetails(n int) map[string]any {
+	rows := []any{map[string]any{"key": "internal/x/x.go:Old:ARITHMETIC_BASE:" + strings.Repeat("b", 64), "line": 3, "status": "LIVED", "explained": "ledger"}}
+	for range n {
+		rows = append(rows, map[string]any{"key": survivorRowKey, "line": 7, "status": "NOT COVERED", "explained": nil})
+	}
+	return map[string]any{
+		"mutants": 4 + n, "killed": 3, "survived_explained": 1, "survived_unexplained": n, "max": 0,
+		"timed_out": 0, "timed_out_keys": []any{}, "dropped": 2, "exempt": []any{}, "survivors": rows,
+	}
+}
+
+// setMutation turns the fixture's switched-off mutation layer into one that ran.
+func setMutation(outcome string, details map[string]any) func(report) {
+	return func(r report) {
+		layer := r.layer("mutation")
+		delete(layer, "reason")
+		delete(layer, "expires")
+		layer["outcome"], layer["details"] = outcome, details
+	}
+}
+
+// The skill reports the mutation counts and each unexplained survivor, and lists
+// a vacuous layer without counting it as a failure.
+func TestGateSkillReportsTheMutationLayer(t *testing.T) {
+	judge := func(t *testing.T, change func(report), exit string) envelope {
+		t.Helper()
+		f := newFake(t)
+		r := loadReport(t)
+		change(r)
+		f.set("FAKE_REPORT="+f.file(t, "report.json", r.bytes(t)), "FAKE_EXIT="+exit)
+		return runSkill(t, "go-tops-gate", f.dir, f.env, "--gotops", f.argv)
+	}
+	failed := judge(t, both(setMutation("fail", survivorDetails(1)), failedItems("mutation", "laws")), "1")
+	m := asObj(failed.Data["mutation"])
+	for key, want := range map[string]float64{"mutants": 5, "killed": 3, "survived_explained": 1, "survived_unexplained": 1, "dropped": 2} {
+		if m[key] != want {
+			t.Errorf("data.mutation.%s = %v, want %v", key, m[key], want)
+		}
+	}
+	rows := asList(m["unexplained"])
+	if len(rows) != 1 || asStr(asObj(rows[0])["key"]) != survivorRowKey || asStr(asObj(rows[0])["status"]) != "NOT COVERED" || asObj(rows[0])["line"] != float64(7) {
+		t.Errorf("data.mutation.unexplained = %v, want the one unexplained row", rows)
+	}
+	vacuous := judge(t, setMutation("vacuous", survivorDetails(0)), "1")
+	if m = asObj(vacuous.Data["mutation"]); !vacuous.OK || asStr(m["outcome"]) != "vacuous" || len(asList(m["unexplained"])) != 0 {
+		t.Errorf("a vacuous layer is listed and is not a failure: ok %v, %v", vacuous.OK, m)
+	}
 }
 
 func TestGateSkillJudgesTheReportUnderC9(t *testing.T) {

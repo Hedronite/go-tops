@@ -9,9 +9,6 @@ const (
 	toolchain = "go1.27.4"
 	// protocolFloorMinor is the minor release of the language floor (§2).
 	protocolFloorMinor = 26
-
-	// The date on which the layer that lands later stops being off (§3.3).
-	expiresM4 = "2027-03-01"
 )
 
 // platforms are the os/arch pairs the lock pins, in the order the lock lists them.
@@ -48,6 +45,7 @@ type moduleTool struct {
 }
 
 var moduleTools = []moduleTool{
+	{"github.com/go-gremlins/gremlins/cmd/gremlins", "github.com/go-gremlins/gremlins", "v0.6.0"},
 	{"github.com/google/go-licenses/v2", "github.com/google/go-licenses/v2", "v2.0.1"},
 	{"golang.org/x/vuln/cmd/govulncheck", "golang.org/x/vuln", "v1.9.0"},
 	{"gotest.tools/gotestsum", "gotest.tools/gotestsum", "v1.13.0"},

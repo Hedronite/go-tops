@@ -2,6 +2,7 @@ package initcmd
 
 import (
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -131,8 +132,10 @@ func TestWorkflowUploadsHiddenReportFilesButNotTheBinaries(t *testing.T) {
 		t.Fatalf("the upload path is not text: %v", up.With["path"])
 	}
 	lines := strings.Fields(path)
-	if len(lines) != 2 || lines[0] != ".go-tops/" || lines[1] != "!.go-tops/bin/" {
-		t.Errorf("the artifact is .go-tops/ without the downloaded binaries, got %q", path)
+	// The ledger travels only in go-tops-baseline, the artifact the first-ledger
+	// message names, so no leg artifact holds a second copy of it.
+	if want := []string{".go-tops/", "!.go-tops/bin/", "!.go-tops/baseline.json"}; !slices.Equal(lines, want) {
+		t.Errorf("the artifact is .go-tops/ without the downloaded binaries and the ledger, got %q", path)
 	}
 	for _, c := range []struct {
 		event, leg string
