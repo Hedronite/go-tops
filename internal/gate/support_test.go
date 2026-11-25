@@ -69,8 +69,10 @@ func details(id string) map[string]any {
 		return map[string]any{"cap": 10.0, "violations": []any{}}
 	case "mutation":
 		return map[string]any{
+			"base": "origin/main", "base_sha": strings.Repeat("0", 40),
 			"mutants": 0, "killed": 0, "survived_explained": 0, "survived_unexplained": 0, "max": 0,
-			"timed_out": 0, "timed_out_keys": []any{}, "dropped": 0, "exempt": []any{},
+			"timed_out": 0, "timed_out_keys": []any{}, "dropped": 0, "not_measured": 0, "exempt": []any{},
+			"survivors": []any{},
 		}
 	}
 	return nil
