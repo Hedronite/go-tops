@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"os/exec"
@@ -213,6 +214,11 @@ func TestStatusCannotTellFailsClosed(t *testing.T) {
 	})
 	t.Run("the base ref is unknown", func(t *testing.T) {
 		_, mod := statusRepo(t, ratchetConfig(t), "", "")
+		old := runBuild
+		t.Cleanup(func() { runBuild = old })
+		runBuild = func(context.Context, string) (baseline.Build, error) {
+			return baseline.Build{GOOS: "linux", GOARCH: "amd64", CGOEnabled: true}, nil
+		}
 		code, got, _ := statusIn(t, mod, "--base", "no-such-ref")
 		wantStatus(t, code, got, 2, "error")
 		if !strings.Contains(got.Reason, "no-such-ref") {
@@ -230,6 +236,11 @@ func TestStatusCannotTellFailsClosed(t *testing.T) {
 	})
 	t.Run("the configuration is missing", func(t *testing.T) {
 		_, mod := statusRepo(t, ratchetConfig(t), "", "")
+		old := runBuild
+		t.Cleanup(func() { runBuild = old })
+		runBuild = func(context.Context, string) (baseline.Build, error) {
+			return baseline.Build{GOOS: "linux", GOARCH: "amd64", CGOEnabled: true}, nil
+		}
 		if err := os.Remove(filepath.Join(mod, "go-tops.yaml")); err != nil {
 			t.Fatal(err)
 		}
@@ -266,6 +277,11 @@ func TestStatusOutsideRatchetHasNoLedgerDue(t *testing.T) {
 // has gives the same answer as the default does.
 func TestStatusReadsTheBaseItIsGiven(t *testing.T) {
 	_, mod := statusRepo(t, ratchetConfig(t), "", "")
+	old := runBuild
+	t.Cleanup(func() { runBuild = old })
+	runBuild = func(context.Context, string) (baseline.Build, error) {
+		return baseline.Build{GOOS: "linux", GOARCH: "amd64", CGOEnabled: true}, nil
+	}
 	code, got, _ := statusIn(t, mod, "--base", "main")
 	wantStatus(t, code, got, 0, "first-ledger-due")
 	if got.BaseRef != "main" {
@@ -275,6 +291,11 @@ func TestStatusReadsTheBaseItIsGiven(t *testing.T) {
 
 func TestStatusIsOneModeWithItsOwnFlag(t *testing.T) {
 	_, mod := statusRepo(t, ratchetConfig(t), "", "")
+	old := runBuild
+	t.Cleanup(func() { runBuild = old })
+	runBuild = func(context.Context, string) (baseline.Build, error) {
+		return baseline.Build{GOOS: "linux", GOARCH: "amd64", CGOEnabled: true}, nil
+	}
 	for _, args := range [][]string{
 		{"--status", "--init"},
 		{"--status", "--accept-regression", "--reason", "x y z", "--owner", "me"},
@@ -286,5 +307,21 @@ func TestStatusIsOneModeWithItsOwnFlag(t *testing.T) {
 		if code != 2 || stdout != "" || !strings.Contains(stderr, "usage:") {
 			t.Errorf("%v: exit %d, stdout %q, stderr %q; want a usage error", args, code, stdout, stderr)
 		}
+	}
+}
+
+func TestStatusSerializesEmptyTagsAsArray(t *testing.T) {
+	_, mod := statusRepo(t, ratchetConfig(t), "", "")
+	old := runBuild
+	t.Cleanup(func() { runBuild = old })
+	runBuild = func(context.Context, string) (baseline.Build, error) {
+		return baseline.Build{GOOS: "linux", GOARCH: "amd64", CGOEnabled: true}, nil
+	}
+	code, stdout, stderr := baselineIn(t, mod, "--status")
+	if code != 0 || stderr != "" {
+		t.Fatalf("exit %d, stderr %q", code, stderr)
+	}
+	if !strings.Contains(stdout, `"tags":[]`) || strings.Contains(stdout, `"tags":null`) {
+		t.Fatalf("stdout %q: want \"tags\":[] and never \"tags\":null", stdout)
 	}
 }

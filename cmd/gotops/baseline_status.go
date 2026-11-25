@@ -97,6 +97,9 @@ func dueOrDeleted(ctx context.Context, dir string, line statusLine) (statusLine,
 	if err != nil {
 		return cannotTell(line, "read the build: "+err.Error())
 	}
+	if build.Tags == nil {
+		build.Tags = []string{}
+	}
 	line.State, line.Build = "first-ledger-due", &build
 	return line, statusDue
 }
