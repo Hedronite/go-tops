@@ -511,6 +511,8 @@ func TestLayerRealEngineF2LineDirectivesFailClosed(t *testing.T) {
 	}{
 		{name: "same_file_line1", directive: "//line fx.go:1\n"},
 		{name: "other_file_line40", directive: "//line other.go:40\n"},
+		{name: "with_col_line1", directive: "//line fx.go:1:1\n"},
+		{name: "identity_line5_col1", directive: "//line fx.go:5:1\n"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			dir := setupGitModule(t, map[string]string{
@@ -527,4 +529,19 @@ func TestLayerRealEngineF2LineDirectivesFailClosed(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("inline_line_directive_with_col", func(t *testing.T) {
+		dir := setupGitModule(t, map[string]string{
+			"go.mod":     "module example.com/inline\n\ngo 1.26\n",
+			"fx.go":      "package fx\nfunc Zero() int { return 0 }\n",
+			"fx_test.go": "package fx\nimport \"testing\"\nfunc TestZero(t *testing.T) { _ = Zero() }\n",
+		})
+		writeFiles(t, dir, map[string]string{
+			"fx.go": "package fx\nfunc Zero() int { return 0 }\nfunc Add(a, b int) int { return /*line fx.go:1:1*/ a + b }\n",
+		})
+		res := Layer{}.Run(context.Background(), testEnv(t, dir, bin))
+		if res.Outcome != gate.Fail {
+			t.Fatalf("expected Fail closed on inline /*line*/ directive, got %s: %s", res.Outcome, res.Reason)
+		}
+	})
 }

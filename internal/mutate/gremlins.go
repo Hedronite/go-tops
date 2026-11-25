@@ -237,6 +237,9 @@ func RunGremlinsBatches(ctx context.Context, env gate.Env, diff DiffResult, buil
 	if _, err := env.Tools.Resolve(ctx, "gremlins"); err != nil {
 		return nil, err
 	}
+	if err := checkNoLineDirectives(env.Dir, diff.InBuildFiles); err != nil {
+		return nil, err
+	}
 	normal, integ, err := PartitionByIntegration(ctx, env.Exec, env.Dir, diff.InBuildFiles)
 	if err != nil {
 		return nil, err
@@ -523,8 +526,11 @@ func EvaluateBatches(cfg gate.MutationConfig, exemptions []report.Exemption, rep
 	if err != nil {
 		return Evaluation{}, err
 	}
+	if err := checkNoLineDirectives(dir, diff.InBuildFiles); err != nil {
+		return Evaluation{}, err
+	}
 	ev := newEvaluation(diff, notMeasured, exRes.Problems)
-	reported := map[string]map[int]int{}
+	reported := map[string]map[MutantLoc]bool{}
 	for _, raw := range reports {
 		ev, err = applyReport(ev, raw, diff, idx, exRes, ledger, dir, reported)
 		if err != nil {
@@ -583,7 +589,22 @@ func newEvaluation(diff DiffResult, notMeasured int, problems []exempt.Problem) 
 	}
 }
 
-func applyReport(ev Evaluation, data []byte, diff DiffResult, idx *ModuleIndex, exRes exempt.MutationResult, ledger Ledger, dir string, reported map[string]map[int]int) (Evaluation, error) {
+func checkNoLineDirectives(dir string, inBuild map[string]map[int]bool) error {
+	for _, rel := range sortedMapKeys(inBuild) {
+		src, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(rel)))
+		if err != nil {
+			return fmt.Errorf("read in-build file %s: %w", rel, err)
+		}
+		if ln, text, ok, err := FindLineDirective(src); err != nil {
+			return err
+		} else if ok {
+			return fmt.Errorf("line directive not allowed in %s:%d (%s)", rel, ln, text)
+		}
+	}
+	return nil
+}
+
+func applyReport(ev Evaluation, data []byte, diff DiffResult, idx *ModuleIndex, exRes exempt.MutationResult, ledger Ledger, dir string, reported map[string]map[MutantLoc]bool) (Evaluation, error) {
 	rep, err := ParseGremlinsOutput(data)
 	if err != nil {
 		return Evaluation{}, err
@@ -609,7 +630,7 @@ func validateReportedFileExists(dir, rel string) error {
 	return nil
 }
 
-func evalFile(ev *Evaluation, gf GremlinsFile, diff DiffResult, idx *ModuleIndex, exRes exempt.MutationResult, ledger Ledger, dir string, cache map[string][]byte, reported map[string]map[int]int) error {
+func evalFile(ev *Evaluation, gf GremlinsFile, diff DiffResult, idx *ModuleIndex, exRes exempt.MutationResult, ledger Ledger, dir string, cache map[string][]byte, reported map[string]map[MutantLoc]bool) error {
 	rel := filepath.ToSlash(gf.Filename)
 	lines := diff.InBuildFiles[rel]
 	if len(lines) == 0 {
@@ -619,7 +640,9 @@ func evalFile(ev *Evaluation, gf GremlinsFile, diff DiffResult, idx *ModuleIndex
 	if err != nil {
 		return err
 	}
-	countReportedLines(rel, lines, gf.Mutations, reported)
+	if err := recordReportedLocs(rel, lines, gf.Mutations, reported); err != nil {
+		return err
+	}
 	for _, m := range gf.Mutations {
 		if !lines[m.Line] {
 			continue
@@ -631,18 +654,23 @@ func evalFile(ev *Evaluation, gf GremlinsFile, diff DiffResult, idx *ModuleIndex
 	return nil
 }
 
-func countReportedLines(rel string, lines map[int]bool, muts []GremlinsMutation, reported map[string]map[int]int) {
+func recordReportedLocs(rel string, lines map[int]bool, muts []GremlinsMutation, reported map[string]map[MutantLoc]bool) error {
 	if reported[rel] == nil {
-		reported[rel] = map[int]int{}
+		reported[rel] = map[MutantLoc]bool{}
 	}
 	for _, m := range muts {
+		loc := MutantLoc{Line: m.Line, Col: m.Column, Mutator: m.Type}
+		if reported[rel][loc] {
+			return fmt.Errorf("duplicate mutant %s:%d:%d (%s) in gremlins output", rel, m.Line, m.Column, m.Type)
+		}
 		if lines[m.Line] {
-			reported[rel][m.Line]++
+			reported[rel][loc] = true
 		}
 	}
+	return nil
 }
 
-func verifyExpectedMutants(dir string, inBuild map[string]map[int]bool, reported map[string]map[int]int) error {
+func verifyExpectedMutants(dir string, inBuild map[string]map[int]bool, reported map[string]map[MutantLoc]bool) error {
 	enabled := EnabledMutators()
 	for _, rel := range sortedMapKeys(inBuild) {
 		src, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(rel)))
@@ -656,24 +684,23 @@ func verifyExpectedMutants(dir string, inBuild map[string]map[int]bool, reported
 	return nil
 }
 
-func checkFileExpectedMutants(rel string, src []byte, lines map[int]bool, repLines map[int]int, enabled map[string]bool) error {
-	expByLine, err := CountMutantsByLine(src, lines, enabled)
+func checkFileExpectedMutants(rel string, src []byte, lines map[int]bool, repLocs map[MutantLoc]bool, enabled map[string]bool) error {
+	expLocs, err := ExpectedMutantKeys(src, lines, enabled)
 	if err != nil {
 		return err
 	}
-	var missing []int
-	var repTotal, expTotal int
-	for _, ln := range sortedIntKeys(expByLine) {
-		exp, rep := expByLine[ln], repLines[ln]
-		expTotal += exp
-		repTotal += rep
-		if rep < exp {
-			missing = append(missing, ln)
+	missingLines := map[int]bool{}
+	var matched int
+	for loc := range expLocs {
+		if repLocs[loc] {
+			matched++
+		} else {
+			missingLines[loc.Line] = true
 		}
 	}
-	if len(missing) > 0 {
+	if len(missingLines) > 0 {
 		return fmt.Errorf("engine omitted expected mutants in %s on line(s) %v (reported %d < expected %d)",
-			rel, missing, repTotal, expTotal)
+			rel, sortedBoolKeys(missingLines), matched, len(expLocs))
 	}
 	return nil
 }
@@ -687,7 +714,7 @@ func sortedMapKeys(m map[string]map[int]bool) []string {
 	return out
 }
 
-func sortedIntKeys(m map[int]int) []int {
+func sortedBoolKeys(m map[int]bool) []int {
 	out := make([]int, 0, len(m))
 	for k := range m {
 		out = append(out, k)

@@ -99,7 +99,7 @@ func check(a, b int) bool {
 	if a < b {
 		return a == b
 	}
-	return b > 0
+	return b > 0 + 0
 }
 
 func skippedExempt(x int) bool {
@@ -150,11 +150,12 @@ var varExempt = func(x int) bool {
     "file_name": "p.go",
     "mutations": [
       {"type": "CONDITIONALS_BOUNDARY", "status": "SKIPPED", "line": 99, "column": 1},
-      {"type": "CONDITIONALS_BOUNDARY", "status": "KILLED", "line": 4, "column": 7},
+      {"type": "CONDITIONALS_NEGATION", "status": "KILLED", "line": 4, "column": 7},
       {"type": "CONDITIONALS_BOUNDARY", "status": "LIVED", "line": 4, "column": 7},
       {"type": "CONDITIONALS_NEGATION", "status": "TIMED OUT", "line": 5, "column": 12},
       {"type": "CONDITIONALS_BOUNDARY", "status": "NOT COVERED", "line": 7, "column": 11},
-      {"type": "ARITHMETIC_BASE", "status": "NOT VIABLE", "line": 7, "column": 11},
+      {"type": "CONDITIONALS_NEGATION", "status": "KILLED", "line": 7, "column": 11},
+      {"type": "ARITHMETIC_BASE", "status": "NOT VIABLE", "line": 7, "column": 15},
       {"type": "CONDITIONALS_BOUNDARY", "status": "LIVED", "line": 11, "column": 11},
       {"type": "CONDITIONALS_NEGATION", "status": "KILLED", "line": 11, "column": 11},
       {"type": "CONDITIONALS_BOUNDARY", "status": "NOT COVERED", "line": 15, "column": 11},
@@ -201,6 +202,12 @@ var varExempt = func(x int) bool {
 	if _, err := Evaluate(gate.MutationConfig{}, nil, []byte(`{"files":[{"file_name":"missing.go","mutations":[]}]}`), false, diff, dir, today); err == nil {
 		t.Fatal("expected fail on non-existent file_name")
 	}
+
+	// O1: duplicate (line, col, mutator) in gremlins output swapping LIVED for KILLED must fail closed.
+	swappedJSON := strings.Replace(jsonOut, `{"type": "CONDITIONALS_BOUNDARY", "status": "LIVED", "line": 4, "column": 7}`, `{"type": "CONDITIONALS_NEGATION", "status": "KILLED", "line": 4, "column": 7}`, 1)
+	if _, err := Evaluate(gate.MutationConfig{}, exemptions, []byte(swappedJSON), false, diff, dir, today); err == nil {
+		t.Fatal("expected fail on duplicate (line, col, mutator) mutant")
+	}
 	if err := os.MkdirAll(filepath.Join(dir, ".go-tops"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -234,8 +241,8 @@ var varExempt = func(x int) bool {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Line 99 filtered out; NOT VIABLE dropped outside Mutants (O1) => 10 counted mutants (4 killed + 1 timed + 1 ledger + 2 exempt + 2 unexplained):
-	if ev.Mutants != 10 || ev.Killed != 5 || ev.TimedOut != 1 || ev.Dropped != 1 ||
+	// Line 99 filtered out; NOT VIABLE dropped outside Mutants (O1) => 11 counted mutants (5 killed + 1 timed + 1 ledger + 2 exempt + 2 unexplained):
+	if ev.Mutants != 11 || ev.Killed != 6 || ev.TimedOut != 1 || ev.Dropped != 1 ||
 		ev.SurvivedExplained != 1 || ev.SurvivedUnexplained != 2 || ev.NotMeasured != 2 || len(ev.ExemptionProblems) != 0 {
 		t.Fatalf("unexpected counts: %+v", ev)
 	}

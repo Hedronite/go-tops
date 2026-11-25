@@ -178,3 +178,30 @@ func f(p *int, a, b int) bool {
 		t.Fatalf("CountMutantsOnLines = %d, want 11", got)
 	}
 }
+
+func TestPhysicalPositionsIgnoreLineDirectivesAndDetectThem(t *testing.T) {
+	srcCol := "package p\n//line fx.go:1:1\nfunc Add(a, b int) int { return a + b }\n"
+	counts, err := CountMutantsByLine([]byte(srcCol), map[int]bool{3: true}, EnabledMutators())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if counts[3] != 1 {
+		t.Fatalf("expected 1 mutant on raw physical line 3 despite //line, got %+v", counts)
+	}
+	ln, txt, found, err := FindLineDirective([]byte(srcCol))
+	if err != nil || !found || ln != 2 || txt != "//line fx.go:1:1" {
+		t.Fatalf("FindLineDirective = (%d, %q, %v, %v)", ln, txt, found, err)
+	}
+
+	srcInline := "package p\nfunc Add(a, b int) int { return /*line fx.go:1:1*/ a + b }\n"
+	ln2, _, found2, err := FindLineDirective([]byte(srcInline))
+	if err != nil || !found2 || ln2 != 2 {
+		t.Fatalf("inline FindLineDirective = (%d, %v, %v)", ln2, found2, err)
+	}
+
+	// Indented //line comment is not a Go line directive.
+	srcIndented := "package p\nfunc F() {\n\t//line not a directive\n}\n"
+	if _, _, found3, err := FindLineDirective([]byte(srcIndented)); err != nil || found3 {
+		t.Fatalf("indented comment falsely matched line directive: found=%v err=%v", found3, err)
+	}
+}

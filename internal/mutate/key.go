@@ -171,7 +171,7 @@ func scanMutatedLine(src []byte, line, col int, reps map[token.Token]token.Token
 
 func nextLineToken(fset *token.FileSet, s *scanner.Scanner, line, col int, reps map[token.Token]token.Token, mutatorName string) (string, bool, bool, error) {
 	tpos, tok, lit := s.Scan()
-	pos := fset.Position(tpos)
+	pos := fset.PositionFor(tpos, false)
 	if tok == token.EOF || pos.Line > line {
 		return "", false, true, nil
 	}
@@ -200,9 +200,44 @@ func renderToken(tok token.Token, lit string, replace bool, reps map[token.Token
 	return tok.String(), false, nil
 }
 
-// CountMutantsByLine counts expected gremlins AST mutants per line for selected lines.
-func CountMutantsByLine(src []byte, lines map[int]bool, enabled map[string]bool) (map[int]int, error) {
-	out := map[int]int{}
+// MutantLoc identifies one AST mutant site by physical line, column, and mutator.
+type MutantLoc struct {
+	Line    int
+	Col     int
+	Mutator string
+}
+
+// FindLineDirective reports the raw physical line and text of any Go //line or /*line directive in src.
+func FindLineDirective(src []byte) (int, string, bool, error) {
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, "", src, parser.ParseComments)
+	if err != nil {
+		return 0, "", false, err
+	}
+	for _, cg := range file.Comments {
+		for _, c := range cg.List {
+			if ln, ok := lineDirectiveComment(fset, c); ok {
+				return ln, c.Text, true, nil
+			}
+		}
+	}
+	return 0, "", false, nil
+}
+
+func lineDirectiveComment(fset *token.FileSet, c *ast.Comment) (int, bool) {
+	pos := fset.PositionFor(c.Slash, false)
+	if strings.HasPrefix(c.Text, "/*line ") {
+		return pos.Line, true
+	}
+	if pos.Column == 1 && strings.HasPrefix(c.Text, "//line ") {
+		return pos.Line, true
+	}
+	return 0, false
+}
+
+// ExpectedMutantKeys returns the exact set of physical (Line, Col, Mutator) mutants AST rules emit on selected lines.
+func ExpectedMutantKeys(src []byte, lines map[int]bool, enabled map[string]bool) (map[MutantLoc]bool, error) {
+	out := map[MutantLoc]bool{}
 	if len(lines) == 0 {
 		return out, nil
 	}
@@ -212,17 +247,38 @@ func CountMutantsByLine(src []byte, lines map[int]bool, enabled map[string]bool)
 		return nil, err
 	}
 	ast.Inspect(file, func(n ast.Node) bool {
-		tok, pos, ok := mutableASTToken(n)
-		if !ok {
-			return true
-		}
-		if ln := fset.Position(pos).Line; lines[ln] {
-			if cnt := countEnabledMutants(tok, enabled); cnt > 0 {
-				out[ln] += cnt
-			}
-		}
+		collectNodeMutants(fset, n, lines, enabled, out)
 		return true
 	})
+	return out, nil
+}
+
+func collectNodeMutants(fset *token.FileSet, n ast.Node, lines map[int]bool, enabled map[string]bool, out map[MutantLoc]bool) {
+	tok, tokPos, ok := mutableASTToken(n)
+	if !ok {
+		return
+	}
+	pos := fset.PositionFor(tokPos, false)
+	if !lines[pos.Line] {
+		return
+	}
+	for _, mt := range tokenMutantTypes[tok] {
+		if enabled[mt] {
+			out[MutantLoc{Line: pos.Line, Col: pos.Column, Mutator: mt}] = true
+		}
+	}
+}
+
+// CountMutantsByLine counts expected gremlins AST mutants per physical line for selected lines.
+func CountMutantsByLine(src []byte, lines map[int]bool, enabled map[string]bool) (map[int]int, error) {
+	locs, err := ExpectedMutantKeys(src, lines, enabled)
+	if err != nil {
+		return nil, err
+	}
+	out := map[int]int{}
+	for loc := range locs {
+		out[loc.Line]++
+	}
 	return out, nil
 }
 
@@ -254,16 +310,6 @@ func mutableASTToken(n ast.Node) (token.Token, token.Pos, bool) {
 	default:
 		return token.ILLEGAL, token.NoPos, false
 	}
-}
-
-func countEnabledMutants(tok token.Token, enabled map[string]bool) int {
-	total := 0
-	for _, mt := range tokenMutantTypes[tok] {
-		if enabled[mt] {
-			total++
-		}
-	}
-	return total
 }
 
 type declSpan struct {
@@ -419,7 +465,7 @@ func addPkgSymbol(funcs *[]exempt.Func, rel, name string) {
 }
 
 func makeSpan(fset *token.FileSet, name string, startPos, endPos token.Pos) declSpan {
-	s, e := fset.Position(startPos), fset.Position(endPos)
+	s, e := fset.PositionFor(startPos, false), fset.PositionFor(endPos, false)
 	return declSpan{name: name, startLine: s.Line, startCol: s.Column, endLine: e.Line, endCol: e.Column}
 }
 
