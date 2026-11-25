@@ -4,7 +4,7 @@ This repository adopts [Go-TOPS](https://github.com/Hedronite/go-tops). `go-tops
 authority: a line here that disagrees with it is wrong.
 
 1. **Adoption.** Go-TOPS, the Go testing and quality protocol.
-2. **Protocol version.** 0.4.4.
+2. **Protocol version.** 0.4.5.
 3. **`gotops` and pinned tools.** `gotops` v0.1.0 (pinned in tools/go.mod). Pins: toolchain go1.27.4 and golangci-lint 2.15.0 (go-tops.lock); go-licenses v2.0.1, gotestsum v1.13.0, govulncheck v1.9.0 (tools/go.mod).
 4. **Class and thresholds.** `library-core`: statement coverage floor 85%, CRAP cap 8, `enforce: ratchet`.
 5. **Run the gate locally.** `just gate`, or `go tool -modfile=tools/go.mod gotops gate`. The kit's lint pass reads `.go-tops/golangci.yml`, not this repository's own `.golangci.yml`. The gate finds `golangci-lint` in `.go-tops/bin/` or on `PATH`: a repository whose tests walk the module tree keeps the binary outside it, on `PATH`, because a walk reads the files of `.go-tops/bin/` too. Install the pinned release into a directory outside the checkout, as the workflow's install step does.

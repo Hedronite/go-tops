@@ -1,5 +1,5 @@
 {
-  "protocol": "0.4.4",
+  "protocol": "0.4.5",
   "tool_version": "0.0.0",
   "module": "github.com/acme/myapp",
   "class": "binary-cli",
@@ -49,8 +49,15 @@
     },
     {
       "id": "mutation", "tier": 1, "outcome": "pass",
-      "details": { "mutants": 63, "killed": 60, "survived_explained": 3, "survived_unexplained": 0,
-                   "max": 0, "timed_out": 0, "timed_out_keys": [], "dropped": 0, "exempt": [] }
+      "details": { "base": "origin/main", "base_sha": "9f3c1e0b7a5d4c2e8f1a6b3d0c9e5a7f2b4d6c81",
+                   "mutants": 63, "killed": 62, "survived_explained": 1, "survived_unexplained": 0,
+                   "max": 0, "timed_out": 0, "timed_out_keys": [], "dropped": 0, "not_measured": 0, "exempt": [],
+                   "survivors": [
+                     { "key": "internal/limits/parse.go:parseLimit:CONDITIONALS_BOUNDARY:b82c563b57fab7510b79dc60e5d89aae1f2b19038fbe00067391e54320495e58",
+                       "file": "internal/limits/parse.go", "function": "parseLimit", "mutator": "CONDITIONALS_BOUNDARY",
+                       "line_hash": "b82c563b57fab7510b79dc60e5d89aae1f2b19038fbe00067391e54320495e58",
+                       "line": 41, "status": "LIVED", "explained": "ledger" }
+                   ] }
     }
   ],
   "laws": {

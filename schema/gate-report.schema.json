@@ -22,7 +22,7 @@
   ],
   "properties": {
     "protocol": {
-      "const": "0.4.4"
+      "const": "0.4.5"
     },
     "tool_version": {
       "type": "string",
@@ -982,6 +982,8 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
+        "base",
+        "base_sha",
         "mutants",
         "killed",
         "survived_explained",
@@ -990,9 +992,21 @@
         "timed_out",
         "timed_out_keys",
         "dropped",
-        "exempt"
+        "not_measured",
+        "exempt",
+        "survivors"
       ],
       "properties": {
+        "base": {
+          "description": "The base the run used: --base, gates.mutation.base or origin/main (section 6.4).",
+          "type": "string",
+          "minLength": 1
+        },
+        "base_sha": {
+          "description": "The commit of the diff base, the merge base of the base and HEAD.",
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$"
+        },
         "mutants": {
           "type": "integer",
           "minimum": 0
@@ -1017,11 +1031,10 @@
           "minimum": 0
         },
         "timed_out_keys": {
-          "description": "The survivor keys of the mutants that timed out, listed so a reviewer sees which hung (§6.4).",
+          "description": "One survivor key per mutant that timed out, listed so a reviewer sees which hung (section 6.4).",
           "type": "array",
           "items": {
-            "type": "string",
-            "minLength": 1
+            "$ref": "#/$defs/survivorKey"
           }
         },
         "dropped": {
@@ -1029,13 +1042,81 @@
           "type": "integer",
           "minimum": 0
         },
+        "not_measured": {
+          "description": "Mutants in files the run's build does not compile; counted nowhere else.",
+          "type": "integer",
+          "minimum": 0
+        },
         "exempt": {
-          "description": "The survivor keys of mutants in code under a mutation exemption; they are not counted as survivors (§6.8).",
+          "description": "One survivor key per surviving mutant under a mutation exemption (section 6.8).",
           "type": "array",
           "items": {
-            "type": "string",
-            "minLength": 1
+            "$ref": "#/$defs/survivorKey"
           }
+        },
+        "survivors": {
+          "description": "One row per surviving mutant, the exempt ones included.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/survivorRow"
+          }
+        }
+      }
+    },
+    "survivorKey": {
+      "description": "A survivor key, <file>:<function>:<mutator>:<line_hash> (section 6.4).",
+      "type": "string",
+      "pattern": "^.+:[^:]+:[A-Z][A-Z_]*:[0-9a-f]{64}$"
+    },
+    "survivorRow": {
+      "description": "One surviving mutant (section 6.4).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "key",
+        "file",
+        "function",
+        "mutator",
+        "line_hash",
+        "line",
+        "status",
+        "explained"
+      ],
+      "properties": {
+        "key": {
+          "$ref": "#/$defs/survivorKey"
+        },
+        "file": {
+          "$ref": "core.schema.json#/$defs/slashPath"
+        },
+        "function": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mutator": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Z_]*$"
+        },
+        "line_hash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "line": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "status": {
+          "enum": [
+            "LIVED",
+            "NOT COVERED"
+          ]
+        },
+        "explained": {
+          "description": "ledger when an entry has the key, null when none does; an exempt survivor's key is in exempt.",
+          "enum": [
+            "ledger",
+            null
+          ]
         }
       }
     },

@@ -1,6 +1,6 @@
 # profiles/binary-cli.yaml
 class: binary-cli
-protocol: "0.4.4"
+protocol: "0.4.5"
 gates:
   coverage: { statements_floor: 70 }
   crap: { cap: 10, complexity: { err_guard_discount: true, wrap_functions: [] } }

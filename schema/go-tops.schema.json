@@ -10,7 +10,7 @@
   ],
   "properties": {
     "protocol": {
-      "const": "0.4.4"
+      "const": "0.4.5"
     },
     "version": {
       "type": "string",
@@ -229,10 +229,7 @@
             },
             "engine": {
               "enum": [
-                "gremlins",
-                "go-mutesting",
-                "mutest",
-                "overlay"
+                "gremlins"
               ]
             },
             "base": {
