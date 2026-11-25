@@ -168,7 +168,7 @@ func TestToGateConfigByClass(t *testing.T) {
 		if c.Layers["bench"].Enabled != w.benchOn {
 			t.Errorf("%s: bench enabled %v, want %v", class, c.Layers["bench"].Enabled, w.benchOn)
 		}
-		if !c.Layers["crap"].Enabled || !c.Layers["mutation"].Enabled || !c.Coverage.ExcludeGenerated || c.Hygiene.LintConfig == "" || len(c.Hygiene.Licenses) == 0 {
+		if !c.Layers["crap"].Enabled || !c.Layers["mutation"].Enabled || c.Mutation.Engine != "gremlins" || c.Mutation.Ledger == "" || !c.Coverage.ExcludeGenerated || c.Hygiene.LintConfig == "" || len(c.Hygiene.Licenses) == 0 {
 			t.Errorf("%s: %+v", class, c)
 		}
 	}

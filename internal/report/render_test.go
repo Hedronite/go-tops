@@ -250,3 +250,54 @@ func TestRenderTextRatchetLineOrder(t *testing.T) {
 		t.Errorf("order: layer %d ratchet %d exemption %d laws %d\n%s", layer, ratchet, exemption, laws, got)
 	}
 }
+
+func TestRenderTextShowsMutationDetails(t *testing.T) {
+	r := Report{
+		Module: "example.com/m", Class: "binary-cli", Enforce: "hard", MaxTier: 1,
+		Layers: []Layer{{
+			ID: "mutation", Tier: 1, Outcome: "fail", Reason: "1 unexplained survivor(s)",
+			Details: map[string]any{
+				"base": "origin/main", "base_sha": "0123456789abcdef",
+				"mutants": 3, "killed": 2, "timed_out": 1,
+				"timed_out_keys":     []string{"a.go:F:CONDITIONALS_NEGATION:1111"},
+				"survived_explained": 0, "survived_unexplained": 1,
+				"dropped": 0, "exempt": []string{}, "not_measured": 2,
+				"survivors": []map[string]any{{
+					"key": "a.go:F:CONDITIONALS_BOUNDARY:2222", "file": "a.go",
+					"function": "F", "mutator": "CONDITIONALS_BOUNDARY",
+					"line_hash": "2222", "line": 12, "status": "LIVED", "explained": nil,
+				}},
+			},
+		}},
+		Summary: Summary{Outcome: "fail", ExitCode: 1, Failed: []string{"mutation"}, Enforced: true},
+	}
+	text := RenderText(r)
+	for _, want := range []string{
+		"base origin/main (0123456), mutants 3: 2 killed (1 timed out)",
+		"2 not measured",
+		"timed out: a.go:F:CONDITIONALS_NEGATION:1111",
+		"survivor LIVED a.go:12 a.go:F:CONDITIONALS_BOUNDARY:2222 (unexplained)",
+	} {
+		if !strings.Contains(text, want) {
+			t.Errorf("text lacks %q:\n%s", want, text)
+		}
+	}
+	r2 := Report{
+		Module: "example.com/m", Class: "binary-cli", Enforce: "hard", MaxTier: 1,
+		Layers: []Layer{{
+			ID: "mutation", Tier: 1, Outcome: "pass", Reason: "0 unexplained",
+			Details: map[string]any{
+				"mutants": 1, "killed": 0, "survived_explained": 1, "survived_unexplained": 0,
+				"survivors": []any{map[string]any{
+					"key": "a.go:G:ARITHMETIC_BASE:3333", "file": "a.go", "line": 4, "status": "NOT COVERED", "explained": "ledger",
+				}},
+			},
+		}},
+	}
+	if got := RenderText(r2); !strings.Contains(got, "explained:ledger") {
+		t.Errorf("missing ledger survivor annotation:\n%s", got)
+	}
+	if len(detailMaps(nil)) != 0 {
+		t.Fatal("expected empty detailMaps for nil map")
+	}
+}

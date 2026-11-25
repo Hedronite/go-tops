@@ -137,6 +137,9 @@ func RenderText(r Report) string {
 			fmt.Fprintf(&b, "  error: %s", msg)
 		}
 		b.WriteByte('\n')
+		if l.ID == "mutation" {
+			renderMutationDetails(&b, l.Details)
+		}
 	}
 	renderRatchet(&b, r.Ratchet)
 	for _, e := range r.Exemptions {
@@ -204,4 +207,89 @@ func renderVerdict(b *strings.Builder, s Summary) {
 		return
 	}
 	fmt.Fprintf(b, "%s (exit %d)\n", verdict, s.ExitCode)
+}
+
+func renderMutationDetails(b *strings.Builder, d map[string]any) {
+	if _, ok := d["mutants"]; !ok {
+		return
+	}
+	base := detailString(d, "base")
+	sha := detailString(d, "base_sha")
+	if len(sha) > 7 {
+		sha = sha[:7]
+	}
+	fmt.Fprintf(b, "    base %s (%s), mutants %d: %d killed (%d timed out), %d explained, %d unexplained, %d exempt, %d dropped, %d not measured\n",
+		base, sha, detailInt(d, "mutants"), detailInt(d, "killed"), detailInt(d, "timed_out"),
+		detailInt(d, "survived_explained"), detailInt(d, "survived_unexplained"),
+		len(detailStrings(d, "exempt")), detailInt(d, "dropped"), detailInt(d, "not_measured"))
+	if keys := detailStrings(d, "timed_out_keys"); len(keys) > 0 {
+		fmt.Fprintf(b, "    timed out: %s\n", strings.Join(keys, ", "))
+	}
+	if keys := detailStrings(d, "exempt"); len(keys) > 0 {
+		fmt.Fprintf(b, "    exempt: %s\n", strings.Join(keys, ", "))
+	}
+	renderMutationSurvivors(b, d["survivors"])
+}
+
+func renderMutationSurvivors(b *strings.Builder, raw any) {
+	for _, row := range detailMaps(raw) {
+		exp := "unexplained"
+		if v := detailString(row, "explained"); v != "" {
+			exp = "explained:" + v
+		}
+		fmt.Fprintf(b, "    survivor %s %s:%d %s (%s)\n",
+			detailString(row, "status"), detailString(row, "file"), detailInt(row, "line"), detailString(row, "key"), exp)
+	}
+}
+
+func detailString(m map[string]any, k string) string {
+	s, ok := m[k].(string)
+	if !ok {
+		return ""
+	}
+	return s
+}
+
+func detailInt(m map[string]any, k string) int {
+	switch v := m[k].(type) {
+	case int:
+		return v
+	case int64:
+		return int(v)
+	case float64:
+		return int(v)
+	}
+	return 0
+}
+
+func detailStrings(m map[string]any, k string) []string {
+	switch v := m[k].(type) {
+	case []string:
+		return v
+	case []any:
+		out := make([]string, 0, len(v))
+		for _, item := range v {
+			if s, ok := item.(string); ok {
+				out = append(out, s)
+			}
+		}
+		return out
+	}
+	return nil
+}
+
+func detailMaps(raw any) []map[string]any {
+	switch v := raw.(type) {
+	case []map[string]any:
+		return v
+	case []any:
+		out := make([]map[string]any, 0, len(v))
+		for _, item := range v {
+			if m, ok := item.(map[string]any); ok {
+				out = append(out, m)
+			}
+		}
+		return out
+	}
+	return nil
 }

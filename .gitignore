@@ -12,6 +12,8 @@ junit.xml
 
 # Gate report is written on every run; the ledgers in .go-tops/ are tracked
 /.go-tops/report.json
+/.go-tops/mutation.diff
+/.go-tops/gremlins.json
 
 # Saved lint output of each run, and the law pass's generated config; the ledgers
 # (baseline.json, survivors.yaml, acks.yaml) are tracked

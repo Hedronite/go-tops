@@ -19,10 +19,11 @@ import (
 )
 
 const (
-	layerCrap   = "crap"
-	shapeTable  = "table-switch"
-	dateLayout  = time.DateOnly
-	globAnyDirs = "**"
+	layerCrap     = "crap"
+	layerMutation = "mutation"
+	shapeTable    = "table-switch"
+	dateLayout    = time.DateOnly
+	globAnyDirs   = "**"
 )
 
 // Func is one production function, as the CRAP layer scores it.
@@ -212,4 +213,64 @@ func covers(e report.Exemption, funcs []Func) ([]int, string) {
 		return nil, fmt.Sprintf("exemption symbol %q (layer crap) names no function in the files %q matches", e.Symbol, e.Path)
 	}
 	return idx, ""
+}
+
+// MutationResult is what in-force `mutation` exemptions do to the production
+// files and functions of a module (§6.8).
+type MutationResult struct {
+	Live     []report.Exemption
+	Problems []Problem
+}
+
+// Covers reports whether an in-force `mutation` exemption covers file and
+// function (Name or Type.Name).
+func (r MutationResult) Covers(file, function string) bool {
+	for _, e := range r.Live {
+		if !Glob(e.Path, file) {
+			continue
+		}
+		if e.Symbol == "" || e.Symbol == function {
+			return true
+		}
+	}
+	return false
+}
+
+// MatchMutation validates in-force `mutation` exemptions against every
+// production file and function of the module (whatever its build tags, §6.8).
+func MatchMutation(entries []report.Exemption, files []string, funcs []Func, today time.Time) MutationResult {
+	var r MutationResult
+	for _, e := range InForce(entries, today) {
+		if e.Layer != layerMutation {
+			continue
+		}
+		if why := mutationProblem(e, files, funcs); why != "" {
+			r.Problems = append(r.Problems, Problem{Entry: e, Message: why})
+			continue
+		}
+		r.Live = append(r.Live, e)
+	}
+	return r
+}
+
+func mutationProblem(e report.Exemption, files []string, funcs []Func) string {
+	matched := false
+	for _, file := range files {
+		if Glob(e.Path, file) {
+			matched = true
+			break
+		}
+	}
+	if !matched {
+		return fmt.Sprintf("exemption path %q (layer mutation) matches no production file", e.Path)
+	}
+	if e.Symbol == "" {
+		return ""
+	}
+	for _, f := range funcs {
+		if Glob(e.Path, f.File) && f.symbol() == e.Symbol {
+			return ""
+		}
+	}
+	return fmt.Sprintf("exemption symbol %q (layer mutation) names no function in the files %q matches", e.Symbol, e.Path)
 }

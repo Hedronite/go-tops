@@ -346,3 +346,37 @@ func TestLines(t *testing.T) {
 		t.Error("lines for no exemptions")
 	}
 }
+
+func TestMatchMutationAndCovers(t *testing.T) {
+	now := time.Date(2026, 11, 25, 0, 0, 0, 0, time.UTC)
+	files := []string{"internal/legacy/codec.go", "internal/app/run.go"}
+	funcs := []Func{
+		{File: "internal/legacy/codec.go", Recv: "Codec", Name: "Decode"},
+		{File: "internal/app/run.go", Name: "Helper"},
+	}
+	entries := []report.Exemption{
+		{Path: "internal/legacy/**", Layer: "mutation", Reason: "frozen vendor port", Owner: "protocol", Expires: "2027-01-31"},
+		{Path: "internal/app/run.go", Symbol: "Helper", Layer: "mutation", Reason: "equivalent boundary", Owner: "platform", Expires: "2027-01-31"},
+		{Path: "internal/app/run.go", Symbol: "Helper", Layer: "mutation", Reason: "expired entry ignored", Owner: "platform", Expires: "2026-11-25"},
+		{Path: "internal/app/run.go", Symbol: "Helper", Layer: "crap", Reason: "crap only entry", Owner: "platform", Expires: "2027-01-31"},
+	}
+	res := MatchMutation(entries, files, funcs, now)
+	if len(res.Problems) != 0 || len(res.Live) != 2 {
+		t.Fatalf("res = %+v, want 2 live and 0 problems", res)
+	}
+	if !res.Covers("internal/legacy/codec.go", "Codec.Decode") || !res.Covers("internal/app/run.go", "Helper") {
+		t.Errorf("expected Covers to match legacy file and Helper symbol")
+	}
+	if res.Covers("internal/app/run.go", "Other") {
+		t.Errorf("unexpected Covers match for Other symbol")
+	}
+
+	bad := []report.Exemption{
+		{Path: "internal/missing/**", Layer: "mutation", Reason: "missing path test", Owner: "p", Expires: "2027-01-31"},
+		{Path: "internal/app/run.go", Symbol: "Missing", Layer: "mutation", Reason: "missing sym test", Owner: "p", Expires: "2027-01-31"},
+	}
+	badRes := MatchMutation(bad, files, funcs, now)
+	if len(badRes.Problems) != 2 {
+		t.Fatalf("problems = %+v, want 2", badRes.Problems)
+	}
+}
