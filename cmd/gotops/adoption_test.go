@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"go.yaml.in/yaml/v3"
 )
@@ -241,6 +242,38 @@ func adAssertJudged(t *testing.T, dir string, code int, when string) {
 	}
 }
 
+// adExplain accepts every unexplained survivor of the last report, as an owner of
+// a legacy repository would, and commits the ledger. The fixture's tests are weak
+// on purpose, so the lines a change touches hold survivors (§6.4): the mutation
+// layer must fail on them first.
+func adExplain(t *testing.T, dir string, rep map[string]any) {
+	t.Helper()
+	if got := adLayer(t, rep, "mutation"); got != "fail" {
+		t.Fatalf("a change the tests do not pin down must fail the mutation layer, got %s: %v", got, adLayerObject(t, rep, "mutation"))
+	}
+	expires := time.Now().UTC().AddDate(0, 0, 30).Format(time.DateOnly)
+	explained := map[string]bool{}
+	for _, r := range array(t, object(t, adLayerObject(t, rep, "mutation")["details"])["survivors"]) {
+		row := object(t, r)
+		key, ok := row["key"].(string)
+		if !ok {
+			t.Fatalf("a survivor row without a key: %v", row)
+		}
+		// Two rows share a key when their lines read the same.
+		if row["explained"] != nil || explained[key] {
+			continue
+		}
+		explained[key] = true
+		code, stdout, stderr := gotopsEnv(t, dir, nil, "survivors", "explain", key,
+			"--reason", "legacy test gap accepted", "--owner", "legacy-owners", "--expires", expires)
+		if code != 0 {
+			t.Fatalf("survivors explain %s: exit %d\n%s\n%s", key, code, stdout, stderr)
+		}
+	}
+	adGit(t, dir, "add", ".go-tops/survivors.yaml")
+	adGit(t, dir, "commit", "-q", "-m", "explain survivors")
+}
+
 func TestAdoptionOfALegacyRepo(t *testing.T) {
 	if _, err := exec.LookPath("golangci-lint"); err != nil {
 		t.Skip("the pinned golangci-lint is not on PATH")
@@ -321,6 +354,8 @@ func adoptLegacy(t *testing.T, sub string) {
 		t.Fatalf("baseline --accept-regression: exit %d\n%s\n%s", code, stdout, stderr)
 	}
 	adGit(t, repo, "commit", "-q", "-a", "-m", "accept the raise of Heavy")
+	_, rep = adGate(t, dir)
+	adExplain(t, dir, rep)
 	code, rep = adGate(t, dir)
 	adAssertPasses(t, code, rep, "after the raise is recorded")
 	adAssertJudged(t, dir, code, "after the raise is recorded")
@@ -330,6 +365,8 @@ func adoptLegacy(t *testing.T, sub string) {
 	adGit(t, repo, "checkout", "-q", "-b", "lower", "adopt")
 	writeFile(t, dir, "legacy.go", legacy(loopedHeavy)["legacy.go"])
 	adGit(t, repo, "commit", "-q", "-a", "-m", "lower Heavy")
+	_, rep = adGate(t, dir)
+	adExplain(t, dir, rep)
 	code, rep = adGate(t, dir)
 	adAssertPasses(t, code, rep, "after lowering Heavy")
 	adAssertJudged(t, dir, code, "after lowering Heavy")
