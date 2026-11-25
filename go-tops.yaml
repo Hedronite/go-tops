@@ -40,9 +40,7 @@ gates:
   crap:
     cap: 10
   mutation:
-    enabled: false
-    reason: the mutation layer lands at M4
-    expires: "2027-03-01"
+    enabled: true
 
 layers:
   fuzz:  { targets: ["./internal/config:FuzzLoad"] }
