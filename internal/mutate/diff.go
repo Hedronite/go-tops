@@ -132,9 +132,11 @@ func verifyBaseCommit(ctx context.Context, ex gate.Executor, dir, base string) e
 	return nil
 }
 
+var gitDiffStripEnv = []string{"GIT_DIFF_OPTS=", "GIT_EXTERNAL_DIFF="}
+
 func gitDiffEnv() []string {
 	return []string{
-		"GIT_CONFIG_COUNT=7",
+		"GIT_CONFIG_COUNT=9",
 		"GIT_CONFIG_KEY_0=diff.context", "GIT_CONFIG_VALUE_0=0",
 		"GIT_CONFIG_KEY_1=diff.interHunkContext", "GIT_CONFIG_VALUE_1=0",
 		"GIT_CONFIG_KEY_2=diff.mnemonicPrefix", "GIT_CONFIG_VALUE_2=false",
@@ -142,16 +144,18 @@ func gitDiffEnv() []string {
 		"GIT_CONFIG_KEY_4=diff.srcPrefix", "GIT_CONFIG_VALUE_4=a/",
 		"GIT_CONFIG_KEY_5=diff.dstPrefix", "GIT_CONFIG_VALUE_5=b/",
 		"GIT_CONFIG_KEY_6=core.quotePath", "GIT_CONFIG_VALUE_6=false",
+		"GIT_CONFIG_KEY_7=color.ui", "GIT_CONFIG_VALUE_7=never",
+		"GIT_CONFIG_KEY_8=color.diff", "GIT_CONFIG_VALUE_8=never",
 	}
 }
 
 func runGitDiff(ctx context.Context, ex gate.Executor, dir, baseSHA string) (string, error) {
 	argv := []string{
-		"git", "diff", "--no-ext-diff", "--relative",
+		"git", "diff", "--no-color", "--no-ext-diff", "--relative",
 		"--src-prefix=a/", "--dst-prefix=b/", "--unified=0", "--inter-hunk-context=0",
 		"-M", baseSHA, "--", ".",
 	}
-	res, err := ex.Run(ctx, gate.Cmd{Dir: dir, Argv: argv, Env: gitDiffEnv()})
+	res, err := ex.Run(ctx, gate.Cmd{Dir: dir, Argv: argv, Env: gitDiffEnv(), StripEnv: gitDiffStripEnv})
 	if err != nil || res.ExitCode != 0 {
 		return "", fmt.Errorf("git diff against %s failed: %s", baseSHA, strings.TrimSpace(string(res.Stderr)))
 	}
@@ -251,9 +255,10 @@ func parseLineSpan(span string) (int, int, bool) {
 
 func listUntrackedGo(ctx context.Context, ex gate.Executor, dir string) ([]string, error) {
 	res, err := ex.Run(ctx, gate.Cmd{
-		Dir:  dir,
-		Env:  gitDiffEnv(),
-		Argv: []string{"git", "ls-files", "--others", "--exclude-standard", "--", "*.go"},
+		Dir:      dir,
+		Env:      gitDiffEnv(),
+		StripEnv: gitDiffStripEnv,
+		Argv:     []string{"git", "ls-files", "--others", "--exclude-standard", "--", "*.go"},
 	})
 	if err != nil || res.ExitCode != 0 {
 		return nil, fmt.Errorf("list untracked Go files in %s: %s", dir, strings.TrimSpace(string(res.Stderr)))

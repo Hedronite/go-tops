@@ -476,3 +476,55 @@ func TestLayerRealEngineFailsOnUnmutatedCopySymlinkAndSpaceDir(t *testing.T) {
 		t.Fatalf("expected fail in directory with space, got %s: %s", resSpace.Outcome, resSpace.Reason)
 	}
 }
+
+func TestLayerRealEngineF1ColorConfigAndF3DiffOpts(t *testing.T) {
+	bin := gremlinsBinary(t)
+	dir := setupGitModule(t, map[string]string{
+		"go.mod":     "module example.com/f13\n\ngo 1.26\n",
+		"fx.go":      "package fx\nfunc Add(a, b int) int { return a - b }\n",
+		"fx_test.go": "package fx\nimport \"testing\"\nfunc TestAdd(t *testing.T) { if Add(3, 1) != 2 { t.Fatal(\"bad\") } }\n",
+	})
+	writeFiles(t, dir, map[string]string{
+		"fx.go":      "package fx\nfunc Add(a, b int) int { return a + b }\nfunc Label(a string) string { return a + \"!\" }\n",
+		"fx_test.go": "package fx\nimport \"testing\"\nfunc TestAdd(t *testing.T) {\n\tif Add(2, 3) != 5 { t.Fatal(\"bad\") }\n\tif Label(\"hi\") != \"hi!\" { t.Fatal(\"label\") }\n}\n",
+	})
+
+	// F1: color.ui=always and color.diff=always must still pass with killed + NOT VIABLE string concat (zero false failures).
+	gitExec(t, dir, "config", "color.ui", "always")
+	gitExec(t, dir, "config", "color.diff", "always")
+	// F3: GIT_DIFF_OPTS=-u5 must not inject context lines causing strong test to fail.
+	t.Setenv("GIT_DIFF_OPTS", "-u5")
+	res := Layer{}.Run(context.Background(), testEnv(t, dir, bin))
+	if res.Outcome != gate.Pass {
+		t.Fatalf("expected Pass under color.ui/color.diff/GIT_DIFF_OPTS + string concat, got %s: %s", res.Outcome, res.Reason)
+	}
+	if got, ok := res.Details["mutants"].(int); !ok || got != 2 {
+		t.Fatalf("expected 2 mutants (numeric + and string concat +), got %v", res.Details)
+	}
+}
+
+func TestLayerRealEngineF2LineDirectivesFailClosed(t *testing.T) {
+	bin := gremlinsBinary(t)
+	for _, tc := range []struct {
+		name      string
+		directive string
+	}{
+		{name: "same_file_line1", directive: "//line fx.go:1\n"},
+		{name: "other_file_line40", directive: "//line other.go:40\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := setupGitModule(t, map[string]string{
+				"go.mod":     "module example.com/linedir\n\ngo 1.26\n",
+				"fx.go":      "package fx\nfunc Zero() int { return 0 }\n",
+				"fx_test.go": "package fx\nimport \"testing\"\nfunc TestZero(t *testing.T) { _ = Zero() }\n",
+			})
+			writeFiles(t, dir, map[string]string{
+				"fx.go": "package fx\nfunc Zero() int { return 0 }\n" + tc.directive + "func Add(a, b int) int { return a + b }\n",
+			})
+			res := Layer{}.Run(context.Background(), testEnv(t, dir, bin))
+			if res.Outcome != gate.Fail {
+				t.Fatalf("%s: expected Fail closed on //line directive, got %s: %s", tc.name, res.Outcome, res.Reason)
+			}
+		})
+	}
+}

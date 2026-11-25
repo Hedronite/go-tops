@@ -177,6 +177,25 @@ func TestComputeDiffScopeExclusionsAndVacuousCases(t *testing.T) {
 	if !resHostile.InBuildFiles["p.go"][2] || resHostile.InBuildFiles["p.go"][3] {
 		t.Fatalf("hostile git config corrupted InBuildFiles[p.go]: %+v", resHostile.InBuildFiles["p.go"])
 	}
+
+	// F1 & F3: color.ui=always, color.diff=always, and GIT_DIFF_OPTS=-u5 must not corrupt diff.
+	gitRun(t, dir, "config", "color.ui", "always")
+	gitRun(t, dir, "config", "color.diff", "always")
+	t.Setenv("GIT_DIFF_OPTS", "-u5")
+	resColor, err := ComputeDiff(ctx, gate.OS{}, dir, "main", b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !resColor.InBuildFiles["p.go"][2] || resColor.InBuildFiles["p.go"][3] {
+		t.Fatalf("color/GIT_DIFF_OPTS corrupted InBuildFiles[p.go]: %+v", resColor.InBuildFiles["p.go"])
+	}
+	colorDiff, err := os.ReadFile(resColor.DiffPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(colorDiff), "+++ b/p.go") || strings.Contains(string(colorDiff), "\x1b[") {
+		t.Fatalf("color/GIT_DIFF_OPTS leaked into mutation.diff:\n%s", string(colorDiff))
+	}
 }
 
 func TestComputeDiffSubdirectoryModule(t *testing.T) {

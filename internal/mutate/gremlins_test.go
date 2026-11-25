@@ -58,6 +58,13 @@ func TestParseGremlinsOutputAndFailures(t *testing.T) {
 		{name: "empty", raw: "   "},
 		{name: "truncated", raw: `{"go_module": "x", "files": [`},
 		{name: "unknown_status", raw: `{"files": [{"file_name": "a.go", "mutations": [{"type": "ARITHMETIC_BASE", "status": "SURVIVED", "line": 1, "column": 1}]}]}`},
+		{name: "col_zero", raw: `{"files": [{"file_name": "a.go", "mutations": [{"type": "ARITHMETIC_BASE", "status": "SKIPPED", "line": 1, "column": 0}]}]}`},
+		{name: "line_zero", raw: `{"files": [{"file_name": "a.go", "mutations": [{"type": "ARITHMETIC_BASE", "status": "LIVED", "line": 0, "column": 5}]}]}`},
+		{name: "dot_slash_filename", raw: `{"files": [{"file_name": "./fx.go", "mutations": []}]}`},
+		{name: "unclean_inner_dotdot", raw: `{"files": [{"file_name": "a/../fx.go", "mutations": []}]}`},
+		{name: "parent_filename", raw: `{"files": [{"file_name": "../fx.go", "mutations": []}]}`},
+		{name: "abs_filename", raw: `{"files": [{"file_name": "/tmp/fx.go", "mutations": []}]}`},
+		{name: "empty_filename", raw: `{"files": [{"file_name": "", "mutations": []}]}`},
 		{name: "unknown_field", raw: `{"unexpected_extra": 1}`},
 	}
 	for _, tc := range badCases {
@@ -149,8 +156,11 @@ var varExempt = func(x int) bool {
       {"type": "CONDITIONALS_BOUNDARY", "status": "NOT COVERED", "line": 7, "column": 11},
       {"type": "ARITHMETIC_BASE", "status": "NOT VIABLE", "line": 7, "column": 11},
       {"type": "CONDITIONALS_BOUNDARY", "status": "LIVED", "line": 11, "column": 11},
+      {"type": "CONDITIONALS_NEGATION", "status": "KILLED", "line": 11, "column": 11},
       {"type": "CONDITIONALS_BOUNDARY", "status": "NOT COVERED", "line": 15, "column": 11},
+      {"type": "CONDITIONALS_NEGATION", "status": "KILLED", "line": 15, "column": 11},
       {"type": "CONDITIONALS_BOUNDARY", "status": "NOT COVERED", "line": 19, "column": 11},
+      {"type": "CONDITIONALS_NEGATION", "status": "KILLED", "line": 19, "column": 11},
       {"type": "CONDITIONALS_BOUNDARY", "status": "LIVED", "line": 99, "column": 1}
     ]
   }]
@@ -182,6 +192,14 @@ var varExempt = func(x int) bool {
 	evNoFile, err := Evaluate(cfg, exemptions, []byte(jsonOut), false, diff, dir, today)
 	if err != nil || evNoFile.SurvivedExplained != 0 || evNoFile.SurvivedUnexplained != 3 {
 		t.Fatalf("absent ledger with nil DefaultLedger: ev=%+v err=%v", evNoFile, err)
+	}
+
+	// F2: doctored files:[] and missing file_name on disk must fail closed.
+	if _, err := Evaluate(gate.MutationConfig{}, nil, []byte(`{"files":[]}`), false, diff, dir, today); err == nil || !strings.Contains(err.Error(), "omitted expected mutants") {
+		t.Fatalf("expected fail on doctored empty files list, got %v", err)
+	}
+	if _, err := Evaluate(gate.MutationConfig{}, nil, []byte(`{"files":[{"file_name":"missing.go","mutations":[]}]}`), false, diff, dir, today); err == nil {
+		t.Fatal("expected fail on non-existent file_name")
 	}
 	if err := os.MkdirAll(filepath.Join(dir, ".go-tops"), 0o755); err != nil {
 		t.Fatal(err)
@@ -216,8 +234,8 @@ var varExempt = func(x int) bool {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Line 99 filtered out; NOT VIABLE dropped outside Mutants (O1) => 7 counted mutants (1 killed + 1 timed + 1 ledger + 2 exempt + 2 unexplained):
-	if ev.Mutants != 7 || ev.Killed != 2 || ev.TimedOut != 1 || ev.Dropped != 1 ||
+	// Line 99 filtered out; NOT VIABLE dropped outside Mutants (O1) => 10 counted mutants (4 killed + 1 timed + 1 ledger + 2 exempt + 2 unexplained):
+	if ev.Mutants != 10 || ev.Killed != 5 || ev.TimedOut != 1 || ev.Dropped != 1 ||
 		ev.SurvivedExplained != 1 || ev.SurvivedUnexplained != 2 || ev.NotMeasured != 2 || len(ev.ExemptionProblems) != 0 {
 		t.Fatalf("unexpected counts: %+v", ev)
 	}

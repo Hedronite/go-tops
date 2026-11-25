@@ -112,13 +112,43 @@ func ensureEOF(dec *json.Decoder) error {
 
 func validateStatuses(files []GremlinsFile) error {
 	for _, f := range files {
+		if err := validateFilePath(f.Filename); err != nil {
+			return err
+		}
 		for _, m := range f.Mutations {
+			if m.Line <= 0 || m.Column <= 0 {
+				return fmt.Errorf("invalid mutant position %s:%d:%d", f.Filename, m.Line, m.Column)
+			}
 			if !isKnownGremlinsStatus(m.Status) {
 				return fmt.Errorf("unknown mutant status %q at %s:%d:%d", m.Status, f.Filename, m.Line, m.Column)
 			}
 		}
 	}
 	return nil
+}
+
+func validateFilePath(fn string) error {
+	if isInvalidPrefix(fn) || isUncleanModulePath(fn) {
+		return fmt.Errorf("non-canonical file_name %q in gremlins output", fn)
+	}
+	return nil
+}
+
+func isInvalidPrefix(fn string) bool {
+	if fn == "" || filepath.IsAbs(fn) || path.IsAbs(fn) {
+		return true
+	}
+	for _, pre := range []string{"/", "./", "../"} {
+		if strings.HasPrefix(fn, pre) {
+			return true
+		}
+	}
+	return false
+}
+
+func isUncleanModulePath(fn string) bool {
+	cleaned := path.Clean(filepath.ToSlash(fn))
+	return fn != cleaned || cleaned == "." || strings.HasPrefix(cleaned, "../")
 }
 
 func isKnownGremlinsStatus(status string) bool {
@@ -260,7 +290,7 @@ func execGremlins(ctx context.Context, env gate.Env, prefix []string, cfgFile st
 		Dir:      env.Dir,
 		Argv:     argv,
 		Env:      gremlinsEnv(build),
-		StripEnv: []string{"GREMLINS_"},
+		StripEnv: []string{"GREMLINS_", "GIT_DIFF_OPTS=", "GIT_EXTERNAL_DIFF="},
 	})
 	return readGremlinsResult(res, err, outPath)
 }
@@ -359,13 +389,15 @@ func gremlinsEnv(build gobuild.Build) []string {
 	env := []string{
 		"CGO_ENABLED=" + cgo,
 		"GOFLAGS=-count=1",
-		"GIT_CONFIG_COUNT=6",
+		"GIT_CONFIG_COUNT=8",
 		"GIT_CONFIG_KEY_0=diff.context", "GIT_CONFIG_VALUE_0=0",
 		"GIT_CONFIG_KEY_1=diff.interHunkContext", "GIT_CONFIG_VALUE_1=0",
 		"GIT_CONFIG_KEY_2=diff.mnemonicPrefix", "GIT_CONFIG_VALUE_2=false",
 		"GIT_CONFIG_KEY_3=diff.noprefix", "GIT_CONFIG_VALUE_3=false",
 		"GIT_CONFIG_KEY_4=diff.srcPrefix", "GIT_CONFIG_VALUE_4=a/",
 		"GIT_CONFIG_KEY_5=diff.dstPrefix", "GIT_CONFIG_VALUE_5=b/",
+		"GIT_CONFIG_KEY_6=color.ui", "GIT_CONFIG_VALUE_6=never",
+		"GIT_CONFIG_KEY_7=color.diff", "GIT_CONFIG_VALUE_7=never",
 	}
 	if build.GOOS != "" {
 		env = append(env, "GOOS="+build.GOOS)
@@ -492,11 +524,15 @@ func EvaluateBatches(cfg gate.MutationConfig, exemptions []report.Exemption, rep
 		return Evaluation{}, err
 	}
 	ev := newEvaluation(diff, notMeasured, exRes.Problems)
+	reported := map[string]map[int]int{}
 	for _, raw := range reports {
-		ev, err = applyReport(ev, raw, diff, idx, exRes, ledger, dir)
+		ev, err = applyReport(ev, raw, diff, idx, exRes, ledger, dir, reported)
 		if err != nil {
 			return Evaluation{}, err
 		}
+	}
+	if err := verifyExpectedMutants(dir, diff.InBuildFiles, reported); err != nil {
+		return Evaluation{}, err
 	}
 	return ev, nil
 }
@@ -547,14 +583,17 @@ func newEvaluation(diff DiffResult, notMeasured int, problems []exempt.Problem) 
 	}
 }
 
-func applyReport(ev Evaluation, data []byte, diff DiffResult, idx *ModuleIndex, exRes exempt.MutationResult, ledger Ledger, dir string) (Evaluation, error) {
+func applyReport(ev Evaluation, data []byte, diff DiffResult, idx *ModuleIndex, exRes exempt.MutationResult, ledger Ledger, dir string, reported map[string]map[int]int) (Evaluation, error) {
 	rep, err := ParseGremlinsOutput(data)
 	if err != nil {
 		return Evaluation{}, err
 	}
 	cache := map[string][]byte{}
 	for _, gf := range rep.Files {
-		if err := evalFile(&ev, gf, diff, idx, exRes, ledger, dir, cache); err != nil {
+		if err := validateReportedFileExists(dir, gf.Filename); err != nil {
+			return Evaluation{}, err
+		}
+		if err := evalFile(&ev, gf, diff, idx, exRes, ledger, dir, cache, reported); err != nil {
 			return Evaluation{}, err
 		}
 	}
@@ -562,7 +601,15 @@ func applyReport(ev Evaluation, data []byte, diff DiffResult, idx *ModuleIndex, 
 	return ev, nil
 }
 
-func evalFile(ev *Evaluation, gf GremlinsFile, diff DiffResult, idx *ModuleIndex, exRes exempt.MutationResult, ledger Ledger, dir string, cache map[string][]byte) error {
+func validateReportedFileExists(dir, rel string) error {
+	info, err := os.Stat(filepath.Join(dir, filepath.FromSlash(rel)))
+	if err != nil || info.IsDir() {
+		return fmt.Errorf("reported file_name %q does not exist in module", rel)
+	}
+	return nil
+}
+
+func evalFile(ev *Evaluation, gf GremlinsFile, diff DiffResult, idx *ModuleIndex, exRes exempt.MutationResult, ledger Ledger, dir string, cache map[string][]byte, reported map[string]map[int]int) error {
 	rel := filepath.ToSlash(gf.Filename)
 	lines := diff.InBuildFiles[rel]
 	if len(lines) == 0 {
@@ -572,6 +619,7 @@ func evalFile(ev *Evaluation, gf GremlinsFile, diff DiffResult, idx *ModuleIndex
 	if err != nil {
 		return err
 	}
+	countReportedLines(rel, lines, gf.Mutations, reported)
 	for _, m := range gf.Mutations {
 		if !lines[m.Line] {
 			continue
@@ -581,6 +629,71 @@ func evalFile(ev *Evaluation, gf GremlinsFile, diff DiffResult, idx *ModuleIndex
 		}
 	}
 	return nil
+}
+
+func countReportedLines(rel string, lines map[int]bool, muts []GremlinsMutation, reported map[string]map[int]int) {
+	if reported[rel] == nil {
+		reported[rel] = map[int]int{}
+	}
+	for _, m := range muts {
+		if lines[m.Line] {
+			reported[rel][m.Line]++
+		}
+	}
+}
+
+func verifyExpectedMutants(dir string, inBuild map[string]map[int]bool, reported map[string]map[int]int) error {
+	enabled := EnabledMutators()
+	for _, rel := range sortedMapKeys(inBuild) {
+		src, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(rel)))
+		if err != nil {
+			return fmt.Errorf("read in-build file %s: %w", rel, err)
+		}
+		if err := checkFileExpectedMutants(rel, src, inBuild[rel], reported[rel], enabled); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func checkFileExpectedMutants(rel string, src []byte, lines map[int]bool, repLines map[int]int, enabled map[string]bool) error {
+	expByLine, err := CountMutantsByLine(src, lines, enabled)
+	if err != nil {
+		return err
+	}
+	var missing []int
+	var repTotal, expTotal int
+	for _, ln := range sortedIntKeys(expByLine) {
+		exp, rep := expByLine[ln], repLines[ln]
+		expTotal += exp
+		repTotal += rep
+		if rep < exp {
+			missing = append(missing, ln)
+		}
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf("engine omitted expected mutants in %s on line(s) %v (reported %d < expected %d)",
+			rel, missing, repTotal, expTotal)
+	}
+	return nil
+}
+
+func sortedMapKeys(m map[string]map[int]bool) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func sortedIntKeys(m map[int]int) []int {
+	out := make([]int, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Ints(out)
+	return out
 }
 
 func readCachedFile(dir, rel string, cache map[string][]byte) ([]byte, error) {

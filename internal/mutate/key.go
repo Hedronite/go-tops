@@ -200,25 +200,43 @@ func renderToken(tok token.Token, lit string, replace bool, reps map[token.Token
 	return tok.String(), false, nil
 }
 
-// CountMutantsOnLines counts mutants matching gremlins AST rules on selected lines.
-func CountMutantsOnLines(src []byte, lines map[int]bool, enabled map[string]bool) (int, error) {
+// CountMutantsByLine counts expected gremlins AST mutants per line for selected lines.
+func CountMutantsByLine(src []byte, lines map[int]bool, enabled map[string]bool) (map[int]int, error) {
+	out := map[int]int{}
 	if len(lines) == 0 {
-		return 0, nil
+		return out, nil
 	}
 	fset := token.NewFileSet()
 	file, err := parser.ParseFile(fset, "", src, 0)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	count := 0
 	ast.Inspect(file, func(n ast.Node) bool {
 		tok, pos, ok := mutableASTToken(n)
-		if ok && lines[fset.Position(pos).Line] {
-			count += countEnabledMutants(tok, enabled)
+		if !ok {
+			return true
+		}
+		if ln := fset.Position(pos).Line; lines[ln] {
+			if cnt := countEnabledMutants(tok, enabled); cnt > 0 {
+				out[ln] += cnt
+			}
 		}
 		return true
 	})
-	return count, nil
+	return out, nil
+}
+
+// CountMutantsOnLines counts mutants matching gremlins AST rules on selected lines.
+func CountMutantsOnLines(src []byte, lines map[int]bool, enabled map[string]bool) (int, error) {
+	byLine, err := CountMutantsByLine(src, lines, enabled)
+	if err != nil {
+		return 0, err
+	}
+	total := 0
+	for _, c := range byLine {
+		total += c
+	}
+	return total, nil
 }
 
 func mutableASTToken(n ast.Node) (token.Token, token.Pos, bool) {
