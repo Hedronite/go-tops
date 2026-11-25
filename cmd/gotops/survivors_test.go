@@ -7,6 +7,10 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/Hedronite/go-tops/internal/gate"
+	"github.com/Hedronite/go-tops/internal/mutate"
 )
 
 // The cases come from GO_TOPS.md §12.1 and §6.4: list reads only; explain writes
@@ -231,5 +235,65 @@ func TestSurvivorsExpireRemovesOnlyThePassedEntries(t *testing.T) {
 	}
 	if strings.Contains(got, `"Old"`) || !strings.Contains(got, `"Limit"`) {
 		t.Errorf("the ledger keeps the live entry alone:\n%s", got)
+	}
+}
+
+// judged runs the adapter's accounting over one changed line whose two mutants
+// both lived, with the ledger this command wires in.
+func judged(t *testing.T, ledger string, today time.Time) (mutate.Evaluation, error) {
+	t.Helper()
+	dir := t.TempDir()
+	put(t, dir, "go.mod", "module example.com/m\n\ngo 1.26\n")
+	put(t, dir, "x.go", "package m\n\nfunc F(a int) bool { return a > 0 }\n")
+	if ledger != "" {
+		put(t, dir, survivorsRel, ledger)
+	}
+	out := []byte(`{"go_module":"example.com/m","files":[{"file_name":"x.go","mutations":[` +
+		`{"type":"CONDITIONALS_BOUNDARY","status":"LIVED","line":3,"column":31},` +
+		`{"type":"CONDITIONALS_NEGATION","status":"LIVED","line":3,"column":31}]}]}`)
+	diff := mutate.DiffResult{InBuildFiles: map[string]map[int]bool{"x.go": {3: true}}}
+	return mutate.Evaluate(gate.MutationConfig{Ledger: survivorsRel}, nil, out, false, diff, dir, today)
+}
+
+func TestTheGateExplainsASurvivorOnlyByALiveEntryOfItsExactKey(t *testing.T) {
+	today := time.Date(2026, 11, 25, 12, 0, 0, 0, time.UTC)
+	bare, err := judged(t, "", today)
+	if err != nil || bare.SurvivedExplained != 0 || bare.SurvivedUnexplained != 2 {
+		t.Fatalf("no ledger: %+v, %v", bare, err)
+	}
+	var key mutate.SurvivorKey
+	for _, s := range bare.Survivors {
+		if s.Key.Mutator == "CONDITIONALS_BOUNDARY" {
+			key = s.Key
+		}
+	}
+	entry := func(hash, expires string) string {
+		return ledgerOf("  - {file: x.go, function: F, mutator: CONDITIONALS_BOUNDARY, line_hash: \"" + hash +
+			"\", reason: three words here, owner: platform, expires: \"" + expires + "\"}\n")
+	}
+	other := "0" + key.LineHash[1:]
+	if other == key.LineHash {
+		other = "1" + key.LineHash[1:]
+	}
+	for name, tc := range map[string]struct {
+		ledger    string
+		explained int
+	}{
+		"the exact key":          {entry(key.LineHash, farDay), 1},
+		"one character changed":  {entry(other, farDay), 0},
+		"an entry on its day":    {entry(key.LineHash, "2026-11-25"), 0},
+		"an absent survivor too": {entry(key.LineHash, farDay) + strings.TrimPrefix(entry(other, farDay), "survivors:\n"), 1},
+	} {
+		ev, err := judged(t, tc.ledger, today)
+		if err != nil || ev.SurvivedExplained != tc.explained || ev.SurvivedUnexplained != 2-tc.explained {
+			t.Errorf("%s: %d explained, %d unexplained, %v", name, ev.SurvivedExplained, ev.SurvivedUnexplained, err)
+		}
+	}
+}
+
+func TestTheGateFailsOnALedgerItCannotRead(t *testing.T) {
+	_, err := judged(t, "survivors:\n  - {file: x.go}\n", time.Now())
+	if err == nil || !strings.Contains(err.Error(), survivorsRel) {
+		t.Fatalf("err = %v, want one naming %s", err, survivorsRel)
 	}
 }

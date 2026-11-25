@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Hedronite/go-tops/internal/mutate"
 )
 
 // The cases come from GO_TOPS.md §6.4: the entry rules, the full-key match, and
@@ -82,18 +84,18 @@ func load(t *testing.T, text string) Ledger {
 	return l
 }
 
-var exact = Key{File: "internal/limits/parse.go", Function: "parseLimit", Mutator: "CONDITIONALS_BOUNDARY", LineHash: strings.Repeat("a", 64)}
+var exact = mutate.SurvivorKey{File: "internal/limits/parse.go", Function: "parseLimit", Mutator: "CONDITIONALS_BOUNDARY", LineHash: strings.Repeat("a", 64)}
 
 func TestAnExactEntryExplainsItsSurvivorAndNoOther(t *testing.T) {
 	l := load(t, ledgerText(nil))
 	if !l.Explains(exact, today) {
 		t.Fatal("the exact key is not explained")
 	}
-	for name, change := range map[string]func(*Key){
-		"another file":      func(k *Key) { k.File = "internal/limits/parse2.go" },
-		"another function":  func(k *Key) { k.Function = "parseLimits" },
-		"another mutator":   func(k *Key) { k.Mutator = "CONDITIONALS_NEGATION" },
-		"another line hash": func(k *Key) { k.LineHash = strings.Repeat("a", 63) + "b" },
+	for name, change := range map[string]func(*mutate.SurvivorKey){
+		"another file":      func(k *mutate.SurvivorKey) { k.File = "internal/limits/parse2.go" },
+		"another function":  func(k *mutate.SurvivorKey) { k.Function = "parseLimits" },
+		"another mutator":   func(k *mutate.SurvivorKey) { k.Mutator = "CONDITIONALS_NEGATION" },
+		"another line hash": func(k *mutate.SurvivorKey) { k.LineHash = strings.Repeat("a", 63) + "b" },
 	} {
 		k := exact
 		change(&k)

@@ -3,12 +3,14 @@ package survivors
 import (
 	"strings"
 	"testing"
+
+	"github.com/Hedronite/go-tops/internal/mutate"
 )
 
 // The key's one string form is <file>:<function>:<mutator>:<line_hash> (§6.4).
 
 func TestAKeyHasOneStringFormThatReadsBack(t *testing.T) {
-	for _, k := range []Key{
+	for _, k := range []mutate.SurvivorKey{
 		exact,
 		{File: "a:b/c.go", Function: "Server.handle", Mutator: "INVERT_LOGICAL", LineHash: strings.Repeat("0", 64)},
 	} {

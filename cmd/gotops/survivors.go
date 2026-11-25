@@ -16,6 +16,7 @@ import (
 
 	"github.com/Hedronite/go-tops/internal/cli"
 	"github.com/Hedronite/go-tops/internal/config"
+	"github.com/Hedronite/go-tops/internal/mutate"
 	"github.com/Hedronite/go-tops/internal/survivors"
 )
 
@@ -194,10 +195,10 @@ func survivorsExpire(env cli.Env, f ledgerFiles, args []string, today time.Time)
 }
 
 // explainRequest reads the key and the three flags of explain.
-func explainRequest(args []string) (survivors.Key, survivors.Entry, error) {
+func explainRequest(args []string) (mutate.SurvivorKey, survivors.Entry, error) {
 	var e survivors.Entry
 	if len(args) == 0 || strings.HasPrefix(args[0], "-") {
-		return survivors.Key{}, e, errors.New("explain needs a key before its flags")
+		return mutate.SurvivorKey{}, e, errors.New("explain needs a key before its flags")
 	}
 	flags := flag.NewFlagSet("explain", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
@@ -205,14 +206,14 @@ func explainRequest(args []string) (survivors.Key, survivors.Entry, error) {
 	flags.StringVar(&e.Owner, "owner", "", "")
 	flags.StringVar(&e.Expires, "expires", "", "")
 	if err := flags.Parse(args[1:]); err != nil {
-		return survivors.Key{}, e, err
+		return mutate.SurvivorKey{}, e, err
 	}
 	if err := noArgs(flags.Args()); err != nil {
-		return survivors.Key{}, e, err
+		return mutate.SurvivorKey{}, e, err
 	}
 	for name, v := range map[string]string{"--reason": e.Reason, "--owner": e.Owner, "--expires": e.Expires} {
 		if v == "" {
-			return survivors.Key{}, e, fmt.Errorf("explain needs %s", name)
+			return mutate.SurvivorKey{}, e, fmt.Errorf("explain needs %s", name)
 		}
 	}
 	k, err := survivors.ParseKey(args[0])
@@ -252,10 +253,7 @@ func survivorsExplain(env cli.Env, f ledgerFiles, args []string, today time.Time
 // mutationRows is what explain reads of the mutation layer's details (§12.3).
 type mutationRows struct {
 	Survivors []struct {
-		File      string  `json:"file"`
-		Function  string  `json:"function"`
-		Mutator   string  `json:"mutator"`
-		LineHash  string  `json:"line_hash"`
+		mutate.SurvivorKey
 		Explained *string `json:"explained"`
 	} `json:"survivors"`
 	Exempt []string `json:"exempt"`
@@ -263,7 +261,7 @@ type mutationRows struct {
 
 // listedUnexplained refuses a key the last report does not list as an
 // unexplained survivor, and a report that is not of this HEAD.
-func (f ledgerFiles) listedUnexplained(k survivors.Key) error {
+func (f ledgerFiles) listedUnexplained(k mutate.SurvivorKey) error {
 	head, rows, err := f.lastReport()
 	if err != nil {
 		return err
@@ -279,7 +277,7 @@ func (f ledgerFiles) listedUnexplained(k survivors.Key) error {
 		return stop(refusedBy, "a mutation exemption already covers this survivor")
 	}
 	for _, r := range rows.Survivors {
-		if r.Explained == nil && k == (survivors.Key{File: r.File, Function: r.Function, Mutator: r.Mutator, LineHash: r.LineHash}) {
+		if r.Explained == nil && k == r.SurvivorKey {
 			return nil
 		}
 	}

@@ -18,37 +18,25 @@ import (
 	"go.yaml.in/yaml/v3"
 
 	"github.com/Hedronite/go-tops/internal/config"
+	"github.com/Hedronite/go-tops/internal/mutate"
 )
 
-// Key identifies a survivor (§6.4). It holds no line number.
-type Key struct {
-	File     string
-	Function string
-	Mutator  string
-	LineHash string
-}
-
-// String is the key's one text form: <file>:<function>:<mutator>:<line_hash>.
-func (k Key) String() string {
-	return k.File + ":" + k.Function + ":" + k.Mutator + ":" + k.LineHash
-}
-
-// ParseKey reads a key's text form. It splits from the right, because only the
-// file part may hold a colon.
-func ParseKey(s string) (Key, error) {
+// ParseKey reads the text form of the adapter's key, which String writes. It
+// splits from the right, because only the file part may hold a colon.
+func ParseKey(s string) (mutate.SurvivorKey, error) {
 	bad := fmt.Errorf("%q is not a survivor key, <file>:<function>:<mutator>:<line_hash>", s)
 	rest := s
 	var tail [3]string
 	for i := len(tail) - 1; i >= 0; i-- {
 		at := strings.LastIndex(rest, ":")
 		if at < 0 {
-			return Key{}, bad
+			return mutate.SurvivorKey{}, bad
 		}
 		rest, tail[i] = rest[:at], rest[at+1:]
 	}
-	k := Key{File: rest, Function: tail[0], Mutator: tail[1], LineHash: tail[2]}
+	k := mutate.SurvivorKey{File: rest, Function: tail[0], Mutator: tail[1], LineHash: tail[2]}
 	if slices.Contains([]string{k.File, k.Function, k.Mutator, k.LineHash}, "") {
-		return Key{}, bad
+		return mutate.SurvivorKey{}, bad
 	}
 	return k, nil
 }
@@ -65,8 +53,8 @@ type Entry struct {
 }
 
 // Key is the survivor the entry explains.
-func (e Entry) Key() Key {
-	return Key{File: e.File, Function: e.Function, Mutator: e.Mutator, LineHash: e.LineHash}
+func (e Entry) Key() mutate.SurvivorKey {
+	return mutate.SurvivorKey{File: e.File, Function: e.Function, Mutator: e.Mutator, LineHash: e.LineHash}
 }
 
 // Live reports whether the entry's day is after today (UTC). On its day and
@@ -122,12 +110,12 @@ func parse(rel string, data []byte) (Ledger, error) {
 }
 
 // Explains reports whether a live entry has exactly the key.
-func (l Ledger) Explains(k Key, today time.Time) bool {
+func (l Ledger) Explains(k mutate.SurvivorKey, today time.Time) bool {
 	return slices.ContainsFunc(l.Entries, func(e Entry) bool { return e.Key() == k && e.Live(today) })
 }
 
 // Holds reports whether an entry, live or not, has exactly the key.
-func (l Ledger) Holds(k Key) bool {
+func (l Ledger) Holds(k mutate.SurvivorKey) bool {
 	return slices.ContainsFunc(l.Entries, func(e Entry) bool { return e.Key() == k })
 }
 
