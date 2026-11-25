@@ -126,10 +126,15 @@ func (l Ledger) Explains(k Key, today time.Time) bool {
 	return slices.ContainsFunc(l.Entries, func(e Entry) bool { return e.Key() == k && e.Live(today) })
 }
 
+// Holds reports whether an entry, live or not, has exactly the key.
+func (l Ledger) Holds(k Key) bool {
+	return slices.ContainsFunc(l.Entries, func(e Entry) bool { return e.Key() == k })
+}
+
 // Add returns the ledger with the entry. It refuses an entry the gate would
 // refuse and a key the ledger already holds.
 func (l Ledger) Add(e Entry, today time.Time) (Ledger, error) {
-	if slices.ContainsFunc(l.Entries, func(have Entry) bool { return have.Key() == e.Key() }) {
+	if l.Holds(e.Key()) {
 		return l, fmt.Errorf("the ledger already holds this key: %s %s %s", e.File, e.Function, e.Mutator)
 	}
 	data, err := marshal(Ledger{Entries: []Entry{e}})
