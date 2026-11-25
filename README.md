@@ -10,7 +10,7 @@ A written spec, a JSON Schema, per-class profiles, and a thin orchestrator (`got
 <p align="center">
   <a href="https://go.dev"><img alt="Go 1.26 language floor" src="https://img.shields.io/badge/go-1.26-00ADD8?style=flat-square&logo=go&logoColor=white&labelColor=0A0A0A" /></a>
   <a href="https://github.com/Hedronite"><img alt="Hedronite" src="https://img.shields.io/badge/org-Hedronite-08ACF0?style=flat-square&logo=github&logoColor=white&labelColor=0A0A0A" /></a>
-  <a href="GO_TOPS.md"><img alt="Protocol 0.4.4" src="https://img.shields.io/badge/protocol-0.4.4-08ACF0?style=flat-square&labelColor=0A0A0A" /></a>
+  <a href="GO_TOPS.md"><img alt="Protocol 0.4.5" src="https://img.shields.io/badge/protocol-0.4.5-08ACF0?style=flat-square&labelColor=0A0A0A" /></a>
   <a href="LICENSE"><img alt="License: MIT OR Apache-2.0" src="https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-08ACF0?style=flat-square&labelColor=0A0A0A" /></a>
   <a href="https://github.com/Hedronite/go-tops/actions/workflows/ci.yml"><img alt="CI workflow: ci" src="https://img.shields.io/github/actions/workflow/status/Hedronite/go-tops/ci.yml?branch=main&style=flat-square&label=ci&labelColor=0A0A0A&color=08ACF0" /></a>
   <a href="https://github.com/Hedronite/go-tops/actions/workflows/docs.yml"><img alt="Docs workflow" src="https://img.shields.io/github/actions/workflow/status/Hedronite/go-tops/docs.yml?branch=main&style=flat-square&label=docs&labelColor=0A0A0A&color=08ACF0" /></a>
@@ -43,7 +43,7 @@ The package is unreleased (`0.0.0-dev`). There is no git tag and no module versi
 
 | Plane | Pin | Where |
 | --- | --- | --- |
-| Protocol | 0.4.4 | [`GO_TOPS.md`](GO_TOPS.md), [`go-tops.yaml`](go-tops.yaml), [`go-tops.lock`](go-tops.lock), and the schema `protocol` constants |
+| Protocol | 0.4.5 | [`GO_TOPS.md`](GO_TOPS.md), [`go-tops.yaml`](go-tops.yaml), [`go-tops.lock`](go-tops.lock), and the schema `protocol` constants |
 | Package | 0.0.0-dev | `gotops version`. No tag exists. A release will set this at link time |
 | Language floor | Go 1.26 | [`go.mod`](go.mod) and `toolchain.go_floor` in [`go-tops.yaml`](go-tops.yaml) |
 | Toolchain | go1.27.4 | [`go-tops.lock`](go-tops.lock) |
@@ -67,7 +67,7 @@ To adopt it in another module, `gotops init --class` accepts `binary-cli`, `bina
 
 | | `go test` and linters alone | This kit |
 | --- | --- | --- |
-| Contract | Docs and tests you arrange | Protocol 0.4.4 and JSON Schemas for the config, the gate report, and the tool lock |
+| Contract | Docs and tests you arrange | Protocol 0.4.5 and JSON Schemas for the config, the gate report, and the tool lock |
 | Class floors | None | Three launch profiles |
 | Orchestrator | You sequence the commands | `gotops` `version`, `check`, `init`, `gate`, `report`, `lock`, `doctor`, `baseline` |
 | CRAP | A separate tool, if any | Native CRAP on every production function: complexity, guard-neutral coverage, exemptions |
@@ -91,7 +91,7 @@ Write the oracle from the contract, then the smallest production code that meets
 
 | Path | Role |
 | --- | --- |
-| [`GO_TOPS.md`](GO_TOPS.md) | The protocol, 0.4.4 |
+| [`GO_TOPS.md`](GO_TOPS.md) | The protocol, 0.4.5 |
 | [`schema/`](schema/) | JSON Schemas: configuration, gate report, tool lock, and shared core definitions |
 | [`cmd/gotops/`](cmd/gotops/), [`internal/`](internal/) | The `gotops` CLI: one file per command, and the layers, CRAP, ratchet, runner, lock, report and `init` packages behind them |
 | [`go-tops.yaml`](go-tops.yaml), [`go-tops.lock`](go-tops.lock), [`tools/`](tools/) | This repository gating itself: configuration, tool pins, and module tools |
@@ -105,7 +105,7 @@ Write the oracle from the contract, then the smallest production code that meets
 
 ## Status
 
-Draft. Protocol **0.4.4**. Package **0.0.0-dev**. No tag.
+Draft. Protocol **0.4.5**. Package **0.0.0-dev**. No tag.
 
 Milestones M1, M2 and M3 are done. The `gotops` CLI judges hygiene, tests, coverage and native CRAP at tier 1, and under `ratchet` it holds a legacy repo to a debt ledger. This repository gates itself with `go run ./cmd/gotops gate` and runs `advisory` until the laws layer lands. [`vigil`](https://github.com/Hedronite/vigil), the first adopter, runs the gate beside its own CI under `ratchet`. Mutation and the laws layer do not run yet, and nothing here is released.
 

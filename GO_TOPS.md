@@ -1,6 +1,6 @@
 # Go-TOPS: Go Testing and Optimization Protocol Suite
 
-**Spec status:** 0.4.4 (0.4.3 was the previous revision) · **Date:** 2026-11-19 · **Owner:** Hedronite
+**Spec status:** 0.4.5 (0.4.4 was the previous revision) · **Date:** 2026-11-25 · **Owner:** Hedronite
 **Modeled on:** [Rust-TOPS](https://github.com/Hedronite/rust-tops) (protocol 1.2.0 on `main`; the latest release tag, `cargo-tops` v0.3.0, carries protocol 1.1.0, and `main` holds package 0.4.0, untagged; read 2026-11-17)
 
 > **Changes from 0.2.0 to 0.3.0:** One CRAP cap per class; authorship marking removed (§5.2, §6.2).
@@ -75,7 +75,7 @@ Plus a practice layer (human and agent working rules, §13 and `AGENTS.md`) and 
 
 | Item | Value |
 |---|---|
-| Protocol version | **0.4.4** (0.4.3 was the previous revision; 1.0.0 is set by the criterion in §19) |
+| Protocol version | **0.4.5** (0.4.4 was the previous revision; 1.0.0 is set by the criterion in §19) |
 | Package version | 0.0.0 (unreleased) |
 | Language floor ("MSRV" analogue) | Go **1.26**, the oldest Go release still supported upstream (a policy: the floor moves when upstream drops support). The floor is a language version, compared in Go's own order (`go/version.Lang`), so a `go 1.26` and a `go 1.26.4` directive both meet it. Matrix tests floor and current (current: Go 1.27) |
 | Toolchain pin | The exact Go release in `go-tops.lock` (§10). `GOTOOLCHAIN=local` makes the `go` command use the toolchain it ships with and never reads the `toolchain` line, so a runner with another patch release would pass silently: the gate therefore checks that `go env GOVERSION` equals the pin (§3.1, G-33). A `toolchain` line is optional: with or without one, and whether the `go` line names a language version (`go 1.26`) or a patch release (`go 1.27.4`), the pin is the release in the lock |
@@ -84,7 +84,7 @@ Plus a practice layer (human and agent working rules, §13 and `AGENTS.md`) and 
 | `gotestsum` | **v1.13.0** (exact; optional display wrapper over `go test -json`) |
 | `govulncheck` | **v1.9.0** (exact) |
 | `benchstat` | `golang.org/x/perf/cmd/benchstat` has no release tags, so a pseudo-version is pinned in `tools/go.mod` at adoption (§10); it runs at tier 2 only, on a named host (§3.1) |
-| Mutation engine | `gremlins` **v0.6.0** (exact; the starting engine, 0.x, flags may change; accounting rules are G4's, R20) |
+| Mutation engine | `gremlins` **v0.6.0** (exact; the starting engine, 0.x, flags may change; its configuration, mutator set and accounting are §6.4) |
 | `goleak` | `go.uber.org/goleak` **v1.3.0** (exact; the leak check on Go 1.26; on 1.27 and later the `goroutineleak` profile in `runtime/pprof` is the stdlib alternative, and G5 states which layer uses which) |
 
 Tool versions were read from upstream release tags on 2026-11-17.
@@ -297,7 +297,7 @@ For a new repo, copy the drop-in set and replace the placeholders:
 | `.go-tops/golangci.yml` | The kit's golangci-lint v2 config for gate 1, **style only**: no law reads it (§8.1). `gates.hygiene.golangci_lint.config` names it, and `init` always writes the key (with the key absent the style pass reads `.golangci.yml`). It sets `run.relative-path-mode: gomod` and carries errcheck `check-blank`, `check-type-assertions` and the same `exclude-functions` list as the law pass (§8.1). The adopter's own `.golangci.yml` is never written, overwritten or changed | generated |
 | `.gitignore` | `init` writes its block between `# go-tops:begin` and `# go-tops:end` and changes nothing outside the markers: `.go-tops/*`, then `!.go-tops/baseline.json`, `!.go-tops/acks.yaml`, `!.go-tops/survivors.yaml` and `!.go-tops/golangci.yml`, so a gate run's own files (the report, the coverage profile, the lint output, the downloaded binaries) are never committed and the ledgers and the kit config are | generated |
 | `.go-tops/baseline.json` | Ratchet baseline (§6.7); written by `gotops baseline`, not by hand | generated |
-| `.gremlins.yaml` or engine config | Mutation settings **[verify]** | |
+| `.gremlins.yaml` | Not part of the drop-in. `gotops` gives the engine every setting itself and never obeys an engine config file or variable (§6.4) | none |
 | `.github/workflows/go-tops.yml` | CI floor (§11) | `{GO_FLOOR}`, `{GO_CURRENT}`, `{PRIMARY_PKG}` |
 | `.github/CODEOWNERS` | A fragment covering the files that can weaken the gate (§11) | `{OWNER}` |
 | `go.mod` | The `go` line, at or above the protocol floor (§2), and optionally a `toolchain` line. `{GO_FLOOR}` is the release or language version the module's `go` line names | `{GO_FLOOR}` |
@@ -413,7 +413,7 @@ its own fuzz globs in `layers.fuzz.targets`, which G-43 reads.
 ```yaml
 # profiles/binary-cli.yaml
 class: binary-cli
-protocol: "0.4.4"
+protocol: "0.4.5"
 gates:
   coverage: { statements_floor: 70 }
   crap: { cap: 10, complexity: { err_guard_discount: true, wrap_functions: [] } }
@@ -429,7 +429,7 @@ laws:
 ```yaml
 # profiles/binary-service.yaml
 class: binary-service
-protocol: "0.4.4"
+protocol: "0.4.5"
 gates:
   coverage: { statements_floor: 75 }
   crap: { cap: 10, complexity: { err_guard_discount: true, wrap_functions: [] } }
@@ -445,7 +445,7 @@ laws:
 ```yaml
 # profiles/library-core.yaml
 class: library-core
-protocol: "0.4.4"
+protocol: "0.4.5"
 gates:
   coverage: { statements_floor: 85 }
   crap: { cap: 8, complexity: { err_guard_discount: true, wrap_functions: [] } }   # provisional (§5.2)
@@ -633,21 +633,62 @@ Keep the key explicit in every config so scores are comparable across repos.
   threshold flag is set, so the adapter judges the parsed statuses, never the exit code. Other
   engines (`go-mutesting` forks, `mutest`, an in-house `-overlay` runner) are admitted only
   through an adapter that maps their statuses to the classes below and meets every rule in this
-  section; none is pinned in 0.4.0. Engine output that is missing or does not parse is `fail`
-  (§3.4, rule 5). The adapter must support restricting mutation to changed lines or files; if the
-  chosen engine cannot, Go-TOPS filters to changed files and post-filters survivors to changed
-  lines.
-- **Diff base:** the merge base of `origin/main` and `HEAD` (`origin/main...HEAD`, three-dot),
-  overridable with `--base`. The diff is written to `.go-tops/mutation.diff` as
-  `git diff --unified=0 <base>...HEAD`, minus the files §6.2 excludes (`_test.go`, generated
-  files, `testdata/`) and every non-Go file.
+  section. No such adapter exists yet, so `gremlins` is the only value `gates.mutation.engine`
+  accepts (§9).
+- **`gotops` configures the engine, and nothing else does.** Every setting and every mutator is
+  passed as a flag, `--config` names an empty `.yaml` file the adapter writes, and every
+  `GREMLINS_*` variable is removed from the engine's environment. A repository's
+  `.gremlins.yaml` and the files the engine would otherwise read (under `/etc/gremlins`,
+  `$XDG_CONFIG_HOME` and `$HOME`) are ignored, never obeyed. All of it is needed: a variable
+  beats an empty config file, and only a flag beats both.
+- **Mutator set:** six mutators are on and five are off, each passed explicitly. The six, with
+  the replacement each makes at the operator it reports:
+
+  | Mutator | Replaces |
+  |---|---|
+  | `ARITHMETIC_BASE` | `+` with `-`, `-` with `+`, `*` with `/`, `/` with `*`, `%` with `*` |
+  | `CONDITIONALS_BOUNDARY` | `<` with `<=`, `<=` with `<`, `>` with `>=`, `>=` with `>` |
+  | `CONDITIONALS_NEGATION` | `==` with `!=`, `!=` with `==`, `<` with `>=`, `<=` with `>`, `>` with `<=`, `>=` with `<` |
+  | `INCREMENT_DECREMENT` | `++` with `--`, `--` with `++` |
+  | `INVERT_LOGICAL` | `&&` with `\|\|`, `\|\|` with `&&` |
+  | `INVERT_NEGATIVES` | `-` with `+` |
+
+  The five that are off: `INVERT_ASSIGNMENTS`, `INVERT_BITWISE`, `INVERT_BWASSIGN`,
+  `INVERT_LOOPCTRL` and `REMOVE_SELF_ASSIGNMENTS`.
+- **Output:** the engine writes its JSON under `.go-tops/`. Output that is missing or does not
+  parse is `fail` (§3.4, rule 5), with one exception: when gremlins finds no mutant at all it
+  writes no file, exits 0 and prints `No results to report.`, which is `0 mutants`. A run that
+  was interrupted prints the same and also exits 0, so an interrupted run is `fail`.
+- **Which tests judge a mutant:** the tests of the mutant's own package. gremlins v0.6.0 finds
+  that package from the directory, so when the diff changes a package whose Go name differs from
+  the last element of its import path (`package main` in `cmd/app`, for one), the adapter passes
+  `--integration`, and every mutant then runs the whole module's tests. The engine works in
+  copies of the module. A mutant is `killed` only by tests that pass without it: a test that
+  fails on the unmutated copy fails the layer, and none of that run's results counts.
+- **Diff base:** the merge base of the base and `HEAD`. The base is `--base` when given, else
+  `gates.mutation.base`, else `origin/main`. The report records both (§12.3). The ratchet reads
+  the same diff base (§6.7).
+- **The diff:** the changes from the diff base to the **working tree**, untracked production
+  files included as wholly added. On a clean checkout it equals `<base>...HEAD` (three-dot). It
+  is written to `.go-tops/mutation.diff` with no context lines (`--unified=0`), renames detected
+  and module-relative paths, minus the files §6.2 excludes (`_test.go`, generated files,
+  `testdata/`), the files of other modules (a directory with its own `go.mod`) and every non-Go
+  file. A **changed line** is a line the diff adds or modifies.
+- **That diff decides what counts.** Every mutant on a changed line is run, and no mutant on an
+  unchanged line counts. The engine's own restriction to a diff (`--diff`) is not trusted:
+  gremlins v0.6.0 skips changed lines when one git hunk holds more than one edit, skips every
+  line of a module in a subdirectory of its repository, and mutates the whole module when the diff it
+  parses is empty. So the adapter does not start the engine when there is no changed line,
+  filters what the engine returns by `.go-tops/mutation.diff`, and does not let the engine's
+  restriction drop a changed line.
 - **Diff outcomes:**
   - No merge base, or a shallow clone (`git rev-parse --is-shallow-repository` prints `true`):
     the layer is `fail`, and its message names the missing history and `fetch-depth: 0` (§11).
-  - No changed line in a production Go file: the layer's outcome is `vacuous` (§3.3). It prints
-    that it had nothing to look at and counts for nothing: neither a pass nor a failure.
-  - A non-empty diff that yields no mutants is a `pass` with `0 mutants` printed. An empty diff
-    is the only vacuous case.
+  - No changed line in a production Go file: the layer's outcome is `vacuous` (§3.3). A change
+    to tests only, a rename with no edit and a change that only deletes lines are such diffs. It
+    prints that it had nothing to look at and counts for nothing: neither a pass nor a failure.
+  - Changed lines that yield no mutants are a `pass` with `0 mutants` printed (a change to
+    comments, for one). The absence of changed lines is the only vacuous case.
 - **Statuses:** every mutant the engine reports is mapped; a status that is not in this table is
   `fail`, never dropped.
 
@@ -655,24 +696,35 @@ Keep the key explicit in every config so scores are comparable across repos.
   |---|---|---|
   | `KILLED` | killed | Counted as killed |
   | `LIVED` | survivor | Unexplained unless explained below |
-  | `NOT COVERED` | survivor | As `LIVED`. No test reaches the changed code, which is what "changed code without a test" means |
+  | `NOT COVERED` | survivor | As `LIVED`. No test in the mutant's own package reaches the changed line; a test in another package does not count |
   | `TIMED OUT` | killed, listed | Counted as killed. Its key is listed in the report, so a reviewer sees which mutants hung instead of failing a test |
-  | `NOT VIABLE` | dropped | Does not compile; counted nowhere. The report prints the total dropped |
+  | `NOT VIABLE` | dropped | Does not compile; counted only in the dropped total. gremlins v0.6.0 on Go 1.27 reports such a mutant `KILLED`, because `go test` exits 1 on a compile error |
+  | `SKIPPED` | none | Outside the diff: dropped before mapping and counting. On a changed line it is `fail` |
+  | `RUNNABLE` | none | Found and not run, which only a dry run reports. The gate makes no dry run, so it is `fail` |
 
+- **Files the build does not compile:** a mutant in a production file that the run's build does
+  not compile (§6.2) is not judged on that leg, whatever status the engine gives it (gremlins
+  reports `NOT COVERED`). It is counted in `not_measured` and nowhere else.
 - **Survivor key:** file, enclosing function, mutator, and a hash of the normalized mutated line.
+  Its one text form is `<file>:<function>:<mutator>:<line_hash>`.
   - `file`: module-relative, slash-separated.
-  - `function`: the enclosing function, by receiver type and name as in §6.7; a function literal
-    belongs to its parent function (§6.3).
+  - `function`: `Name` for a function, or `Type.Name` for a method (the receiver's type with no
+    `*` and no type parameters), as an exemption's `symbol` is written (§6.8). A function literal
+    belongs to its parent function (§6.3). A mutant in a package-level initializer takes the name
+    of the variable or constant it initializes.
   - `mutator`: the engine's mutator name, such as `CONDITIONALS_BOUNDARY`.
-  - `line_hash`: SHA-256, in hex, of the mutated line: the source line with the mutant applied at
-    the position the engine reports, tokenized with `go/scanner`, comments and automatic
-    semicolons dropped, tokens joined by one space. The key holds no line number, because a line number changes on the next edit.
-    Two mutants of one mutator on one line differ in the mutated line, so they have different
-    keys.
+  - `line_hash`: SHA-256, in hex, of the mutated line: the source line with the mutator's
+    replacement applied at the position the engine reports (line and column count from 1, the
+    column in bytes, a tab as 1), tokenized with `go/scanner`, comments and automatic semicolons
+    dropped, tokens joined by one space. The key holds no line number, because a line number
+    changes on the next edit. Two mutants of one mutator on one line differ in the mutated line,
+    so they have different keys. Identical lines in one function give one key.
 - **Survivor accounting:** a survivor is *explained* when an unexpired entry in
   `.go-tops/survivors.yaml` has its key, or an unexpired `mutation` exemption (§6.8) covers its
-  file or function. Only *unexplained* survivors count against `unexplained_survivors_max`. An
-  entry has these fields, all required:
+  file or function. A key that differs in any part is another survivor. One entry explains every
+  surviving mutant with its key. An exemption applies first: a survivor it covers is exempt,
+  whatever the ledger holds. Only *unexplained* survivors count against
+  `unexplained_survivors_max`. An entry has these fields, all required:
 
   ```yaml
   survivors:
@@ -688,9 +740,16 @@ Keep the key explicit in every config so scores are comparable across repos.
   `reason` has at least three words and says why the mutant is accepted: why no test can tell it
   from the original, or which test is owed. `expires` is a `YYYY-MM-DD` date. An entry with a
   missing field, an unknown field, a `reason` of fewer than three words, or an `expires` that is
-  not a real day, or that is today (UTC) or earlier, explains nothing and fails the gate at tier
-  0, named in the output. An entry that matches no survivor in this run is not an error: a
-  diff-scoped run cannot see survivors outside the diff.
+  not a real day, or that is today (UTC) or earlier, explains nothing and fails at tier 0: `check`
+  and the gate stop before any layer runs (exit 2), naming it, with the mutation gate on or off.
+  A well-formed entry that matches no survivor in this run is not an error: a diff-scoped run
+  cannot see survivors outside the diff. `gotops survivors` reads and writes the file (§12.1).
+- **Exemption match:** on every run with the mutation gate on, a `vacuous` one included, a
+  `mutation` exemption whose `path` matches no production file, or whose `symbol` names no
+  function in them, fails the layer (§6.8).
+- **Counts:** `mutants` = `killed` + `survived_explained` + `survived_unexplained` + the number
+  of exempt survivors. A timed-out mutant is among the killed. Dropped, skipped and
+  not-measured mutants are outside `mutants`.
 - **Allowance:** `unexplained_survivors_max` is **`0` in every class**. Any unexplained survivor
   fails the layer. The key stays in `go-tops.yaml` so the report states the limit; `0` is its only
   valid value.
@@ -699,7 +758,8 @@ Keep the key explicit in every config so scores are comparable across repos.
   ledger kind of §6.7: one count per file, and a count above the ledger's value fails. A legacy
   survivor is debt that may only fall; a new survivor, or one in a file the ledger does not list,
   fails (an absent entry means 0). The diff-scoped run at tier 1 has no such allowance:
-  `unexplained_survivors_max` stays 0.
+  `unexplained_survivors_max` stays 0. The tier 2 run and its ledger kind arrive with the deep
+  layers (M6, §19).
 
 ### 6.5 Law verdicts
 
@@ -816,7 +876,8 @@ build equals the recorded one is the **ledger leg**.
   over the line gets a valid file with an empty ledger.
 - A ledger kind fed only by tier 2 (`survivors`) is recorded the same way, from a tier 2 run:
   `baseline --init --kind survivors`. Until it is recorded, that kind is absent and holds at its
-  `hard` form.
+  `hard` form. The tier 2 run and this kind arrive with the deep layers (M6, §19); until then
+  `baseline` refuses the kind.
 - Every later write only lowers. It lowers a value, removes an entry that is no longer over
   the line, and raises `judged_laws`. It never adds an entry and never raises one.
 - **A function the ledger leg does not compile** (§6.2) gets no `functions` entry, from `--init`
@@ -897,7 +958,7 @@ measuring run is `baseline --init` itself, so no step is a red gate.
 8. A PR deletes tested code. In a package at or over its floor the PR passes while the package
    stays at or over it. In a package the ledger lists as under its floor, the percentage may
    fall but the uncovered-statement count does not rise, so the package does not fail.
-9. Before the nightly tier 2 job is enabled, one tier 2 run records the legacy survivors:
+9. From M6, before the nightly tier 2 job is enabled, one tier 2 run records the legacy survivors:
    `gotops baseline --init --kind survivors`. The nightly then fails only on a survivor
    that is new or in a file whose count rose.
 10. CI runs `gotops gate` (§11) on the adoption PR. The base still has no baseline, so the
@@ -1263,7 +1324,7 @@ depth fails.
 
 <!-- go-tops:example path=config/go-tops.example.yaml schema=schema/go-tops.schema.json -->
 ```yaml
-protocol: "0.4.4"            # must match the schema's protocol constant
+protocol: "0.4.5"            # must match the schema's protocol constant
 version: "0.1.0"             # this config's version (non-empty)
 module: github.com/acme/myapp
 class: binary-cli            # one of the schema's classes
@@ -1293,7 +1354,7 @@ gates:
     cap: 10
     complexity: { err_guard_discount: true, wrap_functions: [] }
   mutation:
-    engine: gremlins          # gremlins | go-mutesting | mutest | overlay
+    engine: gremlins          # the only engine with an adapter (§6.4)
     base: origin/main
     unexplained_survivors_max: 0
     ledger: .go-tops/survivors.yaml
@@ -1337,6 +1398,8 @@ it.
 | `gates.crap.complexity.wrap_functions` | list of `import/path.Name` | Wrap functions that count as `fmt.Errorf` with `%w` for the guard rule (§6.3) |
 | `gates.hygiene.govulncheck.db` | URL or path | A mirrored vulnerability database, passed as `-db`, for a run that must be repeatable (§3.1) |
 | `gates.tests.race`, `gates.tests.shuffle`, `gates.tests.count` | `true`, `true`, `1` | Fixed by the command of §3.1 and the race rule of §5.2. The schema allows no other value |
+| `gates.mutation.engine` | `gremlins` | The only engine with an adapter (§6.4). Any other value fails `check` |
+| `gates.mutation.base` | git ref | The ref whose merge base with `HEAD` is the diff base when `--base` is not given; default `origin/main` (§6.4). It moves what the mutation layer and the ratchet look at, so a change to it is a gate edit, which CODEOWNERS covers (§11) |
 | `gates.mutation.unexplained_survivors_max` | `0` | The only valid value, in every class (§6.4) |
 | `gates.mutation.ledger` | path | The survivor ledger; entries carry the record of §6.4, `expires` required |
 | `exemptions` | list of records | The record of §6.8, in `go-tops.yaml`, which CODEOWNERS covers (§11) |
@@ -1354,7 +1417,7 @@ unquoted `2027-03-01` is a timestamp, not the text the schema asks for, so a dat
 quotes). A file that breaks one of these fails `check`, exit 2, before the schema is consulted.
 
 Config files the drop-in set may include: `go-tops.yaml`, `go-tops.lock`, `AGENTS.md`,
-mutation-engine config, `.github/workflows/go-tops.yml`, `justfile`, `.go-tops/` (the ledgers,
+`.github/workflows/go-tops.yml`, `justfile`, `.go-tops/` (the ledgers,
 the kit lint config and the report) and the `.gitignore` block.
 
 ---
@@ -1409,7 +1472,7 @@ identical to the file and validates the file against the schema.
 
 <!-- go-tops:example path=config/go-tops.example.lock schema=schema/lock.schema.json -->
 ```yaml
-protocol: "0.4.4"               # must match the schema protocol constant
+protocol: "0.4.5"               # must match the schema protocol constant
 toolchain: go1.27.4             # go env GOVERSION must equal this
 
 trust:
@@ -1443,7 +1506,7 @@ runs tools one by one can be green while the gate is red.
 
 | Job | Trigger | Content |
 |---|---|---|
-| `gate` | pull request, push to `main` | Checkout with `fetch-depth: 0` (the mutation diff needs history, §6.4); the pinned toolchain; `go tool -modfile=tools/go.mod gotops gate` (tier ≤ 1); upload `.go-tops/` (`report.json` and the saved lint and coverage output) with `if: always()`. Legs: `ubuntu-latest` at `{GO_CURRENT}` (the full gate); `macos-latest` at `{GO_CURRENT}` (the full gate); `ubuntu-latest` with `GOTOOLCHAIN` set to the release the module's `go` line names (`{GO_FLOOR}`, kept whole: `go 1.27.0` runs the release 1.27.0, and `go 1.26` runs the latest 1.26 patch release; when `{GO_FLOOR}` names a release, `go_current` names the pinned release, because Go orders the release 1.27.0 above the language version 1.27), running `go build ./...` and `CGO_ENABLED=1 go test -race -shuffle=on -count=1 ./...` in place of the gate (the language-floor leg, below) |
+| `gate` | pull request, push to `main` | Checkout with `fetch-depth: 0` (the mutation diff needs history, §6.4); the pinned toolchain; `go tool -modfile=tools/go.mod gotops gate` (tier ≤ 1); upload `.go-tops/` (`report.json` and the saved lint and coverage output, without the downloaded binaries and without `baseline.json`) with `if: always()`. Legs: `ubuntu-latest` at `{GO_CURRENT}` (the full gate); `macos-latest` at `{GO_CURRENT}` (the full gate); `ubuntu-latest` with `GOTOOLCHAIN` set to the release the module's `go` line names (`{GO_FLOOR}`, kept whole: `go 1.27.0` runs the release 1.27.0, and `go 1.26` runs the latest 1.26 patch release; when `{GO_FLOOR}` names a release, `go_current` names the pinned release, because Go orders the release 1.27.0 above the language version 1.27), running `go build ./...` and `CGO_ENABLED=1 go test -race -shuffle=on -count=1 ./...` in place of the gate (the language-floor leg, below) |
 | `deep` | schedule | `gotops gate --max-tier 2`: timed fuzzing, full-module mutation, long `-race -count=N` stress, benchmark time per op on a named host with `benchstat` significance, and the build-tag × `CGO_ENABLED=0/1` × GOOS/GOARCH matrix |
 | `release` | tag | `gotops gate --max-tier 3`: reproducible-build verification, binary `govulncheck`, SBOM and signature check |
 
@@ -1473,13 +1536,14 @@ CI rules (carried from Rust-TOPS's lessons):
 - **The first ledger rides the adoption pull request.** `workflow_dispatch` runs only a workflow
   that is on the default branch, and the adoption pull request is what adds it, so the manual run
   cannot write the first ledger; a ledger written on a developer's machine has the wrong build
-  (§6.7). On a `pull_request` the ubuntu leg, the ledger leg, runs `gotops baseline --status
-  --base origin/<base>` (the base ref reaches the command through the environment, never the
-  script text) and reads the `state` of the one JSON line it prints. Exit 0 with `first-ledger-due`
+  (§6.7). On a `pull_request` the ubuntu leg, the ledger leg, runs `gotops baseline
+  --status` and reads the `state` of the one JSON line it prints. Exit 0 with `first-ledger-due`
   says a first ledger is due: the leg runs `baseline --init` on its own build, uploads
   `.go-tops/baseline.json` as the `go-tops-baseline` artifact and fails the run until that file is
   committed, unchanged. Exit 1 with `present`, `deleted` or `not-ratchet` runs the gate and its judge
-  as usual. Any other pair, a missing or unknown state included, fails the run. The manual run (`workflow_dispatch`, `init` or `refresh`) stays for a
+  as usual. Any other pair, a missing or unknown state included, fails the run. The macOS leg asks
+  the same and, while a first ledger is due, runs no gate: it has no ledger to read. The ledger
+  travels only in the `go-tops-baseline` artifact. The manual run (`workflow_dispatch`, `init` or `refresh`) stays for a
   repository whose workflow is on the default branch.
 - **No `law-diff` job in the adopter drop-in.** An adopter has no law files to diff. The risk on
   the adopter's side is an edit to the files that set the gate, so the drop-in ships a CODEOWNERS
@@ -1490,7 +1554,8 @@ CI rules (carried from Rust-TOPS's lessons):
   whole-module mutation run, so the first-ledger check of §6.7 cannot run for it at tier 1: the
   first `deep` run that records it applies the check, and it passes only when each entry equals
   what that run measured. Until then the kind is absent and holds at its `hard` form, so the
-  `deep` schedule is enabled after `gotops baseline --init --kind survivors` has run once.
+  `deep` schedule is enabled after `gotops baseline --init --kind survivors` has run once. Both
+  arrive with the deep layers (M6, §19).
 - A layer the class requires runs in these jobs; none ships as a commented-out job. A layer is
   off only by `enabled: false` with a reason, and for `crap` and `mutation` also a dated `expires`
   (§3.3, §7).
@@ -1506,14 +1571,14 @@ CI rules (carried from Rust-TOPS's lessons):
 | Command | Behavior |
 |---|---|
 | `init --class <c>` | Writes `go-tops.yaml`, `go-tops.lock`, `tools/go.mod` with its pins (added to the file, without removing a line, where one exists), `.go-tops/golangci.yml` (the kit's style rules; the adopter's own `.golangci.yml` is never written or changed), the workflow, the CODEOWNERS fragment, `justfile`, the `.gitignore` block and the adoption record `GO-TOPS.md`. It writes no laws config: the kit embeds it. Where `AGENTS.md` exists it writes only between `<!-- go-tops:begin -->` and `<!-- go-tops:end -->`, replacing the block on a re-run and appending the pair when absent; one marker without the other is a configuration error. Where `AGENTS.md` is absent it creates the file with the block. A CODEOWNERS owner taken from the module path, not from `--owner`, is flagged in a note, because a bare organisation is not a valid owner (a user or `@org/team` is): `init` warns and does not refuse. Refuses to overwrite any other existing file without `--force`. |
-| `check` | Validates `go-tops.yaml` against the **JSON Schema** (full validation, an improvement over Rust-TOPS's partial checks), plus semantic checks: protocol id, non-empty version, module name, language floor ≤ current, `gates.crap.cap` not above the class column of §5.2 and `gates.coverage.statements_floor` not below it (a class with no column takes the cap 8 and the floor 90% of §5.2), an `enabled: false` without a `reason`, a disabled `gates.crap` or `gates.mutation` without an `expires` that has not passed, an `enabled` key on `gates.hygiene`, `gates.tests` or `gates.coverage`, every `laws.required` ID in the catalog, applying to the class, with a reader and at tier 1 or below, every exemption well formed and unexpired (§6.8), every entry of `.go-tops/survivors.yaml` valid against `survivorEntry` and every entry of `.go-tops/acks.yaml` valid against `ackEntry` in `schema/core.schema.json` (§6.4, §3.3), `go-tops.lock` valid against `schema/lock.schema.json` (§10), `enforce: advisory` carrying the `advisory` key (reason, owner, an `expires` that has not passed), and under `ratchet` the baseline file exists and is clean against `HEAD`. |
-| `baseline` | Writes `.go-tops/baseline.json` (§6.7), the only command that does. `--init` measures and writes the first ledger, with the build it ran under, when the tests are green and every feeding layer produced non-empty output (thresholds may be red); `--init --kind survivors` records the tier 2 survivor counts the same way. A plain `baseline` only lowers entries and removes paid ones. `--accept-regression --reason <text> --owner <handle>` is the one way to raise an entry or lower `judged_laws` (the PR carries the `protocol-change` label). `--rename <old-key> <new-key>` moves one key. Refused under `advisory`, and `--init` is refused when a ledger exists. Every write after `--init` runs on the ledger leg, the run whose build equals the `build` the file records (§6.7); on any other leg it exits 1 and names the ledger build. `--init` is run on the build of the leg the repo names as its ledger leg. `--status [--base <ref>]` writes nothing and prints one JSON line whose `state` is `first-ledger-due` (exit 0: `enforce` is `ratchet` and neither the base ref's tree nor the working tree has a ledger), `present`, `deleted` or `not-ratchet` (exit 1; `deleted` is a ledger the diff base or `HEAD` has and the tree lacks, which `--init` refuses too; `not-ratchet` is `enforce: advisory` or `hard`, which keep no first ledger), or `error` (exit 2: it cannot tell, which a caller treats as a failure). |
+| `check` | Validates `go-tops.yaml` against the **JSON Schema** (full validation, an improvement over Rust-TOPS's partial checks), plus semantic checks: protocol id, non-empty version, module name, language floor ≤ current, `gates.crap.cap` not above the class column of §5.2 and `gates.coverage.statements_floor` not below it (a class with no column takes the cap 8 and the floor 90% of §5.2), an `enabled: false` without a `reason`, a disabled `gates.crap` or `gates.mutation` without an `expires` that has not passed, an `enabled` key on `gates.hygiene`, `gates.tests` or `gates.coverage`, every `laws.required` ID in the catalog, applying to the class, with a reader and at tier 1 or below, every exemption well formed and unexpired (§6.8), every entry of `.go-tops/survivors.yaml` valid against `survivorEntry`, with an `expires` that is a real day after today (UTC), and every entry of `.go-tops/acks.yaml` valid against `ackEntry` in `schema/core.schema.json` (§6.4, §3.3), `go-tops.lock` valid against `schema/lock.schema.json` (§10), `enforce: advisory` carrying the `advisory` key (reason, owner, an `expires` that has not passed), and under `ratchet` the baseline file exists and is clean against `HEAD`. |
+| `baseline` | Writes `.go-tops/baseline.json` (§6.7), the only command that does. `--init` measures and writes the first ledger, with the build it ran under, when the tests are green and every feeding layer produced non-empty output (thresholds may be red); `--init --kind survivors` records the tier 2 survivor counts the same way, from M6; until then the kind is refused. A plain `baseline` only lowers entries and removes paid ones. `--accept-regression --reason <text> --owner <handle>` is the one way to raise an entry or lower `judged_laws` (the PR carries the `protocol-change` label). `--rename <old-key> <new-key>` moves one key. Refused under `advisory`, and `--init` is refused when a ledger exists. Every write after `--init` runs on the ledger leg, the run whose build equals the `build` the file records (§6.7); on any other leg it exits 1 and names the ledger build. `--init` is run on the build of the leg the repo names as its ledger leg. `--status [--base <ref>]` writes nothing and prints one JSON line whose `state` is `first-ledger-due` (exit 0: `enforce` is `ratchet` and neither the base ref's tree nor the working tree has a ledger), `present`, `deleted` or `not-ratchet` (exit 1; `deleted` is a ledger the diff base or `HEAD` has and the tree lacks, which `--init` refuses too; `not-ratchet` is `enforce: advisory` or `hard`, which keep no first ledger), or `error` (exit 2: it cannot tell, which a caller treats as a failure). |
 | `gate` | Runs every enabled layer at or below `--max-tier` (default 1), in order, each judged (§3.5), laws last. Options: `--max-tier N`, `--fail-fast`, `--dry-run` (refused in CI), `--base <ref>`, `--json`, `--only <layer>` (a range that leaves a required law out ends `partial` and is refused in CI). A mapped tool that is missing is `tool-missing` and exits 1. Under `ratchet` the judgment against the ledger is made on the ledger leg only and is `skip` elsewhere (§6.7). Exit codes: §12.2. |
 | `laws [list \| run \| explain G-NN]` | Lists the catalog with readers, runs the laws layer alone, explains a law. |
 | `report [--format text \| json \| junit \| sarif]` | Renders the last report. |
 | `lock [--verify \| --update]` | Verifies or updates tool pins (§10). `--verify` reads the lock, valid against `schema/lock.schema.json`, then reads each module tool's version with `go version -m`, compares each downloaded binary's SHA-256, and compares `go env GOVERSION` with the pinned toolchain. `--update` is a reviewed change, never run in CI. |
 | `doctor` | Diagnoses environment: Go version against the protocol floor and against the configured `toolchain.go_floor` when one is set (compared in Go's order, §2) and against the pinned toolchain, a C compiler (cgo is required for `-race`), tool presence, each resolved binary's SHA-256 against `go-tops.lock` for the host as the gate checks it (a binary the lock refuses is `fail`, never `ok`), `GOFLAGS`, `GOTOOLCHAIN`, cgo state. |
-| `survivors [list \| explain \| expire]` | Manages the mutation survivor ledger. |
+| `survivors [list \| explain \| expire]` | The mutation survivor ledger (§6.4). `list` prints each entry as live or expired and writes nothing. `explain <key> --reason <text> --owner <handle> --expires <date>` adds one entry for a key the last report lists as an unexplained survivor. It refuses with exit 1, writing nothing, when the report is missing, lists no survivors, was made at another `HEAD` or does not list the key as unexplained, and when the ledger holds the key already; bad arguments (a missing flag, a reason of fewer than three words, a day that is not after today) are exit 2. `expire` removes the entries whose `expires` is today (UTC) or earlier and prints each; with none it writes nothing. `list` and `expire` exit 0, also with no ledger file, and every subcommand exits 2 on a malformed ledger or configuration. A write rewrites the whole file in one form, entries in key order, so comments are not kept. An expired entry fails the gate before any layer runs, so there is no new report while one exists: the order is `expire`, `gate`, `explain`. |
 | `version` | Protocol, package, and pinned-tool versions. |
 
 ### 12.2 Exit codes
@@ -1546,7 +1611,7 @@ CI keeps the block identical to the file and validates the file against the sche
 <!-- go-tops:example path=config/gate-report.example.json schema=schema/gate-report.schema.json -->
 ```json
 {
-  "protocol": "0.4.4",
+  "protocol": "0.4.5",
   "tool_version": "0.0.0",
   "module": "github.com/acme/myapp",
   "class": "binary-cli",
@@ -1596,8 +1661,15 @@ CI keeps the block identical to the file and validates the file against the sche
     },
     {
       "id": "mutation", "tier": 1, "outcome": "pass",
-      "details": { "mutants": 63, "killed": 60, "survived_explained": 3, "survived_unexplained": 0,
-                   "max": 0, "timed_out": 0, "timed_out_keys": [], "dropped": 0, "exempt": [] }
+      "details": { "base": "origin/main", "base_sha": "9f3c1e0b7a5d4c2e8f1a6b3d0c9e5a7f2b4d6c81",
+                   "mutants": 63, "killed": 62, "survived_explained": 1, "survived_unexplained": 0,
+                   "max": 0, "timed_out": 0, "timed_out_keys": [], "dropped": 0, "not_measured": 0, "exempt": [],
+                   "survivors": [
+                     { "key": "internal/limits/parse.go:parseLimit:CONDITIONALS_BOUNDARY:b82c563b57fab7510b79dc60e5d89aae1f2b19038fbe00067391e54320495e58",
+                       "file": "internal/limits/parse.go", "function": "parseLimit", "mutator": "CONDITIONALS_BOUNDARY",
+                       "line_hash": "b82c563b57fab7510b79dc60e5d89aae1f2b19038fbe00067391e54320495e58",
+                       "line": 41, "status": "LIVED", "explained": "ledger" }
+                   ] }
     }
   ],
   "laws": {
@@ -1668,14 +1740,23 @@ Report rules:
   `shuffle_seed`), coverage (`statements_pct`, `floor`, `profile_bytes`), CRAP (`cap`,
   `violations`, `exempt` for functions scored under an exemption, and `not_measured`, the number
   of production functions in files the run's build does not compile, §6.2; a row of `violations`
-  or `exempt` for such a function has `null` for `cov_pct` and `crap`) and mutation (the counts of
-  §6.4, with `timed_out` and `timed_out_keys` for mutants that hung, `dropped` for mutants
-  that did not compile, and `exempt` for the survivor keys of mutants under a `mutation`
-  exemption). A layer of these five whose outcome is `fail` may carry `{ "error": "<text>" }`
+  or `exempt` for such a function has `null` for `cov_pct` and `crap`) and mutation (below). A
+  layer of these five whose outcome is `fail` may carry `{ "error": "<text>" }`
   instead, when its tool output was empty or did not parse: there is no measurement to report,
   and the layer is `fail`, never `not-run` (§3.4, rule 5). The error form is valid only with
   outcome `fail`, and its text has a non-space character. `exemptions` lists every exemption in
   force on the day of the run, as the records of §6.8.
+- The mutation `details` carry `base` and `base_sha`, the base the run used and the commit of the
+  diff base (§6.4); the counts `mutants`, `killed`, `survived_explained`,
+  `survived_unexplained`, `max`, `timed_out`, `dropped` and `not_measured` (mutants in files the
+  run's build does not compile); `timed_out_keys`, one survivor key per timed-out mutant;
+  `exempt`, one survivor key per surviving mutant under a `mutation` exemption; and `survivors`,
+  one row per surviving mutant, with `key`, `file`, `function`, `mutator`, `line_hash`, `line`,
+  `status` (`LIVED` or `NOT COVERED`) and `explained`. `explained` is always present: `ledger`,
+  or `null`. An exempt survivor has its row, with `explained` `null` and its key in `exempt`. So
+  the rows number `survived_explained` + `survived_unexplained` + the length of `exempt`, and the
+  unexplained ones are the rows with `explained` `null` whose key is not in `exempt`. A key
+  repeats where mutants share it (§6.4). An empty list is `[]`, never `null`.
 - `ratchet` appears only under `enforce: ratchet`. It is the ratchet judgment of §6.7: `outcome`
   is `pass` or `fail` on the ledger leg and `skip` on any other, `ledger_build` is the `build`
   the baseline records and `run_build` is the build of this run. `skip` is exactly the case in
@@ -1789,7 +1870,7 @@ wrong; the config wins.
 
 ---
 
-## 16. Decisions (resolved for v0.4.4; remaining calibration items noted)
+## 16. Decisions (resolved for v0.4.5; remaining calibration items noted)
 
 1. **Complexity rule (`err_guard_discount`):** **true** in every class, for guards that only return the error (wrapped or not). errcheck `check-blank` and `check-type-assertions` are required, so discarding the error is not cheaper than handling it. Explicit in every profile. (§6.3) *Changed in 0.3.0; 0.2.0 turned it off for `library-core` and `concurrency-runtime`.*
 2. **Authorship marking:** None. One CRAP cap per class for every author. (§5.2, §6.2) *Changed in 0.3.0; 0.2.0 used an `Authored-By: agent` trailer that raised the cap.*
@@ -1828,6 +1909,7 @@ wrong; the config wins.
 35. **Files outside the run's build are not measured, never passed:** the CRAP layer scores the production functions in files the run compiles, counts the rest in the report (`not_measured`) and still holds each to the complexity ceiling. Identity stays computed over every `.go` file. (§6.2, §12.3) *New in 0.4.3.*
 36. **The ledger leg:** the baseline records its build, only the run with that build writes it or judges the ratchet, every entry of a first ledger is measured there, and the other legs report the ratchet judgment as `skip`, never `pass`. A function the ledger leg does not compile has no entry and takes a `crap` exemption. A repo under `ratchet` names exactly one CI leg as its ledger leg, and CI fails when that leg's ratchet outcome is `skip`. (§6.7, §11, §12.1, §12.3) *New in 0.4.3.*
 37. **The first adoption of a real repository (M3):** the kit lint pass reads `.go-tops/golangci.yml` and never the adopter's `.golangci.yml`, which `init` leaves byte for byte; `init` adds the kit's pins to an existing `tools/go.mod`, writes a marked `.gitignore` block and keeps the whole release of the `go` line as the floor; the first ledger is written by the ledger leg on the adoption pull request, asked by `baseline --status`; a repository whose tests walk the tree keeps the lint binary outside it. (§4.1, §6.7, §8.1, §10, §11, §12.1) *New in 0.4.4.*
+38. **Mutation, measured before it was built (M4):** `gotops` configures the engine by flags alone and ignores its files and variables; six mutators are on; the kit's own diff, from the diff base to the working tree, decides which mutants count; a survivor key has one text form and the report lists every survivor; mutants in files a build does not compile are counted apart; an expired survivor entry fails at tier 0; `survivors list`, `explain` and `expire` are defined; the engine's per-package meaning of `NOT COVERED` is stated; the tier 2 ledger kind is M6. (§6.4, §6.7, §9, §11, §12.1, §12.3) *New in 0.4.5.*
 
 ---
 
@@ -1884,7 +1966,8 @@ go-tops/
 │   ├── layers/                      # crap, mutation, fuzz, bench... (hygiene, tests and coverage exist)
 │   ├── complexity/                  # AST cyclomatic counting
 │   ├── crap/                        # scoring, guard-neutral coverage, identity
-│   ├── mutate/                      # engine adapters + survivor ledger
+│   ├── mutate/                      # engine adapters, the diff and survivor keys
+│   ├── survivors/                   # the survivor ledger
 │   └── analyzers/                   # go/analysis analyzers (G-NN)
 ├── laws/                            # G-NN.yaml metadata
 ├── testdata/lints/                  # fixture module: one break per delegated rule (§8)
@@ -1907,10 +1990,10 @@ The schemas are files in `schema/`, JSON Schema 2020-12:
 
 | File | What it validates |
 |---|---|
-| `schema/go-tops.schema.json` | `go-tops.yaml` and the class profiles in `profiles/`: one shape for both. `additionalProperties: false` at every object, so an unknown key at any depth fails. Its `protocol` is the constant `0.4.4` |
+| `schema/go-tops.schema.json` | `go-tops.yaml` and the class profiles in `profiles/`: one shape for both. `additionalProperties: false` at every object, so an unknown key at any depth fails. Its `protocol` is the constant `0.4.5` |
 | `schema/gate-report.schema.json` | `.go-tops/report.json` (§12.3): every layer with its tier and outcome, every law with its verdict and reason code, the laws counts, the vulnerability database timestamp and the shuffle seed |
 | `schema/core.schema.json` | The definitions the configuration and report schemas share: layer outcomes, law verdicts, reason codes, run outcomes, enforcement modes, law IDs, the baseline ledger and the exemption record. Both `$ref` it and define none of these again. It is a local copy: the TOPS shared core will replace it by a checked sync |
-| `schema/lock.schema.json` | `go-tops.lock` (§10): the toolchain, the trust mode and the downloaded binaries, each with an exact version, a URL template and a SHA-256 for each of four platforms. `additionalProperties: false` at every object. Its `protocol` is the constant `0.4.4` |
+| `schema/lock.schema.json` | `go-tops.lock` (§10): the toolchain, the trust mode and the downloaded binaries, each with an exact version, a URL template and a SHA-256 for each of four platforms. `additionalProperties: false` at every object. Its `protocol` is the constant `0.4.5` |
 
 `schema/core.schema.json` also defines the entries of the two ledger files that `check`
 validates: `survivorEntry` for `.go-tops/survivors.yaml` (§6.4) and `ackEntry` for
