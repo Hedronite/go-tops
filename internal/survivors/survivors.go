@@ -28,6 +28,31 @@ type Key struct {
 	LineHash string
 }
 
+// String is the key's one text form: <file>:<function>:<mutator>:<line_hash>.
+func (k Key) String() string {
+	return k.File + ":" + k.Function + ":" + k.Mutator + ":" + k.LineHash
+}
+
+// ParseKey reads a key's text form. It splits from the right, because only the
+// file part may hold a colon.
+func ParseKey(s string) (Key, error) {
+	bad := fmt.Errorf("%q is not a survivor key, <file>:<function>:<mutator>:<line_hash>", s)
+	rest := s
+	var tail [3]string
+	for i := len(tail) - 1; i >= 0; i-- {
+		at := strings.LastIndex(rest, ":")
+		if at < 0 {
+			return Key{}, bad
+		}
+		rest, tail[i] = rest[:at], rest[at+1:]
+	}
+	k := Key{File: rest, Function: tail[0], Mutator: tail[1], LineHash: tail[2]}
+	if slices.Contains([]string{k.File, k.Function, k.Mutator, k.LineHash}, "") {
+		return Key{}, bad
+	}
+	return k, nil
+}
+
 // Entry is one accepted survivor, with every field §6.4 requires.
 type Entry struct {
 	File     string `yaml:"file"`
