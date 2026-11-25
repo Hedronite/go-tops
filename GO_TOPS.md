@@ -657,8 +657,9 @@ Keep the key explicit in every config so scores are comparable across repos.
   `INVERT_LOOPCTRL` and `REMOVE_SELF_ASSIGNMENTS`.
 - **Output:** the engine writes its JSON under `.go-tops/`. Output that is missing or does not
   parse is `fail` (§3.4, rule 5), with one exception: when gremlins finds no mutant at all it
-  writes no file, exits 0 and prints `No results to report.`, which is `0 mutants`. A run that
-  was interrupted prints the same and also exits 0, so an interrupted run is `fail`.
+  writes no file, exits 0 and prints `No results to report.`, which is `0 mutants`. An
+  interrupted run also writes no file and exits 0, but it prints `Shutting down gracefully...`
+  and never `No results to report.`, so it is `fail`.
 - **Which tests judge a mutant:** the tests of the mutant's own package. gremlins v0.6.0 finds
   that package from the directory, so when the diff changes a package whose Go name differs from
   the last element of its import path (`package main` in `cmd/app`, for one), the adapter passes
