@@ -147,6 +147,36 @@ func TestComputeDiffScopeExclusionsAndVacuousCases(t *testing.T) {
 	if len(resMixed.OutOfBuildFiles["plat_linux.go"]) != 2 {
 		t.Fatalf("expected _linux.go in OutOfBuildFiles, got %+v", resMixed.OutOfBuildFiles)
 	}
+	// O2: .go-tops/mutation.diff must contain only filtered prod files + untracked prod files.
+	mutDiffBytes, err := os.ReadFile(resMixed.DiffPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mutDiff := string(mutDiffBytes)
+	for _, forbidden := range []string{"p_test.go", "README.md", "testdata/f.go", "gen.go"} {
+		if strings.Contains(mutDiff, forbidden) {
+			t.Fatalf("filtered mutation.diff leaked excluded path %q:\n%s", forbidden, mutDiff)
+		}
+	}
+	for _, wanted := range []string{"+++ b/p.go", "+++ b/new_untracked.go"} {
+		if !strings.Contains(mutDiff, wanted) {
+			t.Fatalf("filtered mutation.diff missing %q:\n%s", wanted, mutDiff)
+		}
+	}
+
+	// B3: hostile repo git diff configs must not break diff parsing or widen hunks.
+	gitRun(t, dir, "config", "diff.mnemonicPrefix", "true")
+	gitRun(t, dir, "config", "diff.noprefix", "true")
+	gitRun(t, dir, "config", "diff.srcPrefix", "src/")
+	gitRun(t, dir, "config", "diff.dstPrefix", "dst/")
+	gitRun(t, dir, "config", "diff.interHunkContext", "10")
+	resHostile, err := ComputeDiff(ctx, gate.OS{}, dir, "main", b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !resHostile.InBuildFiles["p.go"][2] || resHostile.InBuildFiles["p.go"][3] {
+		t.Fatalf("hostile git config corrupted InBuildFiles[p.go]: %+v", resHostile.InBuildFiles["p.go"])
+	}
 }
 
 func TestComputeDiffSubdirectoryModule(t *testing.T) {

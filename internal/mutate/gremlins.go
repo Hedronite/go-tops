@@ -7,12 +7,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
 	"regexp"
 	"runtime"
 	"slices"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -145,7 +147,7 @@ func PartitionByIntegration(ctx context.Context, ex gate.Executor, dir string, i
 	if len(inBuild) == 0 {
 		return normal, integ, nil
 	}
-	res, err := ex.Run(ctx, gate.Cmd{Dir: dir, Argv: []string{"go", "list", "-f", "{{.Dir}} {{.ImportPath}} {{.Name}}", "./..."}})
+	res, err := ex.Run(ctx, gate.Cmd{Dir: dir, Argv: []string{"go", "list", "-f", "{{.ImportPath}}\t{{.Name}}\t{{.Dir}}", "./..."}})
 	if err != nil || res.ExitCode != 0 {
 		return nil, nil, fmt.Errorf("list packages for mutation integration check: %s", strings.TrimSpace(string(res.Stderr)))
 	}
@@ -163,15 +165,15 @@ func PartitionByIntegration(ctx context.Context, ex gate.Executor, dir string, i
 func parsePkgList(absDir, out string) map[string]bool {
 	mismatched := map[string]bool{}
 	for _, line := range nonEmptyLines(out) {
-		fields := strings.Fields(line)
+		fields := strings.SplitN(line, "\t", 3)
 		if len(fields) != 3 {
 			continue
 		}
-		rel, err := filepath.Rel(absDir, resolvedPath(fields[0]))
+		rel, err := filepath.Rel(absDir, resolvedPath(fields[2]))
 		if err != nil {
 			continue
 		}
-		if fields[2] != path.Base(fields[1]) {
+		if fields[1] != path.Base(fields[0]) {
 			mismatched[filepath.ToSlash(rel)] = true
 		}
 	}
@@ -200,10 +202,16 @@ func runGremlinsSubset(ctx context.Context, env gate.Env, diff DiffResult, keep 
 	return execGremlins(ctx, env, prefix, cfgFile, diff, keep, forceExclude, build, integration)
 }
 
-// RunGremlinsBatches partitions in-build files so only mismatched-name packages run --integration.
+// RunGremlinsBatches partitions in-build files, checks the unmutated copy, and runs gremlins per batch.
 func RunGremlinsBatches(ctx context.Context, env gate.Env, diff DiffResult, build gobuild.Build) ([][]byte, error) {
+	if _, err := env.Tools.Resolve(ctx, "gremlins"); err != nil {
+		return nil, err
+	}
 	normal, integ, err := PartitionByIntegration(ctx, env.Exec, env.Dir, diff.InBuildFiles)
 	if err != nil {
+		return nil, err
+	}
+	if err := VerifyUnmutatedCopy(ctx, env.Exec, env.Dir, normal, integ, build); err != nil {
 		return nil, err
 	}
 	forceExclude := len(normal) > 0 && len(integ) > 0
@@ -351,9 +359,13 @@ func gremlinsEnv(build gobuild.Build) []string {
 	env := []string{
 		"CGO_ENABLED=" + cgo,
 		"GOFLAGS=-count=1",
-		"GIT_CONFIG_COUNT=1",
-		"GIT_CONFIG_KEY_0=diff.context",
-		"GIT_CONFIG_VALUE_0=0",
+		"GIT_CONFIG_COUNT=6",
+		"GIT_CONFIG_KEY_0=diff.context", "GIT_CONFIG_VALUE_0=0",
+		"GIT_CONFIG_KEY_1=diff.interHunkContext", "GIT_CONFIG_VALUE_1=0",
+		"GIT_CONFIG_KEY_2=diff.mnemonicPrefix", "GIT_CONFIG_VALUE_2=false",
+		"GIT_CONFIG_KEY_3=diff.noprefix", "GIT_CONFIG_VALUE_3=false",
+		"GIT_CONFIG_KEY_4=diff.srcPrefix", "GIT_CONFIG_VALUE_4=a/",
+		"GIT_CONFIG_KEY_5=diff.dstPrefix", "GIT_CONFIG_VALUE_5=b/",
 	}
 	if build.GOOS != "" {
 		env = append(env, "GOOS="+build.GOOS)
@@ -561,7 +573,7 @@ func evalFile(ev *Evaluation, gf GremlinsFile, diff DiffResult, idx *ModuleIndex
 		return err
 	}
 	for _, m := range gf.Mutations {
-		if !lines[m.Line] || m.Status == "SKIPPED" {
+		if !lines[m.Line] {
 			continue
 		}
 		if err := recordMutant(ev, rel, m, src, idx, exRes, ledger); err != nil {
@@ -584,20 +596,23 @@ func readCachedFile(dir, rel string, cache map[string][]byte) ([]byte, error) {
 }
 
 func recordMutant(ev *Evaluation, rel string, m GremlinsMutation, src []byte, idx *ModuleIndex, exRes exempt.MutationResult, ledger Ledger) error {
-	if m.Status == "RUNNABLE" {
-		return fmt.Errorf("gremlins left mutant RUNNABLE at %s:%d:%d", rel, m.Line, m.Column)
-	}
-	ev.Mutants++
 	switch m.Status {
-	case "KILLED":
-		ev.Killed++
-		return nil
+	case "SKIPPED":
+		return fmt.Errorf("gremlins skipped mutant on changed line %s:%d:%d", rel, m.Line, m.Column)
+	case "RUNNABLE":
+		return fmt.Errorf("gremlins left mutant RUNNABLE at %s:%d:%d", rel, m.Line, m.Column)
 	case "NOT VIABLE":
 		ev.Dropped++
 		return nil
+	case "KILLED":
+		ev.Mutants++
+		ev.Killed++
+		return nil
 	case "TIMED OUT":
+		ev.Mutants++
 		return recordTimedOut(ev, rel, m, src, idx)
 	case "LIVED", "NOT COVERED":
+		ev.Mutants++
 		return recordSurvivor(ev, rel, m, src, idx, exRes, ledger)
 	default:
 		return fmt.Errorf("unexpected mutant status %q at %s:%d:%d", m.Status, rel, m.Line, m.Column)
@@ -660,4 +675,105 @@ func sortEvaluation(ev *Evaluation) {
 		}
 		return strings.Compare(a.Key.LineHash, b.Key.LineHash)
 	})
+}
+
+// VerifyUnmutatedCopy copies dir without symlinks (matching gremlins CachedDealer) and runs the target tests once.
+func VerifyUnmutatedCopy(ctx context.Context, ex gate.Executor, dir string, normal, integ map[string]map[int]bool, build gobuild.Build) (err error) {
+	copyDir, err := os.MkdirTemp("", "gotops-unmutated-*")
+	if err != nil {
+		return fmt.Errorf("create unmutated copy dir: %w", err)
+	}
+	defer func() {
+		if cerr := os.RemoveAll(copyDir); cerr != nil && err == nil {
+			err = cerr
+		}
+	}()
+	if err := copyModuleNoSymlinks(dir, copyDir); err != nil {
+		return fmt.Errorf("copy module for unmutated check: %w", err)
+	}
+	argv := unmutatedTestArgv(normal, integ, build)
+	res, err := ex.Run(ctx, gate.Cmd{Dir: copyDir, Argv: argv, Env: gremlinsEnv(build)})
+	if err != nil {
+		return fmt.Errorf("unmutated copy test execution failed: %w", err)
+	}
+	if res.ExitCode != 0 {
+		return fmt.Errorf("unmutated copy failed tests (exit %d): %s", res.ExitCode, strings.TrimSpace(string(res.Stdout)+string(res.Stderr)))
+	}
+	return nil
+}
+
+func unmutatedTestArgv(normal, integ map[string]map[int]bool, build gobuild.Build) []string {
+	argv := []string{"go", "test", "-count=1"}
+	if len(build.Tags) > 0 {
+		argv = append(argv, "-tags="+strings.Join(build.Tags, ","))
+	}
+	if len(integ) > 0 {
+		return append(argv, "./...")
+	}
+	return append(argv, targetPkgPatterns(normal)...)
+}
+
+func targetPkgPatterns(files map[string]map[int]bool) []string {
+	seen := map[string]bool{}
+	for rel := range files {
+		d := filepath.ToSlash(filepath.Dir(rel))
+		if d == "." {
+			seen["."] = true
+		} else {
+			seen["./"+d] = true
+		}
+	}
+	out := make([]string, 0, len(seen))
+	for p := range seen {
+		out = append(out, p)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func copyModuleNoSymlinks(srcDir, dstDir string) error {
+	return filepath.Walk(srcDir, func(srcPath string, info fs.FileInfo, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		rel, err := filepath.Rel(srcDir, srcPath)
+		if err != nil || rel == "." {
+			return err
+		}
+		return copyEntryNoSymlink(srcPath, filepath.Join(dstDir, rel), info)
+	})
+}
+
+func copyEntryNoSymlink(srcPath, dstPath string, info fs.FileInfo) error {
+	mode := info.Mode()
+	if mode.IsDir() {
+		return os.MkdirAll(dstPath, mode.Perm()|0o700)
+	}
+	if !mode.IsRegular() {
+		return nil
+	}
+	return copyRegularFile(srcPath, dstPath, mode.Perm())
+}
+
+func copyRegularFile(srcPath, dstPath string, perm fs.FileMode) (err error) {
+	s, err := os.Open(srcPath)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if cerr := s.Close(); cerr != nil && err == nil {
+			err = cerr
+		}
+	}()
+	d, err := os.OpenFile(dstPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, perm|0o200)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if cerr := d.Close(); cerr != nil && err == nil {
+			err = cerr
+		}
+	}()
+	_, err = io.Copy(d, s)
+	return err
 }

@@ -250,6 +250,7 @@ func TestAll(t *testing.T) {
 }
 `,
 	})
+	gitExec(t, dirMain, "config", "diff.interHunkContext", "10")
 	writeFiles(t, dirMain, map[string]string{
 		"cmd/tool/main.go": `package main
 
@@ -300,7 +301,7 @@ func TestAll(t *testing.T) {
 	writeFiles(t, dirSub, map[string]string{
 		"sub/mod/calc.go":       "package mod\nfunc Lt(a, b int) bool { return a < b }\n",
 		"sub/mod/calc_test.go":  "package mod\nimport \"testing\"\nfunc TestLt(t *testing.T) { if !Lt(1, 2) || Lt(2, 2) || Lt(3, 2) { t.Fatal(\"bad\") } }\n",
-		"sub/mod/plat_linux.go": "package mod\nfunc Lin(a, b int) bool { return a < b }\n",
+		"sub/mod/plat_never.go": "//go:build never_this_os\n\npackage mod\n\nfunc Lin(a, b int) bool { return a < b }\n",
 	})
 	resSub := Layer{}.Run(context.Background(), testEnv(t, filepath.Join(dirSub, "sub", "mod"), bin))
 	if resSub.Outcome != gate.Pass {
@@ -420,5 +421,58 @@ func TestLayerReportValidatesAgainstLive045Schema(t *testing.T) {
 		if _, err := report.Load(path); err != nil {
 			t.Fatalf("%s report.Load failed: %v", tc.name, err)
 		}
+	}
+}
+
+func TestLayerRealEngineFailsOnUnmutatedCopySymlinkAndSpaceDir(t *testing.T) {
+	bin := gremlinsBinary(t)
+
+	// B4: symlink dropped by CachedDealer causes unmutated copy failure (must fail, never false-pass).
+	outsideFile := filepath.Join(t.TempDir(), "secret.txt")
+	if err := os.WriteFile(outsideFile, []byte("ok"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	dirSym := setupGitModule(t, map[string]string{
+		"go.mod":       "module example.com/sym\n\ngo 1.26\n",
+		"calc.go":      "package sym\nfunc Ok(a int) bool { return a == 0 }\n",
+		"calc_test.go": "package sym\nimport (\n\t\"os\"\n\t\"testing\"\n)\nfunc TestOk(t *testing.T) {\n\tif _, err := os.ReadFile(\"data.txt\"); err != nil { t.Fatal(err) }\n\tif !Ok(0) { t.Fatal(\"bad\") }\n}\n",
+	})
+	if err := os.Symlink(outsideFile, filepath.Join(dirSym, "data.txt")); err != nil {
+		t.Fatal(err)
+	}
+	gitExec(t, dirSym, "add", "data.txt")
+	gitExec(t, dirSym, "commit", "-m", "add symlink fixture")
+	writeFiles(t, dirSym, map[string]string{
+		"calc.go":      "package sym\nfunc Lt(a, b int) bool { return a < b }\n",
+		"calc_test.go": "package sym\nimport (\n\t\"os\"\n\t\"testing\"\n)\nfunc TestLt(t *testing.T) {\n\tif _, err := os.ReadFile(\"data.txt\"); err != nil { t.Fatal(err) }\n\tif !Lt(1, 2) || Lt(3, 2) { t.Fatal(\"bad\") }\n}\n",
+	})
+	resSym := Layer{}.Run(context.Background(), testEnv(t, dirSym, bin))
+	if resSym.Outcome != gate.Fail || !strings.Contains(resSym.Reason, "unmutated copy") {
+		t.Fatalf("expected fail naming unmutated copy on symlinked fixture, got %s: %s", resSym.Outcome, resSym.Reason)
+	}
+
+	// B5: module directory path containing a space still catches weak package main survivor.
+	dirSpace := filepath.Join(t.TempDir(), "with space")
+	if err := os.MkdirAll(dirSpace, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	gitExec(t, dirSpace, "init", "-b", "main")
+	gitExec(t, dirSpace, "config", "user.name", "Test Author")
+	gitExec(t, dirSpace, "config", "user.email", "author@example.com")
+	writeFiles(t, dirSpace, map[string]string{
+		"go.mod":                "module example.com/sp\n\ngo 1.26\n",
+		"cmd/tool/main.go":      "package main\nfunc lt(a, b int) bool { return a == b }\n",
+		"cmd/tool/main_test.go": "package main\nimport \"testing\"\nfunc TestLt(t *testing.T) { if !lt(1, 2) { t.Fatal(\"bad\") } }\n",
+	})
+	gitExec(t, dirSpace, "add", ".")
+	gitExec(t, dirSpace, "commit", "-m", "base")
+	gitExec(t, dirSpace, "checkout", "-b", "feat")
+	writeFiles(t, dirSpace, map[string]string{
+		"cmd/tool/main.go":      "package main\nfunc lt(a, b int) bool { return a < b }\n",
+		"cmd/tool/main_test.go": "package main\nimport \"testing\"\nfunc TestLt(t *testing.T) { if !lt(1, 2) || lt(3, 2) { t.Fatal(\"bad\") } }\n",
+	})
+	resSpace := Layer{}.Run(context.Background(), testEnv(t, dirSpace, bin))
+	if resSpace.Outcome != gate.Fail {
+		t.Fatalf("expected fail in directory with space, got %s: %s", resSpace.Outcome, resSpace.Reason)
 	}
 }

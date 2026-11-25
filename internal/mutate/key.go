@@ -346,13 +346,16 @@ func appendDeclSpans(spans []declSpan, fset *token.FileSet, decl ast.Decl, rel s
 		*funcs = append(*funcs, exempt.Func{File: rel, Recv: recv, Name: d.Name.Name})
 		return append(spans, makeSpan(fset, name, d.Pos(), d.End()))
 	case *ast.GenDecl:
-		return appendGenSpans(spans, fset, d)
+		return appendGenSpans(spans, fset, d, rel, funcs)
 	default:
 		return spans
 	}
 }
 
-func appendGenSpans(spans []declSpan, fset *token.FileSet, d *ast.GenDecl) []declSpan {
+func appendGenSpans(spans []declSpan, fset *token.FileSet, d *ast.GenDecl, rel string, funcs *[]exempt.Func) []declSpan {
+	if d.Tok == token.TYPE {
+		return appendTypeSpans(spans, fset, d.Specs, rel, funcs)
+	}
 	if d.Tok != token.VAR && d.Tok != token.CONST {
 		return spans
 	}
@@ -361,12 +364,27 @@ func appendGenSpans(spans []declSpan, fset *token.FileSet, d *ast.GenDecl) []dec
 		if !ok || len(vs.Names) == 0 {
 			continue
 		}
-		spans = appendValueSpans(spans, fset, vs)
+		spans = appendValueSpans(spans, fset, vs, rel, funcs)
 	}
 	return spans
 }
 
-func appendValueSpans(spans []declSpan, fset *token.FileSet, vs *ast.ValueSpec) []declSpan {
+func appendTypeSpans(spans []declSpan, fset *token.FileSet, specs []ast.Spec, rel string, funcs *[]exempt.Func) []declSpan {
+	for _, spec := range specs {
+		ts, ok := spec.(*ast.TypeSpec)
+		if !ok || ts.Name == nil {
+			continue
+		}
+		addPkgSymbol(funcs, rel, ts.Name.Name)
+		spans = append(spans, makeSpan(fset, ts.Name.Name, ts.Pos(), ts.End()))
+	}
+	return spans
+}
+
+func appendValueSpans(spans []declSpan, fset *token.FileSet, vs *ast.ValueSpec, rel string, funcs *[]exempt.Func) []declSpan {
+	for _, id := range vs.Names {
+		addPkgSymbol(funcs, rel, id.Name)
+	}
 	if len(vs.Values) == len(vs.Names) {
 		for i, expr := range vs.Values {
 			spans = append(spans, makeSpan(fset, vs.Names[i].Name, expr.Pos(), expr.End()))
@@ -374,6 +392,12 @@ func appendValueSpans(spans []declSpan, fset *token.FileSet, vs *ast.ValueSpec) 
 		return spans
 	}
 	return append(spans, makeSpan(fset, vs.Names[0].Name, vs.Pos(), vs.End()))
+}
+
+func addPkgSymbol(funcs *[]exempt.Func, rel, name string) {
+	if name != "" && name != "_" {
+		*funcs = append(*funcs, exempt.Func{File: rel, Name: name})
+	}
 }
 
 func makeSpan(fset *token.FileSet, name string, startPos, endPos token.Pos) declSpan {

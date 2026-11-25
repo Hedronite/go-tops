@@ -102,6 +102,8 @@ var checkLimit = func(x int) bool {
 	return x < 10
 }
 
+type Buf [4 * 2]byte
+
 func topLevel(x int) bool {
 	return x > 0
 }
@@ -125,7 +127,8 @@ func topLevel(x int) bool {
 	}{
 		{name: "funclit_inside_generic_method", line: 7, col: 12, want: "Cache.Get"},
 		{name: "package_var_funclit", line: 13, col: 11, want: "checkLimit"},
-		{name: "top_level_func", line: 17, col: 11, want: "topLevel"},
+		{name: "type_decl", line: 16, col: 13, want: "Buf"},
+		{name: "top_level_func", line: 19, col: 11, want: "topLevel"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -133,6 +136,18 @@ func topLevel(x int) bool {
 				t.Fatalf("EnclosingFunc = %q, want %q", got, tc.want)
 			}
 		})
+	}
+	foundVar, foundType := false, false
+	for _, f := range idx.Funcs() {
+		if f.Name == "checkLimit" {
+			foundVar = true
+		}
+		if f.Name == "Buf" {
+			foundType = true
+		}
+	}
+	if !foundVar || !foundType {
+		t.Fatalf("expected var and type symbols in idx.Funcs(), got %+v", idx.Funcs())
 	}
 }
 

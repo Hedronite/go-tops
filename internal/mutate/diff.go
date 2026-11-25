@@ -10,6 +10,7 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -51,17 +52,24 @@ func ComputeDiff(ctx context.Context, ex gate.Executor, dir, base string, build 
 	if err != nil {
 		return DiffResult{}, err
 	}
-	diffPath, err := writeMutationDiff(dir, raw)
-	if err != nil {
-		return DiffResult{}, err
-	}
 	rawChanged, allPaths := parseUnifiedDiff(raw)
 	untracked, err := listUntrackedGo(ctx, ex, dir)
 	if err != nil {
 		return DiffResult{}, err
 	}
 	allPaths = mergeUntracked(dir, rawChanged, allPaths, untracked)
-	return classifyDiff(dir, base, baseSHA, prefix, diffPath, raw, rawChanged, allPaths, build)
+	res, err := classifyDiff(dir, base, baseSHA, prefix, "", raw, rawChanged, allPaths, build)
+	if err != nil {
+		return DiffResult{}, err
+	}
+	filtered := buildFilteredDiff(dir, raw, untracked, res.ProductionFiles)
+	diffPath, err := writeMutationDiff(dir, filtered)
+	if err != nil {
+		return DiffResult{}, err
+	}
+	res.DiffPath = diffPath
+	res.RawDiff = filtered
+	return res, nil
 }
 
 func moduleRelPrefix(ctx context.Context, ex gate.Executor, dir string) (string, error) {
@@ -126,15 +134,23 @@ func verifyBaseCommit(ctx context.Context, ex gate.Executor, dir, base string) e
 
 func gitDiffEnv() []string {
 	return []string{
-		"GIT_CONFIG_COUNT=3",
+		"GIT_CONFIG_COUNT=7",
 		"GIT_CONFIG_KEY_0=diff.context", "GIT_CONFIG_VALUE_0=0",
-		"GIT_CONFIG_KEY_1=diff.noprefix", "GIT_CONFIG_VALUE_1=false",
-		"GIT_CONFIG_KEY_2=core.quotePath", "GIT_CONFIG_VALUE_2=false",
+		"GIT_CONFIG_KEY_1=diff.interHunkContext", "GIT_CONFIG_VALUE_1=0",
+		"GIT_CONFIG_KEY_2=diff.mnemonicPrefix", "GIT_CONFIG_VALUE_2=false",
+		"GIT_CONFIG_KEY_3=diff.noprefix", "GIT_CONFIG_VALUE_3=false",
+		"GIT_CONFIG_KEY_4=diff.srcPrefix", "GIT_CONFIG_VALUE_4=a/",
+		"GIT_CONFIG_KEY_5=diff.dstPrefix", "GIT_CONFIG_VALUE_5=b/",
+		"GIT_CONFIG_KEY_6=core.quotePath", "GIT_CONFIG_VALUE_6=false",
 	}
 }
 
 func runGitDiff(ctx context.Context, ex gate.Executor, dir, baseSHA string) (string, error) {
-	argv := []string{"git", "diff", "--no-ext-diff", "--relative", "--unified=0", "-M", baseSHA, "--", "."}
+	argv := []string{
+		"git", "diff", "--no-ext-diff", "--relative",
+		"--src-prefix=a/", "--dst-prefix=b/", "--unified=0", "--inter-hunk-context=0",
+		"-M", baseSHA, "--", ".",
+	}
 	res, err := ex.Run(ctx, gate.Cmd{Dir: dir, Argv: argv, Env: gitDiffEnv()})
 	if err != nil || res.ExitCode != 0 {
 		return "", fmt.Errorf("git diff against %s failed: %s", baseSHA, strings.TrimSpace(string(res.Stderr)))
@@ -361,4 +377,70 @@ func sortedKeys(m map[string]bool) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+func buildFilteredDiff(dir, raw string, untracked []string, prod map[string]map[int]bool) string {
+	var buf strings.Builder
+	for _, sec := range splitDiffSections(raw) {
+		if target := sectionTarget(sec); target != "" && len(prod[target]) > 0 {
+			buf.WriteString(sec)
+		}
+	}
+	appendUntrackedSections(&buf, dir, untracked, prod)
+	return buf.String()
+}
+
+func splitDiffSections(raw string) []string {
+	if raw == "" {
+		return nil
+	}
+	var sections []string
+	var cur strings.Builder
+	for _, line := range strings.SplitAfter(raw, "\n") {
+		if strings.HasPrefix(line, "diff --git ") && cur.Len() > 0 {
+			sections = append(sections, cur.String())
+			cur.Reset()
+		}
+		cur.WriteString(line)
+	}
+	if cur.Len() > 0 {
+		sections = append(sections, cur.String())
+	}
+	return sections
+}
+
+func sectionTarget(sec string) string {
+	for _, line := range strings.Split(sec, "\n") {
+		if target, ok := parseDiffTarget(line); ok {
+			return target
+		}
+	}
+	return ""
+}
+
+func appendUntrackedSections(buf *strings.Builder, dir string, untracked []string, prod map[string]map[int]bool) {
+	sorted := slices.Clone(untracked)
+	sort.Strings(sorted)
+	for _, rawRel := range sorted {
+		rel := filepath.ToSlash(rawRel)
+		if len(prod[rel]) == 0 {
+			continue
+		}
+		writeSyntheticDiff(buf, dir, rel)
+	}
+}
+
+func writeSyntheticDiff(buf *strings.Builder, dir, rel string) {
+	data, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(rel)))
+	if err != nil || len(data) == 0 {
+		return
+	}
+	lines := strings.Split(strings.TrimSuffix(string(data), "\n"), "\n")
+	fmt.Fprintf(buf, "diff --git a/%s b/%s\nnew file mode 100644\n--- /dev/null\n+++ b/%s\n@@ -0,0 +1,%d @@\n",
+		rel, rel, rel, len(lines))
+	for _, line := range lines {
+		buf.WriteString("+")
+		buf.WriteString(line)
+		buf.WriteString("\n")
+	}
 }

@@ -102,6 +102,10 @@ func skippedExempt(x int) bool {
 func expiredExempt(x int) bool {
 	return x < 9
 }
+
+var varExempt = func(x int) bool {
+	return x < 3
+}
 `
 	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module example.com/p\n\ngo 1.26\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -125,15 +129,20 @@ func expiredExempt(x int) bool {
 	if err != nil {
 		t.Fatal(err)
 	}
+	hVarExempt, err := MutatedLineHash([]byte(src), 19, 11, "CONDITIONALS_BOUNDARY")
+	if err != nil {
+		t.Fatal(err)
+	}
 	keyLived := SurvivorKey{File: "p.go", Function: "check", Mutator: "CONDITIONALS_BOUNDARY", LineHash: hLived}
 	keyTimed := SurvivorKey{File: "p.go", Function: "check", Mutator: "CONDITIONALS_NEGATION", LineHash: hTimed}
 	keyExempt := SurvivorKey{File: "p.go", Function: "skippedExempt", Mutator: "CONDITIONALS_BOUNDARY", LineHash: hExempt}
+	keyVarExempt := SurvivorKey{File: "p.go", Function: "varExempt", Mutator: "CONDITIONALS_BOUNDARY", LineHash: hVarExempt}
 
 	jsonOut := `{
   "files": [{
     "file_name": "p.go",
     "mutations": [
-      {"type": "CONDITIONALS_BOUNDARY", "status": "SKIPPED", "line": 4, "column": 7},
+      {"type": "CONDITIONALS_BOUNDARY", "status": "SKIPPED", "line": 99, "column": 1},
       {"type": "CONDITIONALS_BOUNDARY", "status": "KILLED", "line": 4, "column": 7},
       {"type": "CONDITIONALS_BOUNDARY", "status": "LIVED", "line": 4, "column": 7},
       {"type": "CONDITIONALS_NEGATION", "status": "TIMED OUT", "line": 5, "column": 12},
@@ -141,6 +150,7 @@ func expiredExempt(x int) bool {
       {"type": "ARITHMETIC_BASE", "status": "NOT VIABLE", "line": 7, "column": 11},
       {"type": "CONDITIONALS_BOUNDARY", "status": "LIVED", "line": 11, "column": 11},
       {"type": "CONDITIONALS_BOUNDARY", "status": "NOT COVERED", "line": 15, "column": 11},
+      {"type": "CONDITIONALS_BOUNDARY", "status": "NOT COVERED", "line": 19, "column": 11},
       {"type": "CONDITIONALS_BOUNDARY", "status": "LIVED", "line": 99, "column": 1}
     ]
   }]
@@ -152,13 +162,14 @@ func expiredExempt(x int) bool {
 			"p.go":       {4: true, 5: true, 7: true, 11: true, 15: true},
 			"p_linux.go": {2: true},
 		},
-		InBuildFiles:    map[string]map[int]bool{"p.go": {4: true, 5: true, 7: true, 11: true, 15: true}},
+		InBuildFiles:    map[string]map[int]bool{"p.go": {4: true, 5: true, 7: true, 11: true, 15: true, 19: true}},
 		OutOfBuildFiles: map[string]map[int]bool{"p_linux.go": {2: true}},
 	}
 
 	today := time.Date(2026, 11, 25, 0, 0, 0, 0, time.UTC)
 	exemptions := []report.Exemption{
 		{Path: "p.go", Symbol: "skippedExempt", Layer: "mutation", Reason: "ok", Owner: "@a", Expires: "2027-01-01"},
+		{Path: "p.go", Symbol: "varExempt", Layer: "mutation", Reason: "var fn", Owner: "@a", Expires: "2027-01-01"},
 		{Path: "p.go", Symbol: "expiredExempt", Layer: "mutation", Reason: "old", Owner: "@a", Expires: "2026-01-01"},
 	}
 
@@ -205,17 +216,18 @@ func expiredExempt(x int) bool {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Line 99 filtered out; SKIPPED ignored => 7 counted mutants:
-	// KILLED(1) + TIMED OUT(1 -> killed++ & timed_out++) + NOT VIABLE(dropped) + LIVED(explained) + NOT COVERED(line 7 -> unexplained) + LIVED(line 11 -> exempt) + NOT COVERED(line 15 expired -> unexplained)
+	// Line 99 filtered out; NOT VIABLE dropped outside Mutants (O1) => 7 counted mutants (1 killed + 1 timed + 1 ledger + 2 exempt + 2 unexplained):
 	if ev.Mutants != 7 || ev.Killed != 2 || ev.TimedOut != 1 || ev.Dropped != 1 ||
-		ev.SurvivedExplained != 1 || ev.SurvivedUnexplained != 2 || ev.NotMeasured != 2 {
+		ev.SurvivedExplained != 1 || ev.SurvivedUnexplained != 2 || ev.NotMeasured != 2 || len(ev.ExemptionProblems) != 0 {
 		t.Fatalf("unexpected counts: %+v", ev)
 	}
 	if !slices.Equal(ev.TimedOutKeys, []string{keyTimed.String()}) {
 		t.Fatalf("TimedOutKeys = %v, want [%s]", ev.TimedOutKeys, keyTimed.String())
 	}
-	if !slices.Equal(ev.Exempt, []string{keyExempt.String()}) {
-		t.Fatalf("Exempt = %v, want [%s]", ev.Exempt, keyExempt.String())
+	wantExempt := []string{keyExempt.String(), keyVarExempt.String()}
+	slices.Sort(wantExempt)
+	if !slices.Equal(ev.Exempt, wantExempt) {
+		t.Fatalf("Exempt = %v, want %v", ev.Exempt, wantExempt)
 	}
 
 	details := ev.Details()
@@ -223,8 +235,8 @@ func expiredExempt(x int) bool {
 	if !ok {
 		t.Fatalf("unexpected survivors type: %T", details["survivors"])
 	}
-	if len(rows) != 4 {
-		t.Fatalf("expected 4 survivor rows (1 explained, 1 exempt, 2 unexplained), got %d", len(rows))
+	if len(rows) != 5 {
+		t.Fatalf("expected 5 survivor rows (1 explained, 2 exempt, 2 unexplained), got %d", len(rows))
 	}
 	for _, row := range rows {
 		val, hasExplained := row["explained"]
@@ -239,10 +251,12 @@ func expiredExempt(x int) bool {
 		}
 	}
 
-	// RUNNABLE left in output must fail closed.
-	runnableJSON := `{"files": [{"file_name": "p.go", "mutations": [{"type": "CONDITIONALS_BOUNDARY", "status": "RUNNABLE", "line": 4, "column": 7}]}]}`
-	if _, err := Evaluate(gate.MutationConfig{}, nil, []byte(runnableJSON), false, diff, dir, today); err == nil {
-		t.Fatal("expected fail on RUNNABLE mutant")
+	// RUNNABLE and SKIPPED on a changed line must fail closed (B2).
+	for _, badStatus := range []string{"RUNNABLE", "SKIPPED"} {
+		badJSON := `{"files": [{"file_name": "p.go", "mutations": [{"type": "CONDITIONALS_BOUNDARY", "status": "` + badStatus + `", "line": 4, "column": 7}]}]}`
+		if _, err := Evaluate(gate.MutationConfig{}, nil, []byte(badJSON), false, diff, dir, today); err == nil {
+			t.Fatalf("expected fail on %s mutant on changed line", badStatus)
+		}
 	}
 }
 
@@ -272,5 +286,21 @@ func TestNeedsIntegration(t *testing.T) {
 	needMain, err := NeedsIntegration(ctx, gate.OS{}, dir, map[string]map[int]bool{"cmd/tool/main.go": {2: true}})
 	if err != nil || !needMain {
 		t.Fatalf("cmd/tool NeedsIntegration = %v, err = %v; want true", needMain, err)
+	}
+
+	// B5: space in module directory path must still detect package main.
+	spaceDir := filepath.Join(t.TempDir(), "mod with space")
+	if err := os.MkdirAll(filepath.Join(spaceDir, "cmd/tool"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(spaceDir, "go.mod"), []byte("module example.com/app\n\ngo 1.26\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(spaceDir, "cmd/tool/main.go"), []byte("package main\nfunc main() {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	needSpace, err := NeedsIntegration(ctx, gate.OS{}, spaceDir, map[string]map[int]bool{"cmd/tool/main.go": {2: true}})
+	if err != nil || !needSpace {
+		t.Fatalf("spaceDir NeedsIntegration = %v, err = %v; want true", needSpace, err)
 	}
 }
