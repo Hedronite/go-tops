@@ -34,6 +34,7 @@ type Config struct {
 	Hygiene  HygieneConfig
 	Coverage CoverageConfig
 	Crap     CrapConfig
+	Mutation MutationConfig
 }
 
 // HygieneConfig is gates.hygiene.
@@ -51,6 +52,13 @@ type CoverageConfig struct {
 	ExcludeGenerated    bool
 	IntegrationEnabled  bool
 	IntegrationPackages []string
+}
+
+// MutationConfig is gates.mutation (§6.4).
+type MutationConfig struct {
+	Engine         string
+	UnexplainedMax int
+	Ledger         string
 }
 
 // CrapConfig is gates.crap.

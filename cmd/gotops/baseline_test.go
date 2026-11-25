@@ -1069,3 +1069,30 @@ func TestUsageSaysARecordFollowsItsEntryDown(t *testing.T) {
 		t.Errorf("the usage does not say that a plain write lowers a record with its entry:\n%s", baselineUsage)
 	}
 }
+
+func TestDescribeSumsFindingsAcrossLintersAndFiles(t *testing.T) {
+	f := baseline.File{
+		JudgedLaws: 16,
+		Ledger: baseline.Ledger{
+			Findings: baseline.Counts{
+				"errcheck": {"a.go": 3, "b.go": 2},
+				"revive":   {"a.go": 4},
+			},
+			Nolint: baseline.Counts{"errcheck": {"c.go": 2}},
+		},
+	}
+	got := describe(f)
+	for _, want := range []string{"findings 9 in 2 files", "nolint 2 in 1 file", "acks 0"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("describe = %q, want %q", got, want)
+		}
+	}
+}
+
+func TestBaselineKindSurvivorsRefusalNamesM6(t *testing.T) {
+	dir := t.TempDir()
+	code, _, stderr := baselineIn(t, dir, "--init", "--kind", "survivors")
+	if code != 2 || !strings.Contains(stderr, "M6") {
+		t.Fatalf("exit %d, stderr %q, want 2 naming M6", code, stderr)
+	}
+}

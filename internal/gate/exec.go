@@ -7,15 +7,17 @@ import (
 	"fmt"
 	"io"
 	"os/exec"
+	"strings"
 )
 
 // Cmd is one argv step. It is run by exec, never through a shell: no element
 // of Argv is parsed or expanded.
 type Cmd struct {
-	Dir   string
-	Argv  []string
-	Env   []string // extra KEY=VALUE entries added to the process environment
-	Stdin io.Reader
+	Dir      string
+	Argv     []string
+	Env      []string // extra KEY=VALUE entries added to the process environment
+	StripEnv []string // prefixes of environment keys removed before Env is applied
+	Stdin    io.Reader
 }
 
 // Output is what a finished step produced. A non-zero exit is an Output, not
@@ -45,8 +47,8 @@ func (OS) Run(ctx context.Context, c Cmd) (Output, error) {
 	}
 	cmd := exec.CommandContext(ctx, c.Argv[0], c.Argv[1:]...)
 	cmd.Dir = c.Dir
-	if len(c.Env) > 0 {
-		cmd.Env = append(cmd.Environ(), c.Env...)
+	if len(c.StripEnv) > 0 || len(c.Env) > 0 {
+		cmd.Env = buildEnv(cmd.Environ(), c.StripEnv, c.Env)
 	}
 	cmd.Stdin = c.Stdin
 	var so, se bytes.Buffer
@@ -64,4 +66,27 @@ func (OS) Run(ctx context.Context, c Cmd) (Output, error) {
 		return out, fmt.Errorf("%w: %s", ErrNotFound, c.Argv[0])
 	}
 	return out, err
+}
+
+func buildEnv(base, strip, extra []string) []string {
+	if len(strip) == 0 {
+		return append(base, extra...)
+	}
+	out := make([]string, 0, len(base)+len(extra))
+	for _, kv := range base {
+		if hasAnyPrefix(kv, strip) {
+			continue
+		}
+		out = append(out, kv)
+	}
+	return append(out, extra...)
+}
+
+func hasAnyPrefix(kv string, prefixes []string) bool {
+	for _, p := range prefixes {
+		if strings.HasPrefix(kv, p) {
+			return true
+		}
+	}
+	return false
 }

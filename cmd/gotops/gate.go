@@ -69,6 +69,7 @@ func toGateConfig(e *config.Config) (gate.Config, error) {
 		Hygiene:      hygieneOf(e.Gates.Hygiene),
 		Coverage:     coverageOf(e.Gates.Coverage),
 		Crap:         crapOf(e.Gates.Crap),
+		Mutation:     mutationOf(e.Gates.Mutation),
 		Exemptions:   exemptionsOf(e.Exemptions),
 	}
 	if e.Advisory != nil {
@@ -135,4 +136,16 @@ func exemptionsOf(in []config.Exemption) []report.Exemption {
 		})
 	}
 	return out
+}
+
+func mutationOf(m config.Mutation) gate.MutationConfig {
+	max := 0
+	if m.UnexplainedSurvivorsMax != nil {
+		max = *m.UnexplainedSurvivorsMax
+	}
+	return gate.MutationConfig{
+		Engine:         m.Engine,
+		UnexplainedMax: max,
+		Ledger:         m.Ledger,
+	}
 }

@@ -136,7 +136,7 @@ var argRules = []argRule{ruleKind, ruleOneMode, ruleRenameKeys, ruleNoStrays, ru
 
 func ruleKind(_ baselineArgs, kind string, _ []string) error {
 	if kind != "" {
-		return fmt.Errorf("--kind %s: the survivors kind is recorded from a tier 2 run, which lands with mutation at M4", kind)
+		return fmt.Errorf("--kind %s: the survivors kind is recorded from a tier 2 run, which lands at M6", kind)
 	}
 	return nil
 }
@@ -628,16 +628,30 @@ func writeLedger(path string, data []byte) error {
 	return nil
 }
 
+// countSummary returns the total count across all buckets and the number of
+// distinct files in c, formatted as "0" or "<sum> in <files> file(s)".
+func countSummary(c baseline.Counts) string {
+	sum := 0
+	files := map[string]bool{}
+	for _, byFile := range c {
+		for file, k := range byFile {
+			sum += k
+			files[file] = true
+		}
+	}
+	if len(files) == 0 {
+		return "0"
+	}
+	unit := "files"
+	if len(files) == 1 {
+		unit = "file"
+	}
+	return fmt.Sprintf("%d in %d %s", sum, len(files), unit)
+}
+
 // describe is one line saying what a ledger holds.
 func describe(f baseline.File) string {
-	n := func(c baseline.Counts) int {
-		total := 0
-		for _, files := range c {
-			total += len(files)
-		}
-		return total
-	}
 	l := f.Ledger
-	return fmt.Sprintf("functions %d, packages %d, findings %d, nolint %d, acks %d, exemptions %d, judged_laws %d",
-		len(l.Functions), len(l.Packages), n(l.Findings), n(l.Nolint), n(l.Ack), l.Exemptions, f.JudgedLaws)
+	return fmt.Sprintf("functions %d, packages %d, findings %s, nolint %s, acks %s, exemptions %d, judged_laws %d",
+		len(l.Functions), len(l.Packages), countSummary(l.Findings), countSummary(l.Nolint), countSummary(l.Ack), l.Exemptions, f.JudgedLaws)
 }
