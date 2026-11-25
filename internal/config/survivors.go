@@ -15,6 +15,6 @@ func ParseSurvivors(file string, data []byte) ([]Issue, error) {
 		return found, err
 	}
 	c := &checker{}
-	c.survivorDays(file, v)
+	c.survivorDays(file, v, false)
 	return c.issues, nil
 }
