@@ -226,6 +226,9 @@ func TestSaveWritesWhatLoadAndTheStrictReaderAccept(t *testing.T) {
 	if len(got.Entries) != 2 || got.Entries[0] != second || got.Entries[1] != entry() {
 		t.Errorf("round trip: %+v", got.Entries)
 	}
+	if info, err := os.Stat(filepath.Join(root, filepath.FromSlash(rel))); err != nil || info.Mode().Perm() != 0o644 {
+		t.Errorf("the ledger is not readable by others: %v %v", info, err)
+	}
 	if err := Save(root, rel, Ledger{}); err != nil {
 		t.Fatal(err)
 	}

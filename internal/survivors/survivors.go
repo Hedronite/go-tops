@@ -21,20 +21,16 @@ import (
 	"github.com/Hedronite/go-tops/internal/mutate"
 )
 
-// ParseKey reads the text form of the adapter's key, which String writes. It
-// splits from the right, because only the file part may hold a colon.
+// ParseKey reads the text form of the adapter's key, which String writes. Only
+// the file part may hold a colon, so the last three parts are the others.
 func ParseKey(s string) (mutate.SurvivorKey, error) {
 	bad := fmt.Errorf("%q is not a survivor key, <file>:<function>:<mutator>:<line_hash>", s)
-	rest := s
-	var tail [3]string
-	for i := len(tail) - 1; i >= 0; i-- {
-		at := strings.LastIndex(rest, ":")
-		if at < 0 {
-			return mutate.SurvivorKey{}, bad
-		}
-		rest, tail[i] = rest[:at], rest[at+1:]
+	parts := strings.Split(s, ":")
+	if len(parts) < 4 {
+		return mutate.SurvivorKey{}, bad
 	}
-	k := mutate.SurvivorKey{File: rest, Function: tail[0], Mutator: tail[1], LineHash: tail[2]}
+	file, tail := parts[:len(parts)-3], parts[len(parts)-3:]
+	k := mutate.SurvivorKey{File: strings.Join(file, ":"), Function: tail[0], Mutator: tail[1], LineHash: tail[2]}
 	if slices.Contains([]string{k.File, k.Function, k.Mutator, k.LineHash}, "") {
 		return mutate.SurvivorKey{}, bad
 	}

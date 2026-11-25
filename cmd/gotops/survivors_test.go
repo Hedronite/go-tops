@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Hedronite/go-tops/internal/cli"
 	"github.com/Hedronite/go-tops/internal/gate"
 	"github.com/Hedronite/go-tops/internal/mutate"
 )
@@ -190,7 +191,8 @@ func TestSurvivorsExplainRefusals(t *testing.T) {
 		{"a passed day", nil, explainArgs(survivorKey, "--expires", "2001-01-01"), 2, "2001-01-01"},
 		{"an empty owner", nil, explainArgs(survivorKey, "--owner", ""), 2, "--owner"},
 		{"no reason", nil, []string{"survivors", "explain", survivorKey, "--owner", "x", "--expires", farDay}, 2, "--reason"},
-		{"no key", nil, []string{"survivors", "explain", "--owner", "x"}, 2, "key"},
+		{"no key", nil, []string{"survivors", "explain", "--owner", "x"}, 2, "needs a key before its flags"},
+		{"explain alone", nil, []string{"survivors", "explain"}, 2, "needs a key before its flags"},
 		{"a key with a part missing", nil, explainArgs("a.go:F:X"), 2, "not a survivor key"},
 		{"a second key", nil, explainArgs(survivorKey, "more"), 2, "more"},
 		{"an unknown subcommand", nil, []string{"survivors", "accept"}, 2, "accept"},
@@ -295,5 +297,33 @@ func TestTheGateFailsOnALedgerItCannotRead(t *testing.T) {
 	_, err := judged(t, "survivors:\n  - {file: x.go}\n", time.Now())
 	if err == nil || !strings.Contains(err.Error(), survivorsRel) {
 		t.Fatalf("err = %v, want one naming %s", err, survivorsRel)
+	}
+}
+
+// The command as the binary runs it, in the module directory: its exit code and
+// what it prints for each way it ends (§12.1).
+func TestTheSurvivorsCommandExitsByHowItEnded(t *testing.T) {
+	dir := gitModule(t, goodConfig(t))
+	t.Chdir(dir)
+	run := func(args ...string) (int, string) {
+		var out, errs strings.Builder
+		code := runSurvivors(cli.NewEnv(&out, &errs), args)
+		return code, errs.String()
+	}
+	if code, errs := run("list"); code != 0 || errs != "" {
+		t.Errorf("list: exit %d %q", code, errs)
+	}
+	if code, errs := run("explain", survivorKey, "--reason", "three words here", "--owner", "x", "--expires", farDay); code != 1 || !strings.HasPrefix(errs, "gotops survivors: no report") {
+		t.Errorf("explain with no report: exit %d %q", code, errs)
+	}
+	if code, errs := run("accept"); code != 2 || !strings.Contains(errs, "unknown subcommand accept") {
+		t.Errorf("an unknown subcommand: exit %d %q", code, errs)
+	}
+	// A ledger that cannot be read is the environment's fault, not the ledger's.
+	if err := os.MkdirAll(filepath.Join(dir, filepath.FromSlash(survivorsRel)), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if code, errs := run("list"); code != cli.ExitEnvironment {
+		t.Errorf("an unreadable ledger: exit %d %q", code, errs)
 	}
 }

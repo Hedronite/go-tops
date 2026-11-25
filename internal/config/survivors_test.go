@@ -42,3 +42,11 @@ func TestParseSurvivorsDoesNotJudgeExpiry(t *testing.T) {
 		}
 	}
 }
+
+// An entry the schema refuses is named, and the ledger is not judged further.
+func TestParseSurvivorsNamesAnEntryTheSchemaRefuses(t *testing.T) {
+	got, err := config.ParseSurvivors("s.yaml", []byte("survivors:\n  - {file: a.go}\n"))
+	if err != nil || len(got) == 0 || !strings.Contains(got[0].String(), "/survivors/0") {
+		t.Fatalf("issues %v, err %v, want one at /survivors/0", got, err)
+	}
+}
