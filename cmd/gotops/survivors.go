@@ -64,16 +64,15 @@ type ledgerFiles struct{ dir, ledger, report string }
 
 func runSurvivors(env cli.Env, args []string) int {
 	err := survivorsCommand(env, ".", args, time.Now())
-	var failure *survivorsError
-	switch {
-	case err == nil:
+	if err == nil {
 		return 0
-	case errors.As(err, &failure):
+	}
+	var failure *survivorsError
+	if errors.As(err, &failure) {
 		env.Stderr.Printf("gotops survivors: %v\n", err)
 		return failure.code
-	default:
-		return usageError(env, "survivors", survivorsUsage, err)
 	}
+	return usageError(env, "survivors", survivorsUsage, err)
 }
 
 // survivorsCommand runs one subcommand. A plain error is a usage error.
@@ -126,14 +125,14 @@ func survivorFiles(dir string) (ledgerFiles, error) {
 
 func (f ledgerFiles) load() (survivors.Ledger, error) {
 	l, err := survivors.Load(f.dir, f.ledger)
-	var invalid *survivors.InvalidError
-	switch {
-	case errors.As(err, &invalid):
-		return l, stop(cli.ExitUsage, "%w", err)
-	case err != nil:
-		return l, stop(cli.ExitEnvironment, "%w", err)
+	if err == nil {
+		return l, nil
 	}
-	return l, nil
+	var invalid *survivors.InvalidError
+	if errors.As(err, &invalid) {
+		return l, stop(cli.ExitUsage, "%w", err)
+	}
+	return l, stop(cli.ExitEnvironment, "%w", err)
 }
 
 func (f ledgerFiles) save(l survivors.Ledger) error {
