@@ -92,10 +92,22 @@ gates:
 	return dir
 }
 
+func fixtureEnv() []string {
+	var env []string
+	for _, entry := range os.Environ() {
+		if strings.HasPrefix(entry, "CI=") || strings.HasPrefix(entry, "GITHUB_ACTIONS=") {
+			continue
+		}
+		env = append(env, entry)
+	}
+	return env
+}
+
 func runFixtureGate(t *testing.T, bin, dir string) (string, report.Layer, string, error) {
 	t.Helper()
 	cmd := exec.Command(bin, "gate", "--only", "mutation", "--base", "main")
 	cmd.Dir = dir
+	cmd.Env = fixtureEnv()
 	out, err := cmd.CombinedOutput()
 	rep, rerr := report.Load(filepath.Join(dir, report.DefaultPath))
 	if rerr != nil {
