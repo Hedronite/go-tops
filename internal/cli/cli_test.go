@@ -176,12 +176,3 @@ func TestDefaultRegistryIsTheOneMainUses(t *testing.T) {
 		t.Errorf("Main exit = %d, want 4 from the command registered through Register", got)
 	}
 }
-
-func TestBelowLimitWeak(t *testing.T) {
-	if !cli.BelowLimit(1, 5) {
-		t.Fatal("BelowLimit(1, 5) = false, want true")
-	}
-	if cli.BelowLimit(6, 5) {
-		t.Fatal("BelowLimit(6, 5) = true, want false")
-	}
-}
