@@ -385,17 +385,18 @@ func (c *checker) ledger(rel, schema string, survivors bool) error {
 	}
 	c.issues = append(c.issues, found...)
 	if len(found) == 0 && survivors {
-		c.survivorDays(rel, v)
+		c.survivorDays(rel, v, true)
 	}
 	return nil
 }
 
 // survivorDays: the pattern of `expires` checks its shape; this checks that it
-// is a real day. Whether it has passed is the mutation layer's judgement.
-func (c *checker) survivorDays(file string, v any) {
+// is a real day and, with inForce, that it has not passed: a passed entry
+// explains nothing and fails at tier 0 (§6.4).
+func (c *checker) survivorDays(file string, v any, inForce bool) {
 	for i, e := range asList(asMap(v)["survivors"]) {
 		if s, ok := asMap(e)["expires"].(string); ok {
-			c.date(file, "/survivors/"+strconv.Itoa(i)+"/expires", s, false)
+			c.date(file, "/survivors/"+strconv.Itoa(i)+"/expires", s, inForce)
 		}
 	}
 }

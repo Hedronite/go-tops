@@ -421,6 +421,21 @@ jobs:
       # it with jq.
       - name: jq version
         run: jq --version
+      # The pinned Nushell of the skills job, for the live skills test below.
+      - name: install Nushell 0.108.0
+        env:
+          VERSION: 0.108.0
+          TARGET: x86_64-unknown-linux-gnu
+        run: |
+          set -euo pipefail
+          sha=f0daaa0256b0f7dd5f4d9925b4d5522d8de5e947ed9ad64a43526e5cffeb05df
+          archive="${RUNNER_TEMP}/nu.tar.gz"
+          curl --fail --silent --show-error --location --output "${archive}" \
+            "https://github.com/nushell/nushell/releases/download/${VERSION}/nu-${VERSION}-${TARGET}.tar.gz"
+          echo "${sha}  ${archive}" | shasum -a 256 -c -
+          mkdir -p "${RUNNER_TEMP}/nu"
+          tar -xzf "${archive}" --strip-components=1 -C "${RUNNER_TEMP}/nu"
+          echo "${RUNNER_TEMP}/nu" >> "${GITHUB_PATH}"
       - name: adoption end to end
         env:
           CGO_ENABLED: "1"
@@ -435,3 +450,17 @@ jobs:
               exit 1
             fi
           done
+      # The skills against the real gotops and linter, on a fixture module
+      # (skills_live_test.go): the skills job runs them on fixtures only.
+      - name: skills against the real gotops
+        env:
+          CGO_ENABLED: "1"
+        shell: bash
+        run: |
+          set -euo pipefail
+          log="${RUNNER_TEMP}/skills-live.log"
+          go test -v -tags "skills adoption" -run TestSkillsRun -timeout 20m -count=1 . 2>&1 | tee "${log}"
+          if ! grep -q -- "--- PASS: TestSkillsRunTheRealGotopsOnAFixtureModule " "${log}"; then
+            echo "::error::no '--- PASS' line for TestSkillsRunTheRealGotopsOnAFixtureModule: the test did not run, or it was skipped"
+            exit 1
+          fi

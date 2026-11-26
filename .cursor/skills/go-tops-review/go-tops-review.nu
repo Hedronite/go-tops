@@ -184,6 +184,32 @@ def function-row [f: record, violations: list, ledger: record] {
   }
 }
 
+# The report's mutation layer: what it did, and its surviving mutants with what
+# explains each (a ledger entry, a mutation exemption, or nothing).
+def mutation-of [rep: record] {
+  let layer = ($rep.layers | where {|l| ($l.id? | default "") == "mutation" } | get 0?)
+  let exempt = ($layer.details?.exempt? | default [])
+  let survivors = ($layer.details?.survivors? | default [] | each {|s|
+    let by = if ($s.key? | default "") in $exempt { "exemption" } else { $s.explained? | default "" }
+    {key: ($s.key? | default ""), file: ($s.file? | default ""), function: ($s.function? | default ""), mutator: ($s.mutator? | default ""), line: $s.line?, status: ($s.status? | default ""), explained: $by}
+  })
+  {outcome: ($layer.outcome? | default ""), error: ($layer.details?.error? | default ""), survivors: $survivors}
+}
+
+def with-survivors [row: record, survivors: list] {
+  let mine = ($survivors | where {|s| $s.file == $row.file and $s.function == $row.function } | each {|s| $s | reject file function })
+  $row | insert survivors $mine
+}
+
+# The survivors in no listed function: a package-level initializer, for one.
+def outside [survivors: list, rows: list] {
+  $survivors | where {|s| not ($rows | any {|r| $r.file == $s.file and $r.function == $s.function }) }
+}
+
+def needs-reviewer [row: record] {
+  $row.state in ["new" "raised"] or ($row.survivors | any {|s| $s.explained == "" })
+}
+
 # The ledger the fork point holds, or the working copy when the fork point has none.
 def base-ledger [path: string, sha: string] {
   let r = (git-run $path ["show" $"($sha):.go-tops/baseline.json"])
@@ -263,7 +289,8 @@ def "main diff" [
   let fns = (touched-functions $path ($rep.module? | default "") $sources $added $committed_only)
   let ledger = (base-ledger $path $fp.sha)
   let violations = ($rep.layers | where id == "crap" | first | get details?.violations? | default [])
-  let rows = ($fns | each {|f| function-row $f $violations $ledger.functions })
+  let mutation = (mutation-of $rep)
+  let rows = ($fns | each {|f| with-survivors (function-row $f $violations $ledger.functions) $mutation.survivors })
   emit true $cmd "" {
     base: $base
     fork_point: $fp.sha
@@ -278,7 +305,9 @@ def "main diff" [
     }
     ledger_source: $ledger.source
     functions: $rows
-    attention: ($rows | where {|r| $r.state in ["new" "raised"] })
+    attention: ($rows | where {|r| needs-reviewer $r })
+    mutation: {outcome: $mutation.outcome, error: $mutation.error}
+    survivors_elsewhere: (outside $mutation.survivors $rows)
     note: "CRAP, complexity and coverage are listed only for functions over the cap: the report names no others. under-cap means the function is not in the report."
     judgment: $JUDGMENT
   }

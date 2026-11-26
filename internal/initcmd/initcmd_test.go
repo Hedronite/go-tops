@@ -11,7 +11,6 @@ import (
 	"sort"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
 	"go.yaml.in/yaml/v3"
@@ -24,8 +23,6 @@ import (
 // kit's own files are two levels up.
 
 const repoRoot = "../.."
-
-var today = time.Date(2026, 11, 17, 0, 0, 0, 0, time.UTC)
 
 // newModule makes a temp Go module and returns its directory.
 func newModule(t *testing.T, module, goLine string) string {
@@ -232,11 +229,10 @@ func TestConfigValidatesAndCarriesTheProfile(t *testing.T) {
 	}
 }
 
-// §12.1, §3.3: init turns CRAP on at the class cap: no enabled: false, so no
-// reason and no expiry. Mutation lands at M4, so it is written off with a reason
-// and an unexpired expires; the other layers init leaves off carry a reason;
-// gates 1 to 3 have no enabled key.
-func TestCrapIsOnAndMutationIsOffWithReasonAndExpiry(t *testing.T) {
+// §12.1, §3.3, §6.4: init turns CRAP on at the class cap and mutation on with no
+// survivor allowed: neither has an off switch's fields. The other layers init
+// leaves off carry a reason; gates 1 to 3 have no enabled key.
+func TestCrapAndMutationAreOn(t *testing.T) {
 	for _, class := range launchClasses {
 		t.Run(class, func(t *testing.T) {
 			dir := newModule(t, "github.com/acme/demo", "1.26")
@@ -250,9 +246,11 @@ func TestCrapIsOnAndMutationIsOffWithReasonAndExpiry(t *testing.T) {
 				t.Errorf("crap must be on with the class cap and no off-switch fields: %v", crap)
 			}
 			m := asMap(t, gates["mutation"])
-			exp, err := time.Parse("2006-01-02", fmt.Sprint(m["expires"]))
-			if m["enabled"] != false || m["reason"] == nil || err != nil || !exp.After(today) {
-				t.Errorf("mutation must be off with a reason and an unexpired expires: %v", m)
+			if m["enabled"] != true || m["reason"] != nil || m["expires"] != nil {
+				t.Errorf("mutation must be on with no off-switch fields: %v", m)
+			}
+			if fmt.Sprint(m["unexplained_survivors_max"]) != "0" || m["ledger"] != ".go-tops/survivors.yaml" {
+				t.Errorf("mutation allows no unexplained survivor and names its ledger: %v", m)
 			}
 			for _, g := range []string{"hygiene", "tests", "coverage"} {
 				if _, has := asMap(t, gates[g])["enabled"]; has {
@@ -433,6 +431,7 @@ func TestToolsModPinsTheModuleTools(t *testing.T) {
 	for _, want := range []string{
 		"module github.com/acme/demo/tools", "go 1.26.4\n",
 		"\tgotest.tools/gotestsum\n", "gotest.tools/gotestsum v1.13.0",
+		"\tgithub.com/go-gremlins/gremlins/cmd/gremlins\n", "github.com/go-gremlins/gremlins v0.6.0",
 		"\tgolang.org/x/vuln/cmd/govulncheck\n", "golang.org/x/vuln v1.9.0",
 		"\tgithub.com/google/go-licenses/v2\n", "github.com/google/go-licenses/v2 v2.0.1",
 		"\tgithub.com/Hedronite/go-tops/cmd/gotops\n", "github.com/Hedronite/go-tops v0.1.0",
@@ -490,9 +489,10 @@ func TestAdoptionRecordFillsItems2To4And6(t *testing.T) {
 	for _, want := range []string{
 		"https://github.com/Hedronite/go-tops",
 		"2. **Protocol version.** " + mustProtocol(t),
-		"`gotops` v0.1.0", "toolchain go1.27.4", "golangci-lint 2.15.0", "govulncheck v1.9.0", "gotestsum v1.13.0", "go-licenses v2.0.1",
+		"`gotops` v0.1.0", "toolchain go1.27.4", "golangci-lint 2.15.0", "govulncheck v1.9.0", "gotestsum v1.13.0", "go-licenses v2.0.1", "gremlins v0.6.0",
 		"`library-core`: statement coverage floor 85%, CRAP cap 8",
 		".go-tops/baseline.json", ".go-tops/survivors.yaml",
+		"8. **Known deviations.** None.",
 	} {
 		if !strings.Contains(rec, want) {
 			t.Errorf("GO-TOPS.md lacks %q:\n%s", want, rec)
@@ -559,22 +559,5 @@ func TestAdoptionRecordItem6NamesTheLedgerLeg(t *testing.T) {
 		if !strings.Contains(item, want) {
 			t.Errorf("item 6 lacks %q:\n%s", want, item)
 		}
-	}
-}
-
-// CRAP is on from init, so the record's known deviations name only mutation.
-func TestAdoptionRecordItem8NamesOnlyMutation(t *testing.T) {
-	dir := newModule(t, "github.com/acme/demo", "1.26")
-	if code, _, errs := run(opts(dir, "binary-cli")); code != ExitOK {
-		t.Fatal(errs)
-	}
-	rec := read(t, dir, "GO-TOPS.md")
-	i := strings.Index(rec, "\n8. **")
-	if i < 0 {
-		t.Fatal("no item 8")
-	}
-	item := rec[i:]
-	if !strings.Contains(item, "mutation gate is off until 2027-03-01") || strings.Contains(item, "CRAP gate is off") {
-		t.Errorf("item 8 should name the mutation gate and not CRAP:\n%s", item)
 	}
 }

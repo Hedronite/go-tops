@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -475,5 +476,117 @@ func TestReviewWithNoCommandNamesTheThree(t *testing.T) {
 	got := decodeEnvelope(t, out)
 	if got.OK || !strings.Contains(got.Error, "files, diff or answers") {
 		t.Fatalf("ok = %v, error %q", got.OK, got.Error)
+	}
+}
+
+// survivor is one row of the report's mutation layer (GO_TOPS.md section 12.3).
+func survivor(function, mutator string, line int, explained any) map[string]any {
+	hash := strings.Repeat("c", 64)
+	return map[string]any{
+		"key": "pkg/a.go:" + function + ":" + mutator + ":" + hash, "file": "pkg/a.go", "function": function,
+		"mutator": mutator, "line_hash": hash, "line": line, "status": "LIVED", "explained": explained,
+	}
+}
+
+// writeMutation adds a mutation layer to the report writeReport wrote.
+func (r *repo) writeMutation(outcome string, details map[string]any) {
+	r.t.Helper()
+	path := filepath.Join(r.dir, ".go-tops", "report.json")
+	b, err := os.ReadFile(path)
+	if err != nil {
+		r.t.Fatal(err)
+	}
+	var rep map[string]any
+	if err := json.Unmarshal(b, &rep); err != nil {
+		r.t.Fatal(err)
+	}
+	rep["layers"] = append(asList(rep["layers"]), map[string]any{"id": "mutation", "outcome": outcome, "details": details})
+	if b, err = json.Marshal(rep); err != nil {
+		r.t.Fatal(err)
+	}
+	r.write(".go-tops/report.json", string(b))
+}
+
+// keysOf lists the keys of a list of survivor rows, with what explains each.
+func keysOf(v any) []string {
+	var out []string
+	for _, row := range asList(v) {
+		out = append(out, strings.Split(asStr(asObj(row)["key"]), ":")[2]+" "+asStr(asObj(row)["explained"]))
+	}
+	return out
+}
+
+// The review lists the survivors on the diff's functions, each with what
+// explains it; one outside every listed function is listed apart. It still gives
+// no verdict.
+func TestReviewDiffListsTheSurvivorsOfEachTouchedFunction(t *testing.T) {
+	r := reviewRepo(t)
+	r.writeReport(reviewViolations())
+	exempt := survivor("T.Method", "INCREMENT_DECREMENT", 3, nil)
+	r.writeMutation("fail", map[string]any{
+		"survivors": []any{
+			survivor("Held", "CONDITIONALS_BOUNDARY", 1, nil),
+			survivor("Held", "ARITHMETIC_BASE", 2, "ledger"),
+			exempt,
+			survivor("limit", "INVERT_NEGATIVES", 4, nil), // a package-level variable
+		},
+		"exempt": []any{exempt["key"]},
+	})
+	got := runSkill(t, "go-tops-review", r.dir, nil, "diff")
+	if !got.OK {
+		t.Fatal(got.Error)
+	}
+	byName := map[string][]string{}
+	for _, f := range asList(got.Data["functions"]) {
+		byName[asStr(asObj(f)["function"])] = keysOf(asObj(f)["survivors"])
+	}
+	for name, want := range map[string][]string{
+		"Held": {"CONDITIONALS_BOUNDARY ", "ARITHMETIC_BASE ledger"}, "T.Method": {"INCREMENT_DECREMENT exemption"}, "Raised": nil,
+	} {
+		if !slices.Equal(byName[name], want) {
+			t.Errorf("%s lists %q, want %q", name, byName[name], want)
+		}
+	}
+	if elsewhere := keysOf(got.Data["survivors_elsewhere"]); !slices.Equal(elsewhere, []string{"INVERT_NEGATIVES "}) {
+		t.Errorf("survivors_elsewhere = %q", elsewhere)
+	}
+	var attention []string
+	for _, a := range asList(got.Data["attention"]) {
+		attention = append(attention, asStr(asObj(a)["function"]))
+	}
+	slices.Sort(attention)
+	if want := []string{"Held", "New", "Raised"}; !slices.Equal(attention, want) {
+		t.Errorf("attention = %v, want %v: an unexplained survivor needs the reviewer", attention, want)
+	}
+	if m := asObj(got.Data["mutation"]); asStr(m["outcome"]) != "fail" {
+		t.Errorf("data.mutation = %v", m)
+	}
+}
+
+// A mutation layer that judged nothing, failed with no measurement or is absent
+// is said as it is, and lists no survivor.
+func TestReviewDiffSaysWhatTheMutationLayerDid(t *testing.T) {
+	for _, c := range []struct {
+		outcome string
+		details map[string]any
+		error   string
+	}{
+		{"vacuous", map[string]any{"survivors": []any{}}, ""},
+		{"fail", map[string]any{"error": "no merge base: check out with fetch-depth: 0"}, "fetch-depth: 0"},
+		{"", nil, ""},
+	} {
+		r := reviewRepo(t)
+		r.writeReport(reviewViolations())
+		if c.outcome != "" {
+			r.writeMutation(c.outcome, c.details)
+		}
+		got := runSkill(t, "go-tops-review", r.dir, nil, "diff")
+		m := asObj(got.Data["mutation"])
+		if !got.OK || asStr(m["outcome"]) != c.outcome || !strings.Contains(asStr(m["error"]), c.error) {
+			t.Errorf("%q: ok %v, data.mutation = %v", c.outcome, got.OK, m)
+		}
+		if n := len(asList(got.Data["survivors_elsewhere"])); n != 0 {
+			t.Errorf("%q: %d survivors listed", c.outcome, n)
+		}
 	}
 }

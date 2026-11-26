@@ -15,7 +15,8 @@ It prints one JSON object. `command` is the exact `gotops gate` argv. `ok` is ju
 
 - the exit code is 0 or 1 (2, 3 and 4 are errors, not verdicts) and is the `summary.exit_code` the report records;
 - the report exists, is JSON and has its layers, laws, summary and enforce fields;
-- every layer is `pass` or `skip`, and the run was not partial;
+- every layer is `pass` or `skip`, or for `mutation` alone `vacuous` (the diff changed no production line), and the run was not partial;
+- the mutation layer lists no unexplained survivor, counts none when it is `pass`, and is off (`skip`) only until a day after today (UTC);
 - the only failed item, if any, is `laws`, with every required law reported not evaluated, none judged and none refused;
 - under `enforce: ratchet` the ratchet is `pass`, or `skip` on a build that is not the ledger's, never `fail`.
 
@@ -25,7 +26,9 @@ A ratchet `skip` is judged by build (ruling C3b): it is allowed only when the ru
 
 A law that is `not-evaluated` never turns a failure into a pass. A law that is not required and not evaluated does not fail the laws layer, so it does not make `ok` false: it is listed in `data.laws.gaps`.
 
-`data` has `layers`, `ratchet`, `summary`, the `laws` counts and `laws.gaps` (every law that is not allowed, with its reason), and `problems`, each reason `ok` is false. A `not-evaluated` law is a gap, never a pass beyond the required laws C9 names.
+`data.mutation` has the layer's outcome, the counts (`mutants`, `killed`, `survived_explained`, `survived_unexplained`, `dropped`), `timed_out_keys`, `exempt` and `unexplained`: each survivor nothing explains, with its `key`, `line` and `status`. Kill it with a test, or accept it with `gotops survivors explain <key>` and say why. A `vacuous` layer judged nothing and is not a failure.
+
+`data` has `mutation`, `layers`, `ratchet`, `summary`, the `laws` counts and `laws.gaps` (every law that is not allowed, with its reason), and `problems`, each reason `ok` is false. A `not-evaluated` law is a gap, never a pass beyond the required laws C9 names.
 
 `gotops` is found from `--gotops`, then `$GOTOPS`, then the module's `tools/go.mod` (`go tool -modfile=tools/go.mod gotops`), then PATH. A missing `gotops`, a missing report or a report that is not JSON is `ok: false`.
 

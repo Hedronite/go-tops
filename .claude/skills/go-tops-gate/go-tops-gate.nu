@@ -105,9 +105,72 @@ def ratchet-problems [r: record] {
   []
 }
 
+# pass and skip, and for the mutation layer alone vacuous: the diff changed no
+# production line (GO_TOPS.md section 6.4).
+def layer-passes [l: record] {
+  let outcome = ($l.outcome? | default "")
+  ($outcome in ["pass" "skip"]) or ($outcome == "vacuous" and ($l.id? | default "") == "mutation")
+}
+
 def layer-problems [r: record] {
-  $r.layers | where {|l| ($l.outcome? | default "") not-in ["pass" "skip"] } | each {|l|
-    $"layer ($l.id? | default '?') is ($l.outcome? | default 'missing')"
+  $r.layers | where {|l| not (layer-passes $l) } | each {|l|
+    let said = $"layer ($l.id? | default '?') is ($l.outcome? | default 'missing')"
+    let why = ($l.details?.error? | default "")
+    if $why == "" { $said } else { $"($said): ($why)" }
+  }
+}
+
+# The report's mutation layer, or null: this also reads a report that lacks layers.
+def mutation-layer [r: record] {
+  if not (is-list $r.layers?) { return null }
+  $r.layers | where {|l| ($l.id? | default "") == "mutation" } | get 0?
+}
+
+# The survivors nothing explains: no ledger entry, and no mutation exemption.
+def unexplained [m: any] {
+  if not (is-record $m) { return [] }
+  let exempt = ($m.details?.exempt? | default [])
+  $m.details?.survivors? | default [] | where {|s| $s.explained? == null and ($s.key? | default "") not-in $exempt }
+}
+
+# A YYYY-MM-DD day after today (UTC).
+def later-day [v: any] {
+  if ($v | describe) != "string" { return false }
+  if not ($v =~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$') { return false }
+  $v > (date now | date to-timezone UTC | format date "%Y-%m-%d")
+}
+
+def mutation-problems [r: record] {
+  let m = (mutation-layer $r)
+  if $m == null { return [] }
+  let outcome = ($m.outcome? | default "")
+  mut out = (unexplained $m | each {|s| $"unexplained survivor ($s.key? | default '?') \(($s.status? | default '?'), line ($s.line? | default '?')\)" })
+  if $outcome == "pass" and $m.details?.survived_unexplained? != 0 {
+    $out = ($out | append "the mutation layer passed without a count of 0 unexplained survivors")
+  }
+  if $outcome == "skip" and not (later-day $m.expires?) {
+    $out = ($out | append "the mutation gate is off without a date after today (UTC)")
+  }
+  $out
+}
+
+def mutation-data [r: record] {
+  let m = (mutation-layer $r)
+  if $m == null { return null }
+  let d = ($m.details? | default {})
+  {
+    outcome: ($m.outcome? | default "")
+    reason: ($m.reason? | default "")
+    expires: ($m.expires? | default "")
+    error: ($d.error? | default "")
+    mutants: $d.mutants?
+    killed: $d.killed?
+    survived_explained: $d.survived_explained?
+    survived_unexplained: $d.survived_unexplained?
+    timed_out_keys: ($d.timed_out_keys? | default [])
+    dropped: $d.dropped?
+    exempt: ($d.exempt? | default [])
+    unexplained: (unexplained $m | each {|s| {key: ($s.key? | default ""), line: $s.line?, status: ($s.status? | default "")} })
   }
 }
 
@@ -135,7 +198,8 @@ def judge [code: int, r: record] {
   let shape = (shape-problems $r)
   if not ($shape | is-empty) { return $shape }
   let failed_laws = ("laws" in $r.summary.failed)
-  (layer-problems $r)
+  (mutation-problems $r)
+    | append (layer-problems $r)
     | append (run-problems $code $r)
     | append (ratchet-problems $r)
     | append (laws-problems $r.laws $failed_laws)
@@ -165,6 +229,7 @@ def data-of [code: int, r: record, problems: list, file: string] {
     max_tier: ($r.max_tier? | default null)
     summary: ($r.summary? | default null)
     layers: (($r.layers? | default []) | each {|l| {id: ($l.id? | default ""), tier: ($l.tier? | default null), outcome: ($l.outcome? | default ""), reason: ($l.reason? | default "")} })
+    mutation: (mutation-data $r)
     ratchet: (if $rat == null { null } else { {outcome: ($rat.outcome? | default ""), same_build: (same-build $rat.ledger_build? $rat.run_build?), judged: (($rat.outcome? | default "") in ["pass" "fail"])} })
     laws: {
       catalog: ($r.laws?.catalog? | default null)
