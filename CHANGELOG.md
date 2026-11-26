@@ -4,6 +4,40 @@ All notable changes to this project are listed here. The protocol version and th
 
 ## [Unreleased]
 
+### Package (M4)
+
+- **Mutation on the diff.** Compiled from the step READYs: the engine probe (G0), the protocol 0.4.5 bundle (G1e, #39), the adapter and diff (G1, #40), the survivor ledger, CLI, drop-in and skills (G2, #41), the overlay spike (G3), the kit's own gate (G4, #43), the `vigil` change (G5, `Hedronite/vigil` #33) and the exit (G6).
+  - Engine probe (G0): gremlins v0.6.0 was run on scratch clones of the kit (`0f0c4fe`) and `vigil` (`8bb786c`), nothing pushed. It filed findings E1 to E21; E22 to E25 came during the build. Those that shaped the adapter: the engine's `--diff` drops changed lines in a hunk with two edits, finds nothing in a module in a subdirectory and mutates the whole module on an empty diff; at its default workers and timeout real survivors read `TIMED OUT`, which counts as killed; for a package whose name differs from its directory it runs the wrong tests; and its `GREMLINS_*` variables beat its config file.
+  - Protocol 0.4.5 (G1e, #39): see the entry under Changed.
+  - Adapter and diff (G1, #40):
+    - The `mutation` layer at tier 1 (`internal/mutate`, `internal/layers/mutation`). `gotops` computes its own diff from the merge base to the working tree, writes `.go-tops/mutation.diff` and judges only the mutants on changed production lines. A shallow clone or a missing merge base fails, naming `fetch-depth: 0`.
+    - The engine gets every setting as a flag, with an empty config file and no `GREMLINS_*` variable: six mutators on, at most four workers, `--timeout-coefficient=5` and `GOFLAGS=-count=1`. Git's diff settings are pinned for `gotops` and for the engine.
+    - It fails closed on a `SKIPPED` mutant on a changed line, on an expected mutant the engine did not report, on a line directive in a changed file, and on tests that fail in a copy of the module made as the engine makes it.
+    - A survivor has one key; a `mutation` exemption covers it by file or function. Mutants in files the build does not compile are counted in `not_measured`.
+    - Carries from M3 closed: the `baseline --init` summary counts findings and files (F14), and `baseline --status` prints `build.tags` as `[]` (F15). The refusal of `baseline --kind survivors` names M6.
+  - Survivor ledger, CLI, drop-in and skills (G2, #41):
+    - `.go-tops/survivors.yaml` explains a survivor by its exact key. Every field is required, the reason has at least three words and the expiry is a real day after today (UTC); a bad or expired entry fails `check` at tier 0, with mutation on or off. `gotops survivors list | explain | expire`.
+    - `init` turns mutation on and pins gremlins v0.6.0. The drop-in judge takes `vacuous` for mutation and refuses an unexplained survivor, and a `skip` without a later date. The leg artifacts leave out the baseline (F16).
+    - `go-tops-gate` and `go-tops-review` report the mutation counts and survivors, and the weekly adoption job runs the skills against the real `gotops` (F17).
+  - Overlay spike (G3), a record only: a diff-only runner on `go test -overlay`, with four of the six mutators, gave the same killed-or-survivor class as gremlins on 21 of 21 shared mutants, ran 1.23 to 39.19 times faster on the kit and `vigil` cases and copied no module. Verdict: go, as an adapter slice after M4. M4 keeps gremlins.
+  - The kit's own gate (G4, #43, which replaces #42, closed unmerged):
+    - `go-tops.yaml` turns mutation on, and the report assertion requires `pass` or `vacuous`, never `skip`.
+    - `testdata/mutation` holds a boundary with a weak, a strong and an empty test; a tagged test (`-tags mutation`) runs the real gate on each, in a `mutation` CI job on Linux and macOS.
+    - Demonstrated on the pull request: the planted weak test turned `gate` red on mutation alone, naming the survivor ([run 45731115471](https://github.com/Hedronite/go-tops/actions/runs/45731115471)), and its revert turned it green ([run 45735510884](https://github.com/Hedronite/go-tops/actions/runs/45735510884)).
+  - `vigil` (G5, `Hedronite/vigil` #33, merged `835a6c1` on 2026-11-26 UTC):
+    - The pin is `v0.0.0-20261126014032-ae70e548474f` (kit `ae70e54`) with gremlins v0.6.0, which raises three shared indirect modules in `tools/go.mod` (`cobra`, `pflag`, `go-colorable`). Mutation is on; `init` rewrote the configuration, lock, workflow, record and its `AGENTS.md` block.
+    - `vigil`'s `ci.yml`, `.golangci.yml`, `go.mod`, `go.sum`, baseline and code are unchanged. Its checks and every `gate` leg were green with mutation `vacuous`.
+    - On a scratch clone, a weak test planted beside a changed line failed the gate naming the survivor, and a strong test passed.
+  - Exit (G6): two green `gate` runs on `vigil` `main` ([run 45743084710](https://github.com/Hedronite/vigil/actions/runs/45743084710), both attempts) and two on kit `main` ([run 45737352822](https://github.com/Hedronite/go-tops/actions/runs/45737352822), both attempts), mutation `vacuous` in each.
+  - **Repos initialised before M4** have mutation off with an `expires`. Move the pin, add the engine with `go get -tool -modfile=tools/go.mod github.com/go-gremlins/gremlins/cmd/gremlins@v0.6.0`, then re-run `gotops init --class <class> --force` (it rewrites `go-tops.yaml`, so keep any edits you made aside).
+  - Carried:
+    - `go-tops-review` gives figures only for functions over the cap (F18), and `gates.tests.tags` (B16).
+    - Under heavy host load the engine can report a real survivor as `TIMED OUT`, which counts as killed and is listed in `timed_out_keys` (E24). To M5 or M6.
+    - A mutant in a `case` expression of a `switch` without a tag reads `NOT COVERED` whatever the tests do, because the coverage profile holds no block there (E25). Write the condition as an `if`, or explain the survivor. To the adapter slice after M4.
+    - Under Go 1.27 the engine reports a mutant that does not compile as `KILLED`, not `NOT VIABLE` (E12). To the adapter slice.
+    - The tier 2 whole-module run and its `survivors` ledger kind (M6).
+    - Three small things in the mutation fixture and configuration: its git repository does not set `commit.gpgsign=false`; the weak case checks the status and the key apart rather than on one row; and one comment line in `go-tops.yaml` is over-long.
+
 ### Package (M3)
 
 - **The first adopter, `vigil`.** Compiled from the step READYs: the dry run (G0), the kit fixes (G1, #35), the protocol 0.4.4 bundle (G1e, #36), the skills and drop-in (G2, #37), the adoption pull request in `vigil` (G3, `Hedronite/vigil` #24) and the exit (G4).
