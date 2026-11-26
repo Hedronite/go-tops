@@ -16,7 +16,8 @@ name: ci
 # network and takes minutes, so it does not belong on every push. Every job says
 # which events it runs on. The `skills` job runs the tests of the agent skills,
 # which need Nushell, on both platforms of every push and pull request. The
-# `bootstrap` job proves the drop-in's first-ledger route on ubuntu-latest.
+# `bootstrap` job proves the drop-in's first-ledger route on ubuntu-latest. The
+# `mutation` job runs the weak/strong/uncovered fixture suite across platforms.
 
 on:
   pull_request:
