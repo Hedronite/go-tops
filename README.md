@@ -35,7 +35,7 @@ A written spec, a JSON Schema, per-class profiles, and a thin orchestrator (`got
 
 Go-TOPS (Go Testing and Optimization Protocol Suite) is a protocol: a written spec, a JSON Schema, per-class profiles, and the `gotops` CLI that runs the Go tools you already use. This repository is the public kit for that protocol.
 
-It is for authors of Go libraries and binaries, and for the people who own their CI, who want one gate order: hygiene, tests, coverage and CRAP, then the later layers the class names once those layers land. A legacy repository can adopt it under `ratchet`, where a debt ledger holds the line and counts only fall.
+It is for authors of Go libraries and binaries, and for the people who own their CI, who want one gate order: hygiene, tests, coverage, CRAP and mutation on the changed lines, then the later layers the class names once those layers land. A legacy repository can adopt it under `ratchet`, where a debt ledger holds the line and counts only fall.
 
 The package is unreleased (`0.0.0-dev`). There is no git tag and no module version to install. Run `gotops` from this tree. One public repository, [`vigil`](https://github.com/Hedronite/vigil), runs the gate beside its own CI under `ratchet`; the kit is not yet a release you can pin.
 
@@ -59,9 +59,9 @@ go run ./cmd/gotops check
 go run ./cmd/gotops gate
 ```
 
-`check` validates `go-tops.yaml` and `go-tops.lock` against their schemas, then the semantic rules. `gate` runs every enabled layer at tier 1 (hygiene, tests, coverage, CRAP) and writes `.go-tops/report.json`. This repository's CI runs `go run ./cmd/gotops gate` and then asserts the report.
+`check` validates `go-tops.yaml` and `go-tops.lock` against their schemas, then the semantic rules. `gate` runs every enabled layer at tier 1 (hygiene, tests, coverage, CRAP, mutation) and writes `.go-tops/report.json`. This repository's CI runs `go run ./cmd/gotops gate` and then asserts the report.
 
-To adopt it in another module, `gotops init --class` accepts `binary-cli`, `binary-service`, or `library-core`, and `gotops baseline --init` writes the first `.go-tops/baseline.json` ledger for the `ratchet` mode. The `go-tops-adopt`, `go-tops-gate` and `go-tops-review` skills under [`.agents/skills/`](.agents/skills/) walk an agent through the same steps.
+To adopt it in another module, `gotops init --class` accepts `binary-cli`, `binary-service`, or `library-core`, and `gotops baseline --init` writes the first `.go-tops/baseline.json` ledger for the `ratchet` mode. A new configuration has mutation on: a mutant that survives on a changed line fails the gate until a test kills it or `gotops survivors explain` records why it is accepted. The `go-tops-adopt`, `go-tops-gate` and `go-tops-review` skills under [`.agents/skills/`](.agents/skills/) walk an agent through the same steps.
 
 ## What you get
 
@@ -69,17 +69,18 @@ To adopt it in another module, `gotops init --class` accepts `binary-cli`, `bina
 | --- | --- | --- |
 | Contract | Docs and tests you arrange | Protocol 0.4.5 and JSON Schemas for the config, the gate report, and the tool lock |
 | Class floors | None | Three launch profiles |
-| Orchestrator | You sequence the commands | `gotops` `version`, `check`, `init`, `gate`, `report`, `lock`, `doctor`, `baseline` |
+| Orchestrator | You sequence the commands | `gotops` `version`, `check`, `init`, `gate`, `report`, `lock`, `doctor`, `baseline`, `survivors` |
 | CRAP | A separate tool, if any | Native CRAP on every production function: complexity, guard-neutral coverage, exemptions |
+| Mutation | A separate tool, if any | Mutants on the lines a change touches (the pinned gremlins), with a survivor ledger whose entries expire |
 | Legacy code | All or nothing | `ratchet`: a debt ledger records only what is over the line, and counts only fall |
-| CI on this repo | — | One `gate` job (Linux, macOS, and the language floor), then a report assertion, plus docs CI |
+| CI on this repo | — | A `gate` job (Linux, macOS, and the language floor) with a report assertion, jobs for the skills, the first-ledger route and the mutation fixture, and docs CI |
 
 ### What you do not get
 
 | Claim | Reality |
 | --- | --- |
 | A released module or tag | The package is `0.0.0-dev`. Nothing is published |
-| Mutation testing | Not yet. It is the next milestone (M4) |
+| Whole-module mutation | The gate mutates the changed lines only. The whole-module run is a deep layer (M6) |
 | A laws layer that judges this repo | Analyzer laws land at M5. Until then this repository gates itself under `advisory`, and CI asserts the gates that exist |
 | A test framework | `gotops` runs `go test` and the pinned tools; it does not replace them |
 
@@ -95,7 +96,7 @@ Write the oracle from the contract, then the smallest production code that meets
 | [`schema/`](schema/) | JSON Schemas: configuration, gate report, tool lock, and shared core definitions |
 | [`cmd/gotops/`](cmd/gotops/), [`internal/`](internal/) | The `gotops` CLI: one file per command, and the layers, CRAP, ratchet, runner, lock, report and `init` packages behind them |
 | [`go-tops.yaml`](go-tops.yaml), [`go-tops.lock`](go-tops.lock), [`tools/`](tools/) | This repository gating itself: configuration, tool pins, and module tools |
-| [`.github/workflows/ci.yml`](.github/workflows/ci.yml) | The one `gate` job |
+| [`.github/workflows/ci.yml`](.github/workflows/ci.yml) | The `gate`, `skills`, `bootstrap` and `mutation` jobs, and a weekly `adoption` job |
 | [`profiles/`](profiles/) | Launch profiles |
 | [`calibration/`](calibration/) | The calibration records behind the CRAP caps: the 2026-11 probe and the native CRAP re-measure |
 | [`.agents/skills/`](.agents/skills/) | The adopt, gate and review skills (mirrored for other agent harnesses) |
@@ -107,7 +108,7 @@ Write the oracle from the contract, then the smallest production code that meets
 
 Draft. Protocol **0.4.5**. Package **0.0.0-dev**. No tag.
 
-Milestones M1, M2 and M3 are done. The `gotops` CLI judges hygiene, tests, coverage and native CRAP at tier 1, and under `ratchet` it holds a legacy repo to a debt ledger. This repository gates itself with `go run ./cmd/gotops gate` and runs `advisory` until the laws layer lands. [`vigil`](https://github.com/Hedronite/vigil), the first adopter, runs the gate beside its own CI under `ratchet`. Mutation and the laws layer do not run yet, and nothing here is released.
+Milestones M1 to M4 are done. The `gotops` CLI judges hygiene, tests, coverage, native CRAP and diff-scoped mutation at tier 1, and under `ratchet` it holds a legacy repo to a debt ledger. This repository gates itself with `go run ./cmd/gotops gate`, mutation included, and runs `advisory` until the laws layer lands. [`vigil`](https://github.com/Hedronite/vigil), the first adopter, runs the gate beside its own CI under `ratchet`. The laws layer does not run yet, and nothing here is released.
 
 | Milestone | Contents |
 | --- | --- |
@@ -115,8 +116,8 @@ Milestones M1, M2 and M3 are done. The `gotops` CLI judges hygiene, tests, cover
 | **M1** CLI (done) | `init`, `check`, `gate` at tier 1 (hygiene, tests, coverage), `report`, `lock`, `doctor`, `report.json`; Go-TOPS gates itself under the advisory bootstrap rule |
 | **M2** CRAP and ratchet (done) | Native CRAP: complexity, guard-neutral coverage, exemptions; `baseline` and the ratchet judge; Go-TOPS gates itself with CRAP on |
 | **M3** first adopter (done) | `vigil` gated under `ratchet`; the first ledger written on the pull request; the adopt, gate and review skills |
-| M4 (next) | Mutation: a gremlins adapter and the survivor ledger |
-| M5 | Laws v0.1: 16 of 43 laws judged by analyzers; the kit switches its own gate to `hard` |
+| **M4** mutation (done) | A gremlins adapter judged on gotops' own diff, the survivor ledger, mutation on in this repository and in `vigil` |
+| M5 (next) | Laws v0.1: 16 of 43 laws judged by analyzers; the kit switches its own gate to `hard` |
 | M6–M7 | Deep layers and the second and third adopters; the release tier and protocol 1.0 |
 
 The full roadmap is in [`GO_TOPS.md` §19](GO_TOPS.md#19-roadmap). Version history is in [`CHANGELOG.md`](CHANGELOG.md).
