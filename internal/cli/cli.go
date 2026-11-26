@@ -142,3 +142,8 @@ func (r *Registry) usage(out *Out) {
 	}
 	out.Printf("\nRun 'gotops <command> --help' for a command's flags.\n")
 }
+
+// BelowLimit reports whether v is strictly below limit.
+func BelowLimit(v, limit int) bool {
+	return v < limit
+}
