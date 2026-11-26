@@ -4,8 +4,7 @@
 # 16 required laws stay `not-evaluated`, and a required law that is not
 # evaluated fails the gate (§3.3), so a `hard` run would be red by construction.
 # The kit's CI holds the gates that exist to the bar anyway: it fails unless
-# hygiene, tests, coverage and CRAP are `pass`, mutation is `skip` with an
-# unexpired `expires`, and every required law is `not-evaluated` for `no_reader`
+# hygiene, tests, coverage and CRAP are `pass`, mutation is `pass` or `vacuous`, and every required law is `not-evaluated` for `no_reader`
 # (.github/workflows/ci.yml, "assert the report"). CRAP has been on since M2: every
 # function meets the cap, but the two exemptions at the end of this file. At M5
 # this file switches to `enforce: hard` and the `advisory` key goes.
@@ -40,9 +39,7 @@ gates:
   crap:
     cap: 10
   mutation:
-    enabled: false
-    reason: the mutation layer lands at M4
-    expires: "2027-03-01"
+    enabled: true
 
 layers:
   fuzz:  { targets: ["./internal/config:FuzzLoad"] }

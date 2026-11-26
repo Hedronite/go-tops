@@ -16,7 +16,8 @@ name: ci
 # network and takes minutes, so it does not belong on every push. Every job says
 # which events it runs on. The `skills` job runs the tests of the agent skills,
 # which need Nushell, on both platforms of every push and pull request. The
-# `bootstrap` job proves the drop-in's first-ledger route on ubuntu-latest.
+# `bootstrap` job proves the drop-in's first-ledger route on ubuntu-latest. The
+# `mutation` job runs the weak/strong/uncovered fixture suite across platforms.
 
 on:
   pull_request:
@@ -156,7 +157,7 @@ jobs:
       # The bootstrap rule of GO_TOPS.md §6.7 and §17: the gate exits 0 under
       # advisory, so this step reads the report and fails unless
       #   - hygiene, tests, coverage and crap are `pass`;
-      #   - mutation is `skip` with an `expires` that has not passed;
+      #   - mutation is `pass` or `vacuous` (never `skip`);
       #   - every required law is `not-evaluated` for `no_reader`, and none was judged;
       #   - the run is reported as not enforced, and every enabled layer ran.
       # To plant a failure locally, change .go-tops/report.json and run this step's
@@ -167,7 +168,7 @@ jobs:
         run: |
           set -euo pipefail
           test -s .go-tops/report.json
-          problems="$(jq -r --arg today "$(date -u +%F)" '
+          problems="$(jq -r '
             def layer($id): [.layers[] | select(.id == $id)] | if length == 1 then .[0] else null end;
             [
               ( ("hygiene", "tests", "coverage", "crap") as $id
@@ -176,8 +177,8 @@ jobs:
                 | "\($id): outcome \($l.outcome // "absent"), want pass" ),
               ( "mutation" as $id
                 | layer($id) as $l
-                | select($l == null or $l.outcome != "skip" or (($l.expires // "") <= $today))
-                | "\($id): want skip with an expires after \($today), got \($l.outcome // "absent") expires \($l.expires // "none")" ),
+                | select($l == null or ($l.outcome != "pass" and $l.outcome != "vacuous"))
+                | "\($id): outcome \($l.outcome // "absent"), want pass or vacuous" ),
               ( select(.laws.required < 1 or .laws.required_not_evaluated != .laws.required)
                 | "laws: \(.laws.required_not_evaluated) of \(.laws.required) required laws are not-evaluated, want all" ),
               ( (.laws.results // [])[]
@@ -312,6 +313,43 @@ jobs:
             exit 1
           fi
 
+  mutation:
+    name: mutation (${{ matrix.name }})
+    if: ${{ github.event_name == 'pull_request' || github.event_name == 'push' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: ubuntu
+            os: ubuntu-latest
+          - name: macos
+            os: macos-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version: ${{ env.CURRENT_GO }}
+          cache-dependency-path: |
+            go.sum
+            tools/go.sum
+      - name: mutation fixture tests
+        env:
+          CGO_ENABLED: "1"
+          GOTOOLCHAIN: local
+        shell: bash
+        run: |
+          set -euo pipefail
+          log="${RUNNER_TEMP}/mutation.log"
+          go test -v -tags mutation -run TestMutationFixtureWeakStrongAndUncovered -timeout 15m -count=1 ./cmd/gotops 2>&1 | tee "${log}"
+          if ! grep -q -- "--- PASS: TestMutationFixtureWeakStrongAndUncovered " "${log}"; then
+            echo "::error::no '--- PASS' line for TestMutationFixtureWeakStrongAndUncovered: the test did not run, or it was skipped"
+            exit 1
+          fi
+
   ci:
     name: ci
     # Runs even when a dependency failed, was skipped or was cancelled, and
@@ -319,7 +357,7 @@ jobs:
     # runs on the events the gate runs on; a scheduled or dispatched run has no
     # gate to wait for.
     if: ${{ always() && (github.event_name == 'pull_request' || github.event_name == 'push') }}
-    needs: [gate, skills, bootstrap]
+    needs: [gate, skills, bootstrap, mutation]
     runs-on: ubuntu-latest
     steps:
       - name: every ci job succeeded
