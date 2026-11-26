@@ -28,9 +28,7 @@ gates:
     cap: 10
     complexity: { err_guard_discount: true, wrap_functions: [] }
   mutation:
-    enabled: false
-    reason: "mutation lands at M4 of the kit"
-    expires: "2027-03-01"
+    enabled: true
     unexplained_survivors_max: 0
     ledger: .go-tops/survivors.yaml
 
