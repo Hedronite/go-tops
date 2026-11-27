@@ -631,8 +631,9 @@ Keep the key explicit in every config so scores are comparable across repos.
   There is no external engine, so there is no engine pin, config file or environment variable
   to obey or to ignore. A mutant is a copy of one source file, written to a temporary directory
   outside the work tree and given to the `go` command with `-overlay`. The module is never
-  copied, and a run changes nothing in the work tree but the files under `.go-tops/` that the
-  gate writes.
+  copied. In the work tree the engine writes only `.go-tops/mutation.diff` and the report
+  (§12.3). A mutant's tests run in the package's own directory, as under `go test`, and what
+  they write there stays.
 - **Mutator set:** six mutators, each replacing one token:
 
   | Mutator | Replaces |
@@ -653,10 +654,14 @@ Keep the key explicit in every config so scores are comparable across repos.
   time is the package's baseline time. The coverage profile of the tests gate, which counts
   every package's tests, is never used for it.
 - **Which mutants are run:** a mutant in a function body is run when the coverage block that
-  holds its position ran; otherwise it is `NOT COVERED` and is not run. Two positions have no
-  block of their own:
-  - an expression of a `case` clause takes the block of its `switch` or `select` statement, so a
-    clause that was reached is judged by the tests, whether or not its body ran;
+  holds its position ran; otherwise it is `NOT COVERED`. A `NOT COVERED` mutant is neither
+  compiled nor run, so one that would not compile is a survivor, not `NOT VIABLE`. Three
+  positions have no coverage block of their own:
+  - an expression of a `case` clause in a `switch`, a type `switch` or a `select` (the send or
+    receive of a `select` case included) takes the block in which that statement starts, so the
+    tests judge it whenever the statement was reached, whether or not the clause's body ran;
+  - code that follows a function literal in the same statement takes the block in which the
+    statement starts (the literal's body has blocks of its own);
   - a package-level `const`, `var` or `type` declaration has no coverage at all, so its mutants
     are always run.
 - **Which tests judge a mutant:** the tests of the mutant's own package, and no other package's.
@@ -671,13 +676,16 @@ Keep the key explicit in every config so scores are comparable across repos.
 - **Only a test kills.** `-vet=off` is required: `go test` runs `go vet` checks first, and a
   mutant that `vet` rejects (`x != 1 || x != 2`, for one) would fail the build and count as
   killed with no test involved.
-- **Compile check:** a mutant whose test binary does not compile is `NOT VIABLE`.
-- **Bounds:** at most four mutants run at once, no more than `GOMAXPROCS` and at least one. A
-  mutant's test run is stopped, and the mutant is `TIMED OUT`, after five times the package's
-  baseline time and never less than 10 seconds. The compile has its own limit, five times the
-  baseline time and never less than 60 seconds, and a compile that exceeds it fails the layer.
-  An engine that cannot finish every mutant (an interrupt, or a failure to write or to start a
-  run) is `fail`: a partial result is never judged.
+- **Compile check:** a mutant whose compile exits with an error is `NOT VIABLE`.
+- **Bounds:** at most four mutants are in progress at once, no more than `GOMAXPROCS` and at
+  least one. They compile in parallel. The test binaries of one package run one at a time,
+  because they share its directory; binaries of different packages run in parallel. A mutant's
+  test run is stopped, with its process group, and the mutant is `TIMED OUT`, after five times
+  the package's baseline time and never less than 10 seconds, counted from the start of its
+  binary. The compile has its own limit, five times the baseline time and never less than 60
+  seconds, and a compile that exceeds it fails the layer. An engine that cannot finish every
+  mutant (an interrupt, or a failure to write or to start a run) is `fail`: a partial result is
+  never judged.
 - **What the tests read at run time:** an overlay changes what the `go` command compiles, not
   what a test opens. A test that reads its own package's source files sees the unmutated file.
 - **Line directives:** a changed production file with a `//line` or `/*line` directive fails the
@@ -1918,7 +1926,7 @@ wrong; the config wins.
 36. **The ledger leg:** the baseline records its build, only the run with that build writes it or judges the ratchet, every entry of a first ledger is measured there, and the other legs report the ratchet judgment as `skip`, never `pass`. A function the ledger leg does not compile has no entry and takes a `crap` exemption. A repo under `ratchet` names exactly one CI leg as its ledger leg, and CI fails when that leg's ratchet outcome is `skip`. (§6.7, §11, §12.1, §12.3) *New in 0.4.3.*
 37. **The first adoption of a real repository (M3):** the kit lint pass reads `.go-tops/golangci.yml` and never the adopter's `.golangci.yml`, which `init` leaves byte for byte; `init` adds the kit's pins to an existing `tools/go.mod`, writes a marked `.gitignore` block and keeps the whole release of the `go` line as the floor; the first ledger is written by the ledger leg on the adoption pull request, asked by `baseline --status`; a repository whose tests walk the tree keeps the lint binary outside it. (§4.1, §6.7, §8.1, §10, §11, §12.1) *New in 0.4.4.*
 38. **Mutation, measured before it was built (M4):** `gotops` configures the engine by flags alone and ignores its files and variables; six mutators are on; the kit's own diff, from the diff base to the working tree, decides which mutants count; a survivor key has one text form and the report lists every survivor; mutants in files a build does not compile are counted apart; an expired survivor entry fails at tier 0; `survivors list`, `explain` and `expire` are defined; the engine's per-package meaning of `NOT COVERED` is stated; the tier 2 ledger kind is M6. (§6.4, §6.7, §9, §11, §12.1, §12.3) *New in 0.4.5.*
-39. **The native mutation engine:** `overlay` is the only engine, and the external one and its pin are gone; `vet` is off in every mutant run, so only a test kills; a mutant that does not compile is `NOT VIABLE`; a `case` expression takes its `switch` statement's coverage and a package-level declaration is always run; a test's run-time reads see unmutated files. (§2, §4.1, §6.4, §9, §10) *New in 0.4.6.*
+39. **The native mutation engine:** `overlay` is the only engine, and the external one and its pin are gone; `vet` is off in every mutant run, so only a test kills; a mutant that does not compile is `NOT VIABLE`; a `case` expression and code after a function literal take their statement's coverage, and a package-level declaration is always run; one package's test binaries run one at a time; a test's run-time reads see unmutated files. (§2, §4.1, §6.4, §9, §10) *New in 0.4.6.*
 
 ---
 
