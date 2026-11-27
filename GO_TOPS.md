@@ -1,6 +1,6 @@
 # Go-TOPS: Go Testing and Optimization Protocol Suite
 
-**Spec status:** 0.4.5 (0.4.4 was the previous revision) · **Date:** 2026-11-25 · **Owner:** Hedronite
+**Spec status:** 0.4.6 (0.4.5 was the previous revision) · **Date:** 2026-11-26 · **Owner:** Hedronite
 **Modeled on:** [Rust-TOPS](https://github.com/Hedronite/rust-tops) (protocol 1.2.0 on `main`; the latest release tag, `cargo-tops` v0.3.0, carries protocol 1.1.0, and `main` holds package 0.4.0, untagged; read 2026-11-17)
 
 > **Changes from 0.2.0 to 0.3.0:** One CRAP cap per class; authorship marking removed (§5.2, §6.2).
@@ -75,7 +75,7 @@ Plus a practice layer (human and agent working rules, §13 and `AGENTS.md`) and 
 
 | Item | Value |
 |---|---|
-| Protocol version | **0.4.5** (0.4.4 was the previous revision; 1.0.0 is set by the criterion in §19) |
+| Protocol version | **0.4.6** (0.4.5 was the previous revision; 1.0.0 is set by the criterion in §19) |
 | Package version | 0.0.0 (unreleased) |
 | Language floor ("MSRV" analogue) | Go **1.26**, the oldest Go release still supported upstream (a policy: the floor moves when upstream drops support). The floor is a language version, compared in Go's own order (`go/version.Lang`), so a `go 1.26` and a `go 1.26.4` directive both meet it. Matrix tests floor and current (current: Go 1.27) |
 | Toolchain pin | The exact Go release in `go-tops.lock` (§10). `GOTOOLCHAIN=local` makes the `go` command use the toolchain it ships with and never reads the `toolchain` line, so a runner with another patch release would pass silently: the gate therefore checks that `go env GOVERSION` equals the pin (§3.1, G-33). A `toolchain` line is optional: with or without one, and whether the `go` line names a language version (`go 1.26`) or a patch release (`go 1.27.4`), the pin is the release in the lock |
@@ -84,7 +84,7 @@ Plus a practice layer (human and agent working rules, §13 and `AGENTS.md`) and 
 | `gotestsum` | **v1.13.0** (exact; optional display wrapper over `go test -json`) |
 | `govulncheck` | **v1.9.0** (exact) |
 | `benchstat` | `golang.org/x/perf/cmd/benchstat` has no release tags, so a pseudo-version is pinned in `tools/go.mod` at adoption (§10); it runs at tier 2 only, on a named host (§3.1) |
-| Mutation engine | `gremlins` **v0.6.0** (exact; the starting engine, 0.x, flags may change; its configuration, mutator set and accounting are §6.4) |
+| Mutation engine | `overlay`, built into `gotops`, over `go test -overlay`. No separate tool, so no pin of its own; its mutator set and accounting are §6.4 |
 | `goleak` | `go.uber.org/goleak` **v1.3.0** (exact; the leak check on Go 1.26; on 1.27 and later the `goroutineleak` profile in `runtime/pprof` is the stdlib alternative, and G5 states which layer uses which) |
 
 Tool versions were read from upstream release tags on 2026-11-17.
@@ -297,7 +297,6 @@ For a new repo, copy the drop-in set and replace the placeholders:
 | `.go-tops/golangci.yml` | The kit's golangci-lint v2 config for gate 1, **style only**: no law reads it (§8.1). `gates.hygiene.golangci_lint.config` names it, and `init` always writes the key (with the key absent the style pass reads `.golangci.yml`). It sets `run.relative-path-mode: gomod` and carries errcheck `check-blank`, `check-type-assertions` and the same `exclude-functions` list as the law pass (§8.1). The adopter's own `.golangci.yml` is never written, overwritten or changed | generated |
 | `.gitignore` | `init` writes its block between `# go-tops:begin` and `# go-tops:end` and changes nothing outside the markers: `.go-tops/*`, then `!.go-tops/baseline.json`, `!.go-tops/acks.yaml`, `!.go-tops/survivors.yaml` and `!.go-tops/golangci.yml`, so a gate run's own files (the report, the coverage profile, the lint output, the downloaded binaries) are never committed and the ledgers and the kit config are | generated |
 | `.go-tops/baseline.json` | Ratchet baseline (§6.7); written by `gotops baseline`, not by hand | generated |
-| `.gremlins.yaml` | Not part of the drop-in. `gotops` gives the engine every setting itself and never obeys an engine config file or variable (§6.4) | none |
 | `.github/workflows/go-tops.yml` | CI floor (§11) | `{GO_FLOOR}`, `{GO_CURRENT}`, `{PRIMARY_PKG}` |
 | `.github/CODEOWNERS` | A fragment covering the files that can weaken the gate (§11) | `{OWNER}` |
 | `go.mod` | The `go` line, at or above the protocol floor (§2), and optionally a `toolchain` line. `{GO_FLOOR}` is the release or language version the module's `go` line names | `{GO_FLOOR}` |
@@ -413,7 +412,7 @@ its own fuzz globs in `layers.fuzz.targets`, which G-43 reads.
 ```yaml
 # profiles/binary-cli.yaml
 class: binary-cli
-protocol: "0.4.5"
+protocol: "0.4.6"
 gates:
   coverage: { statements_floor: 70 }
   crap: { cap: 10, complexity: { err_guard_discount: true, wrap_functions: [] } }
@@ -429,7 +428,7 @@ laws:
 ```yaml
 # profiles/binary-service.yaml
 class: binary-service
-protocol: "0.4.5"
+protocol: "0.4.6"
 gates:
   coverage: { statements_floor: 75 }
   crap: { cap: 10, complexity: { err_guard_discount: true, wrap_functions: [] } }
@@ -445,7 +444,7 @@ laws:
 ```yaml
 # profiles/library-core.yaml
 class: library-core
-protocol: "0.4.5"
+protocol: "0.4.6"
 gates:
   coverage: { statements_floor: 85 }
   crap: { cap: 8, complexity: { err_guard_discount: true, wrap_functions: [] } }   # provisional (§5.2)
@@ -627,22 +626,14 @@ Keep the key explicit in every config so scores are comparable across repos.
 
 ### 6.4 Mutation
 
-- **Engine:** pluggable adapter. The starting engine is **gremlins v0.6.0**
-  (`github.com/go-gremlins/gremlins`); a `go install` build of it reports its version as `dev`,
-  so the pin is read with `go version -m` (§10). It exits 0 when mutants survive unless a
-  threshold flag is set, so the adapter judges the parsed statuses, never the exit code. Other
-  engines (`go-mutesting` forks, `mutest`, an in-house `-overlay` runner) are admitted only
-  through an adapter that maps their statuses to the classes below and meets every rule in this
-  section. No such adapter exists yet, so `gremlins` is the only value `gates.mutation.engine`
-  accepts (§9).
-- **`gotops` configures the engine, and nothing else does.** Every setting and every mutator is
-  passed as a flag, `--config` names an empty `.yaml` file the adapter writes, and every
-  `GREMLINS_*` variable is removed from the engine's environment. A repository's
-  `.gremlins.yaml` and the files the engine would otherwise read (under `/etc/gremlins`,
-  `$XDG_CONFIG_HOME` and `$HOME`) are ignored, never obeyed. All of it is needed: a variable
-  beats an empty config file, and only a flag beats both.
-- **Mutator set:** six mutators are on and five are off, each passed explicitly. The six, with
-  the replacement each makes at the operator it reports:
+- **Engine:** `overlay`, the mutation runner inside `gotops`. It is the only engine:
+  `gates.mutation.engine` accepts `overlay` and nothing else, and that is the default (§9).
+  There is no external engine, so there is no engine pin, config file or environment variable
+  to obey or to ignore. A mutant is a copy of one source file, written to a temporary directory
+  outside the work tree and given to the `go` command with `-overlay`. The module is never
+  copied, and a run changes nothing in the work tree but the files under `.go-tops/` that the
+  gate writes.
+- **Mutator set:** six mutators, each replacing one token:
 
   | Mutator | Replaces |
   |---|---|
@@ -653,19 +644,38 @@ Keep the key explicit in every config so scores are comparable across repos.
   | `INVERT_LOGICAL` | `&&` with `\|\|`, `\|\|` with `&&` |
   | `INVERT_NEGATIVES` | `-` with `+` |
 
-  The five that are off: `INVERT_ASSIGNMENTS`, `INVERT_BITWISE`, `INVERT_BWASSIGN`,
-  `INVERT_LOOPCTRL` and `REMOVE_SELF_ASSIGNMENTS`.
-- **Output:** the engine writes its JSON under `.go-tops/`. Output that is missing or does not
-  parse is `fail` (§3.4, rule 5), with one exception: when gremlins finds no mutant at all it
-  writes no file, exits 0 and prints `No results to report.`, which is `0 mutants`. An
-  interrupted run also writes no file and exits 0, but it prints `Shutting down gracefully...`
-  and never `No results to report.`, so it is `fail`.
-- **Which tests judge a mutant:** the tests of the mutant's own package. gremlins v0.6.0 finds
-  that package from the directory, so when the diff changes a package whose Go name differs from
-  the last element of its import path (`package main` in `cmd/app`, for one), the adapter passes
-  `--integration`, and every mutant then runs the whole module's tests. The engine works in
-  copies of the module. A mutant is `killed` only by tests that pass without it: a test that
-  fails on the unmutated copy fails the layer, and none of that run's results counts.
+  There is one mutant for each mutator that applies to a token on a changed line, and none on an
+  unchanged line. Only the token's bytes change, so every other position, comment and directive
+  in the file stays as it was.
+- **The unmutated run:** the tests of each package with a mutant run once on the unmutated
+  files, with `-coverprofile` and without `-coverpkg`. They must pass, or the layer fails and no
+  result counts: a mutant is `killed` only by tests that pass without it. This run gives the
+  coverage and the time that the mutant runs use; the coverage profile of the tests gate, which
+  counts every package's tests, is never used for it.
+- **Which mutants are run:** a mutant in a function body is run when the coverage block that
+  holds its position ran; otherwise it is `NOT COVERED` and is not run. Two positions have no
+  block of their own:
+  - an expression of a `case` clause takes the block of its `switch` or `select` statement, so a
+    clause that was reached is judged by the tests, whether or not its body ran;
+  - a package-level `const`, `var` or `type` declaration has no coverage at all, so its mutants
+    are always run.
+- **Which tests judge a mutant:** the tests of the mutant's own package, and no other package's.
+  Each mutant runs `go test -overlay=<file> -vet=off -count=1 -failfast <package>` with the
+  build of the gate run (its tags, `CGO_ENABLED`, `GOOS` and `GOARCH`), without `-race` and
+  without `-shuffle`.
+- **Only a test kills.** `-vet=off` is required, here and in the compile check: `go test` runs
+  `go vet` checks first, and a mutant that `vet` rejects (`x != 1 || x != 2`, for one) would
+  fail the build and count as killed with no test involved.
+- **Compile check:** before its tests, the mutated package's test binary is compiled with the
+  same overlay and build (`go test -c -vet=off`). A mutant that does not compile is `NOT VIABLE`.
+- **Bounds:** at most four mutants run at once «confirm: workers». A mutant's run is stopped,
+  and the mutant is `TIMED OUT`, after «confirm: the multiple of the unmutated time, and the
+  floor». An engine that cannot finish every mutant (an interrupt, or a failure to write or to
+  start a run) is `fail`: a partial result is never judged.
+- **What the tests read at run time:** an overlay changes what the `go` command compiles, not
+  what a test opens. A test that reads its own package's source files sees the unmutated file.
+- **Line directives:** a changed production file with a `//line` or `/*line` directive fails the
+  layer, because positions in it cannot be trusted.
 - **Diff base:** the merge base of the base and `HEAD`. The base is `--base` when given, else
   `gates.mutation.base`, else `origin/main`. The report records both (§12.3). The ratchet reads
   the same diff base (§6.7).
@@ -675,13 +685,8 @@ Keep the key explicit in every config so scores are comparable across repos.
   and module-relative paths, minus the files §6.2 excludes (`_test.go`, generated files,
   `testdata/`), the files of other modules (a directory with its own `go.mod`) and every non-Go
   file. A **changed line** is a line the diff adds or modifies.
-- **That diff decides what counts.** Every mutant on a changed line is run, and no mutant on an
-  unchanged line counts. The engine's own restriction to a diff (`--diff`) is not trusted:
-  gremlins v0.6.0 skips changed lines when one git hunk holds more than one edit, skips every
-  line of a module in a subdirectory of its repository, and mutates the whole module when the diff it
-  parses is empty. So the adapter does not start the engine when there is no changed line,
-  filters what the engine returns by `.go-tops/mutation.diff`, and does not let the engine's
-  restriction drop a changed line.
+- **That diff decides what counts.** Every mutant on a changed line is judged, and no mutant is
+  made on an unchanged line.
 - **Diff outcomes:**
   - No merge base, or a shallow clone (`git rev-parse --is-shallow-repository` prints `true`):
     the layer is `fail`, and its message names the missing history and `fetch-depth: 0` (§11).
@@ -690,22 +695,18 @@ Keep the key explicit in every config so scores are comparable across repos.
     prints that it had nothing to look at and counts for nothing: neither a pass nor a failure.
   - Changed lines that yield no mutants are a `pass` with `0 mutants` printed (a change to
     comments, for one). The absence of changed lines is the only vacuous case.
-- **Statuses:** every mutant the engine reports is mapped; a status that is not in this table is
-  `fail`, never dropped.
+- **Statuses:** every mutant ends in one of these; any other result is `fail`, never dropped.
 
-  | Engine status (gremlins) | Class | Effect |
+  | Status | Class | Effect |
   |---|---|---|
-  | `KILLED` | killed | Counted as killed |
-  | `LIVED` | survivor | Unexplained unless explained below |
-  | `NOT COVERED` | survivor | As `LIVED`. No test in the mutant's own package reaches the changed line; a test in another package does not count |
+  | `KILLED` | killed | A test of the package failed. Counted as killed |
+  | `LIVED` | survivor | The tests passed. Unexplained unless explained below |
+  | `NOT COVERED` | survivor | As `LIVED`. No test in the mutant's own package reaches it, as above; a test in another package does not count |
   | `TIMED OUT` | killed, listed | Counted as killed. Its key is listed in the report, so a reviewer sees which mutants hung instead of failing a test |
-  | `NOT VIABLE` | dropped | Does not compile; counted only in the dropped total. gremlins v0.6.0 on Go 1.27 reports such a mutant `KILLED`, because `go test` exits 1 on a compile error |
-  | `SKIPPED` | none | Outside the diff: dropped before mapping and counting. On a changed line it is `fail` |
-  | `RUNNABLE` | none | Found and not run, which only a dry run reports. The gate makes no dry run, so it is `fail` |
+  | `NOT VIABLE` | dropped | Does not compile; counted only in the dropped total |
 
 - **Files the build does not compile:** a mutant in a production file that the run's build does
-  not compile (§6.2) is not judged on that leg, whatever status the engine gives it (gremlins
-  reports `NOT COVERED`). It is counted in `not_measured` and nowhere else.
+  not compile (§6.2) is not run on that leg. It is counted in `not_measured` and nowhere else.
 - **Survivor key:** file, enclosing function, mutator, and a hash of the normalized mutated line.
   Its one text form is `<file>:<function>:<mutator>:<line_hash>`.
   - `file`: module-relative, slash-separated.
@@ -713,9 +714,9 @@ Keep the key explicit in every config so scores are comparable across repos.
     `*` and no type parameters), as an exemption's `symbol` is written (§6.8). A function literal
     belongs to its parent function (§6.3). A mutant in a package-level initializer takes the name
     of the variable or constant it initializes.
-  - `mutator`: the engine's mutator name, such as `CONDITIONALS_BOUNDARY`.
+  - `mutator`: the mutator's name, such as `CONDITIONALS_BOUNDARY`.
   - `line_hash`: SHA-256, in hex, of the mutated line: the source line with the mutator's
-    replacement applied at the position the engine reports (line and column count from 1, the
+    replacement applied at the token's position (line and column count from 1, the
     column in bytes, a tab as 1), tokenized with `go/scanner`, comments and automatic semicolons
     dropped, tokens joined by one space. The key holds no line number, because a line number
     changes on the next edit. Two mutants of one mutator on one line differ in the mutated line,
@@ -754,7 +755,7 @@ Keep the key explicit in every config so scores are comparable across repos.
 - **Allowance:** `unexplained_survivors_max` is **`0` in every class**. Any unexplained survivor
   fails the layer. The key stays in `go-tops.yaml` so the report states the limit; `0` is its only
   valid value.
-- Tier 2 runs the whole module on a schedule, with the same statuses and key; engine run time can
+- Tier 2 runs the whole module on a schedule, with the same statuses and key; its run time can
   reach hours on large modules. The unexplained survivors of that run are held by the `survivors`
   ledger kind of §6.7: one count per file, and a count above the ledger's value fails. A legacy
   survivor is debt that may only fall; a new survivor, or one in a file the ledger does not list,
@@ -1325,7 +1326,7 @@ depth fails.
 
 <!-- go-tops:example path=config/go-tops.example.yaml schema=schema/go-tops.schema.json -->
 ```yaml
-protocol: "0.4.5"            # must match the schema's protocol constant
+protocol: "0.4.6"            # must match the schema's protocol constant
 version: "0.1.0"             # this config's version (non-empty)
 module: github.com/acme/myapp
 class: binary-cli            # one of the schema's classes
@@ -1355,7 +1356,7 @@ gates:
     cap: 10
     complexity: { err_guard_discount: true, wrap_functions: [] }
   mutation:
-    engine: gremlins          # the only engine with an adapter (§6.4)
+    engine: overlay           # the only engine, and the default (§6.4)
     base: origin/main
     unexplained_survivors_max: 0
     ledger: .go-tops/survivors.yaml
@@ -1399,7 +1400,7 @@ it.
 | `gates.crap.complexity.wrap_functions` | list of `import/path.Name` | Wrap functions that count as `fmt.Errorf` with `%w` for the guard rule (§6.3) |
 | `gates.hygiene.govulncheck.db` | URL or path | A mirrored vulnerability database, passed as `-db`, for a run that must be repeatable (§3.1) |
 | `gates.tests.race`, `gates.tests.shuffle`, `gates.tests.count` | `true`, `true`, `1` | Fixed by the command of §3.1 and the race rule of §5.2. The schema allows no other value |
-| `gates.mutation.engine` | `gremlins` | The only engine with an adapter (§6.4). Any other value fails `check` |
+| `gates.mutation.engine` | `overlay` | The only engine, built into `gotops`, and the default (§6.4). Any other value fails `check` |
 | `gates.mutation.base` | git ref | The ref whose merge base with `HEAD` is the diff base when `--base` is not given; default `origin/main` (§6.4). It moves what the mutation layer and the ratchet look at, so a change to it is a gate edit, which CODEOWNERS covers (§11) |
 | `gates.mutation.unexplained_survivors_max` | `0` | The only valid value, in every class (§6.4) |
 | `gates.mutation.ledger` | path | The survivor ledger; entries carry the record of §6.4, `expires` required |
@@ -1427,7 +1428,7 @@ the kit lint config and the report) and the `.gitignore` block.
 
 Purpose: make the gate reproducible, with one pin mechanism for each kind of tool.
 
-- **Module tools** (`gotops`, `gotestsum`, `govulncheck`, `benchstat`, the mutation engine,
+- **Module tools** (`gotops`, `gotestsum`, `govulncheck`, `benchstat`,
   `go-licenses` v2.0.1) live in `tools/go.mod` as `tool` lines and are run with
   `go tool -modfile=tools/go.mod <name>`. That file and its `go.sum` are the lock for them, and
   the Go checksum database verifies them. The adopter's own `go.mod` and `go.sum` stay free of
@@ -1473,7 +1474,7 @@ identical to the file and validates the file against the schema.
 
 <!-- go-tops:example path=config/go-tops.example.lock schema=schema/lock.schema.json -->
 ```yaml
-protocol: "0.4.5"               # must match the schema protocol constant
+protocol: "0.4.6"               # must match the schema protocol constant
 toolchain: go1.27.4             # go env GOVERSION must equal this
 
 trust:
@@ -1612,7 +1613,7 @@ CI keeps the block identical to the file and validates the file against the sche
 <!-- go-tops:example path=config/gate-report.example.json schema=schema/gate-report.schema.json -->
 ```json
 {
-  "protocol": "0.4.5",
+  "protocol": "0.4.6",
   "tool_version": "0.0.0",
   "module": "github.com/acme/myapp",
   "class": "binary-cli",
@@ -1821,7 +1822,7 @@ wrong; the config wins.
 | Test runner | `cargo nextest` + `cargo test --doc` | One `go test -json -race -shuffle=on -count=1` run, incl. `Example*`, parsed natively; `gotestsum` is optional display | Native equivalents; one run feeds tests, coverage and CRAP |
 | Coverage | `cargo llvm-cov` → LCOV | The profile of that run (`-coverprofile`, `-coverpkg=./...`) + `covdata` merge, in statements; LCOV optional | Go's own format; integration via `GOCOVERDIR`; Go has no line or branch figure |
 | CRAP | external `cargo crap --lcov` | **Native** implementation | Control of formula and counting rule; no mature single Go tool |
-| Mutation | `cargo mutants --in-diff` | Pluggable engine adapter + diff filter | Go engines vary in diff support |
+| Mutation | `cargo mutants --in-diff` | A native diff-scoped runner over `go test -overlay` | No second tool to pin or configure, and no copy of the module |
 | Deps/supply chain | `cargo deny check` | `govulncheck` + `depguard` + license scan + `go mod verify` | Go splits these concerns |
 | Deep layers | fuzz, Miri, Kani, loom, sanitizers, Callgrind (mostly unmapped) | fuzz, race, goleak, synctest, benchstat, pprof budgets (**mapped**) | Go's tools are in the stdlib/ecosystem and cheap to run |
 | Laws engine | Bend2 `LAWS.bend` (53 laws, 15 judged) | Native `go/analysis` multichecker (43 laws); no Bend or Lean layer | Analyzers judge the code itself; a proof over a fact table judges the table |
@@ -1862,8 +1863,8 @@ wrong; the config wins.
 - No built-in test engine; Go-TOPS orchestrates existing tools.
 - Only a minority of laws are judged mechanically; the rest report `not-evaluated`.
 - No formal-verification layer (Kani analogue); it is not a Go-TOPS layer.
-- Mutation testing quality depends on the chosen engine; engines are pre-1.0 or fork-maintained
-  and may change flags between releases.
+- Mutation testing has six mutators, judges a mutant only by its own package's tests, and does
+  not change what a test reads from disk at run time (§6.4).
 - Only three of twelve classes have profiles at launch (`binary-cli`, `binary-service`, `library-core`).
 - Coverage statistics reflect statement coverage; Go has no native branch coverage.
 - No platform-specific law coverage at v0.1: the gate runs on Linux and macOS and judges the same laws on both; there is no Windows leg.
@@ -1871,11 +1872,11 @@ wrong; the config wins.
 
 ---
 
-## 16. Decisions (resolved for v0.4.5; remaining calibration items noted)
+## 16. Decisions (resolved for v0.4.6; remaining calibration items noted)
 
 1. **Complexity rule (`err_guard_discount`):** **true** in every class, for guards that only return the error (wrapped or not). errcheck `check-blank` and `check-type-assertions` are required, so discarding the error is not cheaper than handling it. Explicit in every profile. (§6.3) *Changed in 0.3.0; 0.2.0 turned it off for `library-core` and `concurrency-runtime`.*
 2. **Authorship marking:** None. One CRAP cap per class for every author. (§5.2, §6.2) *Changed in 0.3.0; 0.2.0 used an `Authored-By: agent` trailer that raised the cap.*
-3. **Mutation engine:** Pluggable adapter. Start with gremlins (or strongest existing with diff filtering). Plan thin in-house `-overlay` runner later for full control. Not blocking v0.1/v0.2.
+3. **Mutation engine:** a native runner over `go test -overlay`, built into `gotops`. It replaced the external engine that M4 shipped with. (§6.4) *Changed in 0.4.6.*
 4. **Formal layers:** No Bend2 parity layer and no Lean recheck. The native analyzers are the laws layer. Reconsidered only with evidence that a formal layer judges something the analyzers do not. (§8.1) *Changed in 0.3.0.*
 5. **Thresholds:** The CRAP caps come from a measurement (§5.2) and are recalibrated from the first three adopters before protocol 1.0 (§19). Floors remain **proposed** until then.
 6. **`parser-codec` priority:** High priority immediately after the five launch classes.
@@ -1911,6 +1912,7 @@ wrong; the config wins.
 36. **The ledger leg:** the baseline records its build, only the run with that build writes it or judges the ratchet, every entry of a first ledger is measured there, and the other legs report the ratchet judgment as `skip`, never `pass`. A function the ledger leg does not compile has no entry and takes a `crap` exemption. A repo under `ratchet` names exactly one CI leg as its ledger leg, and CI fails when that leg's ratchet outcome is `skip`. (§6.7, §11, §12.1, §12.3) *New in 0.4.3.*
 37. **The first adoption of a real repository (M3):** the kit lint pass reads `.go-tops/golangci.yml` and never the adopter's `.golangci.yml`, which `init` leaves byte for byte; `init` adds the kit's pins to an existing `tools/go.mod`, writes a marked `.gitignore` block and keeps the whole release of the `go` line as the floor; the first ledger is written by the ledger leg on the adoption pull request, asked by `baseline --status`; a repository whose tests walk the tree keeps the lint binary outside it. (§4.1, §6.7, §8.1, §10, §11, §12.1) *New in 0.4.4.*
 38. **Mutation, measured before it was built (M4):** `gotops` configures the engine by flags alone and ignores its files and variables; six mutators are on; the kit's own diff, from the diff base to the working tree, decides which mutants count; a survivor key has one text form and the report lists every survivor; mutants in files a build does not compile are counted apart; an expired survivor entry fails at tier 0; `survivors list`, `explain` and `expire` are defined; the engine's per-package meaning of `NOT COVERED` is stated; the tier 2 ledger kind is M6. (§6.4, §6.7, §9, §11, §12.1, §12.3) *New in 0.4.5.*
+39. **The native mutation engine:** `overlay` is the only engine, and the external one and its pin are gone; `vet` is off in every mutant run, so only a test kills; a mutant that does not compile is `NOT VIABLE`; a `case` expression takes its `switch` statement's coverage and a package-level declaration is always run; a test's run-time reads see unmutated files. (§2, §4.1, §6.4, §9, §10) *New in 0.4.6.*
 
 ---
 
@@ -1967,7 +1969,7 @@ go-tops/
 │   ├── layers/                      # crap, mutation, fuzz, bench... (hygiene, tests and coverage exist)
 │   ├── complexity/                  # AST cyclomatic counting
 │   ├── crap/                        # scoring, guard-neutral coverage, identity
-│   ├── mutate/                      # engine adapters, the diff and survivor keys
+│   ├── mutate/                      # the overlay engine, the diff and survivor keys
 │   ├── survivors/                   # the survivor ledger
 │   └── analyzers/                   # go/analysis analyzers (G-NN)
 ├── laws/                            # G-NN.yaml metadata
@@ -2065,10 +2067,7 @@ The Rust-TOPS repository, the tool versions and the Go 1.27 APIs were read on 20
 - Go `tool` directive proposal (<https://go.googlesource.com/proposal/+/master/design/48429-go-tool-modules.md>)
 - `testing/synctest` (<https://pkg.go.dev/testing/synctest>)
 - gocyclo counting rules (<https://pkg.go.dev/github.com/fzipp/gocyclo>)
-- Mutation tools: gremlins v0.6.0, 2025-12-06 (<https://github.com/go-gremlins/gremlins>);
-  go-mutesting, maintained fork `avito-tech/go-mutesting` v2.3.1, 2025-12-26
-  (<https://github.com/avito-tech/go-mutesting>); mutest (<https://github.com/fchimpan/mutest>);
-  ooze (<https://github.com/gtramontina/ooze>)
+- `go help build`, the `-overlay` flag (<https://pkg.go.dev/cmd/go>)
 - CRAP tools: crap4go (<https://github.com/unclebob/crap4go>)
 - golangci-lint v2.15.0, 2026-10-16 (<https://golangci-lint.run>; release notes on
   <https://github.com/golangci/golangci-lint/releases>)

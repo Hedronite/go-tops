@@ -116,6 +116,13 @@ All notable changes to this project are listed here. The protocol version and th
 
 ### Changed
 
+- **Protocol 0.4.6** (`GO_TOPS.md`, `schema/`, `profiles/`, `config/`, `init`). Mutation runs inside `gotops`.
+  - The engine (§2, §6.4, §9, §10, §16 item 39): `overlay`, a runner over `go test -overlay`, is the only engine and the default; `gates.mutation.engine` accepts nothing else. gremlins, its pin in `tools/go.mod` and every rule about its config files and variables are gone, and so are the two statuses only it reported (`SKIPPED`, `RUNNABLE`). No module copy is made and nothing in the work tree changes.
+  - Only a test kills: `go vet`, which `go test` runs first, is off in every mutant run. Under 0.4.5 a mutant that `vet` rejected counted as killed with no test involved.
+  - A mutant that does not compile is `NOT VIABLE` (it read `KILLED` before). A `case` expression takes its `switch` statement's coverage, and a package-level declaration is always run (both read `NOT COVERED` before). A mutant is judged by its own package's tests only, and a test that reads its source at run time sees the unmutated file.
+  - Survivor keys are unchanged, so existing ledger entries still match.
+  - **Repos on 0.4.5:** set `protocol: "0.4.6"` in `go-tops.yaml` and `go-tops.lock`, delete a `gates.mutation.engine: gremlins` line if there is one, move the `gotops` pin, and drop the engine's pin with `go get -modfile=tools/go.mod -tool github.com/go-gremlins/gremlins/cmd/gremlins@none`. `init` never removes a line from `tools/go.mod`.
+
 - **Protocol 0.4.5** (`GO_TOPS.md`, `schema/`, `profiles/`, `config/`). Mutation, measured before it is built (M4): the text, the schemas and the version for what the engine probe and the design review found. The code that follows it is not in this change.
   - The engine (§6.4, §4.1, §9, §16 item 38): `gotops` gives gremlins every setting as a flag with an empty `--config` file and no `GREMLINS_*` variable, and never obeys a `.gremlins.yaml` or an engine config file elsewhere. Six mutators are on and five off, with each replacement listed. `gates.mutation.engine` accepts `gremlins` alone, so any other value now fails `check`. A package whose name differs from its directory runs the whole module's tests, and a test that fails on the engine's unmutated copy fails the layer.
   - The diff (§6.4, §9): from the diff base to the working tree, untracked files included; module-relative; without the files of other modules. It alone decides which mutants count, and the engine's own `--diff` is not trusted. The base is `--base`, then `gates.mutation.base`, then `origin/main`.

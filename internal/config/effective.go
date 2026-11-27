@@ -13,7 +13,7 @@ import (
 const (
 	defaultLintConfig = ".golangci.yml"
 	defaultFailOn     = "reachable"
-	defaultEngine     = "gremlins"
+	defaultEngine     = "overlay"
 	defaultBase       = "origin/main"
 	defaultReport     = ".go-tops/report.json"
 	defaultEnforce    = "ratchet" // adopters default to ratchet (§6.7)

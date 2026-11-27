@@ -1,4 +1,4 @@
-protocol: "0.4.5"            # must match the schema's protocol constant
+protocol: "0.4.6"            # must match the schema's protocol constant
 version: "0.1.0"             # this config's version (non-empty)
 module: github.com/acme/myapp
 class: binary-cli            # one of the schema's classes
@@ -28,7 +28,7 @@ gates:
     cap: 10
     complexity: { err_guard_discount: true, wrap_functions: [] }
   mutation:
-    engine: gremlins          # the only engine with an adapter (§6.4)
+    engine: overlay           # the only engine, and the default (§6.4)
     base: origin/main
     unexplained_survivors_max: 0
     ledger: .go-tops/survivors.yaml

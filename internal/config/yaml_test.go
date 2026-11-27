@@ -71,7 +71,7 @@ func TestLoadDecodesTheExampleIntoTypedFields(t *testing.T) {
 	if n := cfg.Layers.Stress.Count; n == nil || *n != 20 {
 		t.Errorf("stress count = %v, want 20", n)
 	}
-	if cfg.Gates.Mutation.Engine != "gremlins" || cfg.Layers.Fuzz.Timed.Duration != "5m" {
+	if cfg.Gates.Mutation.Engine != "overlay" || cfg.Layers.Fuzz.Timed.Duration != "5m" {
 		t.Errorf("mutation engine %q, fuzz duration %q", cfg.Gates.Mutation.Engine, cfg.Layers.Fuzz.Timed.Duration)
 	}
 	if len(cfg.Exemptions) != 1 || cfg.Exemptions[0].Symbol != "Server.handleOp" || cfg.Exemptions[0].Expires != "2027-03-01" {

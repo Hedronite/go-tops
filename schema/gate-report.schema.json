@@ -22,7 +22,7 @@
   ],
   "properties": {
     "protocol": {
-      "const": "0.4.5"
+      "const": "0.4.6"
     },
     "tool_version": {
       "type": "string",

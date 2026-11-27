@@ -10,7 +10,7 @@
   ],
   "properties": {
     "protocol": {
-      "const": "0.4.5"
+      "const": "0.4.6"
     },
     "version": {
       "type": "string",
@@ -229,8 +229,9 @@
             },
             "engine": {
               "enum": [
-                "gremlins"
-              ]
+                "overlay"
+              ],
+              "default": "overlay"
             },
             "base": {
               "type": "string",
