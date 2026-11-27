@@ -38,7 +38,6 @@
     },
     "classes": {
       "type": "array",
-      "minItems": 1,
       "uniqueItems": true,
       "items": {
         "$ref": "go-tops.schema.json#/$defs/class"
@@ -137,6 +136,36 @@
         "required": [
           "tool"
         ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "active"
+          },
+          "v01": {
+            "const": true
+          }
+        },
+        "required": [
+          "status",
+          "v01"
+        ]
+      },
+      "then": {
+        "properties": {
+          "classes": {
+            "minItems": 1
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "classes": {
+            "minItems": 0
+          }
+        }
       }
     }
   ]
