@@ -648,10 +648,10 @@ Keep the key explicit in every config so scores are comparable across repos.
   unchanged line. Only the token's bytes change, so every other position, comment and directive
   in the file stays as it was.
 - **The unmutated run:** the tests of each package with a mutant run once on the unmutated
-  files, with `-coverprofile` and without `-coverpkg`. They must pass, or the layer fails and no
-  result counts: a mutant is `killed` only by tests that pass without it. This run gives the
-  coverage and the time that the mutant runs use; the coverage profile of the tests gate, which
-  counts every package's tests, is never used for it.
+  files, as `go test` with `-coverprofile` and without `-coverpkg`. They must pass, or the layer
+  fails and no result counts. This run gives the coverage that the mutant runs use, and its wall
+  time is the package's baseline time. The coverage profile of the tests gate, which counts
+  every package's tests, is never used for it.
 - **Which mutants are run:** a mutant in a function body is run when the coverage block that
   holds its position ran; otherwise it is `NOT COVERED` and is not run. Two positions have no
   block of their own:
@@ -660,18 +660,24 @@ Keep the key explicit in every config so scores are comparable across repos.
   - a package-level `const`, `var` or `type` declaration has no coverage at all, so its mutants
     are always run.
 - **Which tests judge a mutant:** the tests of the mutant's own package, and no other package's.
-  Each mutant runs `go test -overlay=<file> -vet=off -count=1 -failfast <package>` with the
-  build of the gate run (its tags, `CGO_ENABLED`, `GOOS` and `GOARCH`), without `-race` and
-  without `-shuffle`.
-- **Only a test kills.** `-vet=off` is required, here and in the compile check: `go test` runs
-  `go vet` checks first, and a mutant that `vet` rejects (`x != 1 || x != 2`, for one) would
-  fail the build and count as killed with no test involved.
-- **Compile check:** before its tests, the mutated package's test binary is compiled with the
-  same overlay and build (`go test -c -vet=off`). A mutant that does not compile is `NOT VIABLE`.
-- **Bounds:** at most four mutants run at once «confirm: workers». A mutant's run is stopped,
-  and the mutant is `TIMED OUT`, after «confirm: the multiple of the unmutated time, and the
-  floor». An engine that cannot finish every mutant (an interrupt, or a failure to write or to
-  start a run) is `fail`: a partial result is never judged.
+- **How a mutant is run:** `go test -c -vet=off -overlay=<file> -o <binary> <package>` builds
+  the package's test binary with the build of the gate run (its tags, `CGO_ENABLED`, `GOOS` and
+  `GOARCH`), and the binary is run in the package's directory with `-test.failfast`, without
+  `-race` and without `-shuffle`. It is run as `go test` runs a test binary: with
+  `-test.paniconexit0`, and with the `bin` directory of `GOROOT` first on `PATH`.
+- **A mutant is `killed` only by tests that pass without it:** the unmutated test binary, built
+  and run the same way, must pass too, or the layer fails. A package with no test files has no
+  binary, and every mutant in it is `NOT COVERED`.
+- **Only a test kills.** `-vet=off` is required: `go test` runs `go vet` checks first, and a
+  mutant that `vet` rejects (`x != 1 || x != 2`, for one) would fail the build and count as
+  killed with no test involved.
+- **Compile check:** a mutant whose test binary does not compile is `NOT VIABLE`.
+- **Bounds:** at most four mutants run at once, no more than `GOMAXPROCS` and at least one. A
+  mutant's test run is stopped, and the mutant is `TIMED OUT`, after five times the package's
+  baseline time and never less than 10 seconds. The compile has its own limit, five times the
+  baseline time and never less than 60 seconds, and a compile that exceeds it fails the layer.
+  An engine that cannot finish every mutant (an interrupt, or a failure to write or to start a
+  run) is `fail`: a partial result is never judged.
 - **What the tests read at run time:** an overlay changes what the `go` command compiles, not
   what a test opens. A test that reads its own package's source files sees the unmutated file.
 - **Line directives:** a changed production file with a `//line` or `/*line` directive fails the

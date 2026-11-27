@@ -118,6 +118,7 @@ All notable changes to this project are listed here. The protocol version and th
 
 - **Protocol 0.4.6** (`GO_TOPS.md`, `schema/`, `profiles/`, `config/`, `init`). Mutation runs inside `gotops`.
   - The engine (§2, §6.4, §9, §10, §16 item 39): `overlay`, a runner over `go test -overlay`, is the only engine and the default; `gates.mutation.engine` accepts nothing else. gremlins, its pin in `tools/go.mod` and every rule about its config files and variables are gone, and so are the two statuses only it reported (`SKIPPED`, `RUNNABLE`). No module copy is made and nothing in the work tree changes.
+  - A mutant's test binary is built with `go test -c` and run the way `go test` runs it, and the unmutated binary must pass the same way. At most four mutants run at once; a test run is stopped after five times the package's baseline time (never under 10 seconds) and a compile after five times (never under 60).
   - Only a test kills: `go vet`, which `go test` runs first, is off in every mutant run. Under 0.4.5 a mutant that `vet` rejected counted as killed with no test involved.
   - A mutant that does not compile is `NOT VIABLE` (it read `KILLED` before). A `case` expression takes its `switch` statement's coverage, and a package-level declaration is always run (both read `NOT COVERED` before). A mutant is judged by its own package's tests only, and a test that reads its source at run time sees the unmutated file.
   - Survivor keys are unchanged, so existing ledger entries still match.
