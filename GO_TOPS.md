@@ -1733,6 +1733,10 @@ CI keeps the block identical to the file and validates the file against the sche
     {
       "id": "crap", "tier": 1, "outcome": "fail",
       "details": { "cap": 10, "not_measured": 3,
+        "functions": [ { "func": "ParseSpec", "file": "internal/spec/parse.go:41",
+                           "cc": 14, "cov_pct": 52.0, "crap": 35.7, "cap": 10, "baseline": null },
+                         { "func": "dial", "file": "internal/net/dial_windows.go:12",
+                           "cc": 12, "cov_pct": null, "crap": null, "cap": 10, "baseline": null } ],
         "violations": [ { "func": "ParseSpec", "file": "internal/spec/parse.go:41",
                           "cc": 14, "cov_pct": 52.0, "crap": 35.7, "baseline": null },
                         { "func": "dial", "file": "internal/net/dial_windows.go:12",
@@ -1990,8 +1994,8 @@ wrong; the config wins.
 36. **The ledger leg:** the baseline records its build, only the run with that build writes it or judges the ratchet, every entry of a first ledger is measured there, and the other legs report the ratchet judgment as `skip`, never `pass`. A function the ledger leg does not compile has no entry and takes a `crap` exemption. A repo under `ratchet` names exactly one CI leg as its ledger leg, and CI fails when that leg's ratchet outcome is `skip`. (§6.7, §11, §12.1, §12.3) *New in 0.4.3.*
 37. **The first adoption of a real repository (M3):** the kit lint pass reads `.go-tops/golangci.yml` and never the adopter's `.golangci.yml`, which `init` leaves byte for byte; `init` adds the kit's pins to an existing `tools/go.mod`, writes a marked `.gitignore` block and keeps the whole release of the `go` line as the floor; the first ledger is written by the ledger leg on the adoption pull request, asked by `baseline --status`; a repository whose tests walk the tree keeps the lint binary outside it. (§4.1, §6.7, §8.1, §10, §11, §12.1) *New in 0.4.4.*
 38. **Mutation, measured before it was built (M4):** `gotops` configures the engine by flags alone and ignores its files and variables; six mutators are on; the kit's own diff, from the diff base to the working tree, decides which mutants count; a survivor key has one text form and the report lists every survivor; mutants in files a build does not compile are counted apart; an expired survivor entry fails at tier 0; `survivors list`, `explain` and `expire` are defined; the engine's per-package meaning of `NOT COVERED` is stated; the tier 2 ledger kind is M6. (§6.4, §6.7, §9, §11, §12.1, §12.3) *New in 0.4.5.*
-40. **Laws v0.1 protocol (M5 G1e):** in-process custom analyzers (D10 a); law-pass `issues` uncap; `//tops:ack` and `acks.yaml` semantics with R laws never ackable; `gotops laws` subcommands; `law.schema.json`; CRAP `functions` in the report (F18); C9 retires when `laws.judged` equals `laws.required` and `laws.required_not_evaluated` is `0`, with the verdict read from `.laws` and `summary.failed`. (§3.3, §8.1, §11, §12.1, §12.3, §18) *New in 0.4.7.*
 39. **The native mutation engine:** `overlay` is the only engine, and the external one and its pin are gone; `vet` is off in every mutant run, so only a test kills; a mutant that does not compile is `NOT VIABLE`; a `case` expression and code after a function literal take their statement's coverage, and a package-level declaration is always run; one package's test binaries run one at a time, and its unmutated binary must pass before and after them; a test's run-time reads see unmutated files. (§2, §4.1, §6.4, §9, §10) *New in 0.4.6.*
+40. **Laws v0.1 protocol (M5 G1e):** in-process custom analyzers (D10 a); law-pass `issues` uncap; `//tops:ack` and `acks.yaml` semantics with R laws never ackable; `gotops laws` subcommands; `law.schema.json`; CRAP `functions` in the report (F18); C9 retires when `laws.judged` equals `laws.required` and `laws.required_not_evaluated` is `0`, with the verdict read from `.laws` and `summary.failed`. (§3.3, §8.1, §11, §12.1, §12.3, §18) *New in 0.4.7.*
 
 ---
 
