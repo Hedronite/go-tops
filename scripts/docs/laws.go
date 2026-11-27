@@ -46,6 +46,7 @@ func checkLaws(r *repo) checkResult {
 	cache := map[string]*jsonschema.Schema{}
 	var files []string
 	pending := 0
+	var v01Pending []string
 	activeFixtures := 0
 	for _, e := range entries {
 		if e.IsDir() || !lawFileRe.MatchString(e.Name()) {
@@ -93,6 +94,9 @@ func checkLaws(r *repo) checkResult {
 			}
 			if strings.HasPrefix(filepath.ToSlash(row.Fixture), "testdata/laws/pending/") {
 				pending++
+				if row.V01 && row.Status == "active" {
+					v01Pending = append(v01Pending, row.ID)
+				}
 			}
 		}
 	}
@@ -109,7 +113,12 @@ func checkLaws(r *repo) checkResult {
 			res.Findings = append(res.Findings, finding{lawsDir, 0, id + ": in §8.2, no laws/" + want})
 		}
 	}
-	res.Summary = fmt.Sprintf("%d law files; %d active fixture paths; %d under testdata/laws/pending/ (catalog placeholders until G3/G4)", len(files), activeFixtures, pending)
+	sort.Strings(v01Pending)
+	summary := fmt.Sprintf("%d law files; %d active fixture paths; %d under testdata/laws/pending/ (catalog placeholders until G3/G4)", len(files), activeFixtures, pending)
+	if len(v01Pending) > 0 {
+		summary += "; v0.1 laws still on pending fixtures (G4 fails until real): " + strings.Join(v01Pending, ", ")
+	}
+	res.Summary = summary
 	if len(files) == 0 {
 		res.Vacuous = true
 	}

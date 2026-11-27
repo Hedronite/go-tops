@@ -16,8 +16,10 @@ classes:
 - embedded-tinygo
 - workspace-root
 reader: analyzer
-rationale: Law G-08 states a floor from GO_TOPS.md section 8.2 so reviews and gates share one explicit rule.
-fix: Rewrite the code to satisfy the law statement in GO_TOPS.md section 8.2.
+rationale: >
+  time.Sleep in tests hides races and flakes CI; the synctest analyzer replaces wall-clock waits.
+fix: >
+  Use synctest.Test or channels with a clear happens-before; delete time.Sleep used only to wait for goroutines.
 v01: true
 analyzer: gotops/synctest
 fixture: testdata/laws/pending/G-08

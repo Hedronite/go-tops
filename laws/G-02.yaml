@@ -16,8 +16,10 @@ classes:
 - embedded-tinygo
 - workspace-root
 reader: tool
-rationale: Law G-02 states a floor from GO_TOPS.md section 8.2 so reviews and gates share one explicit rule.
-fix: Rewrite the code to satisfy the law statement in GO_TOPS.md section 8.2.
+rationale: >
+  Calling wg.Add inside the goroutine races with Wait and can under-count; govet's waitgroup analyzer flags it.
+fix: >
+  Call wg.Add before the go statement that uses the WaitGroup, with a comment naming the owning goroutine and how it exits.
 v01: true
 tool: govet
 fixture: testdata/laws/pending/G-02

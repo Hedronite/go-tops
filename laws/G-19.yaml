@@ -16,8 +16,10 @@ classes:
 - embedded-tinygo
 - workspace-root
 reader: analyzer
-rationale: Law G-19 states a floor from GO_TOPS.md section 8.2 so reviews and gates share one explicit rule.
-fix: Rewrite the code to satisfy the law statement in GO_TOPS.md section 8.2.
+rationale: >
+  Default HTTP clients wait forever; the analyzer flags http.DefaultClient and missing timeouts on clients and servers.
+fix: >
+  Use an http.Client with Timeout, or transport deadlines; set Server ReadHeaderTimeout, ReadTimeout, and WriteTimeout.
 v01: true
 analyzer: gotops/httptimeout
 fixture: testdata/laws/pending/G-19

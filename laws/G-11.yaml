@@ -16,8 +16,10 @@ classes:
 - embedded-tinygo
 - workspace-root
 reader: tool
-rationale: Law G-11 states a floor from GO_TOPS.md section 8.2 so reviews and gates share one explicit rule.
-fix: Rewrite the code to satisfy the law statement in GO_TOPS.md section 8.2.
+rationale: >
+  String matching on errors breaks when wording changes; errorlint enforces %w at boundaries and rejects err.Error() comparisons.
+fix: >
+  Return errors with fmt.Errorf("...: %w", err); compare with errors.Is or errors.As, not err.Error().
 v01: true
 tool: errorlint
 fixture: testdata/laws/pending/G-11

@@ -16,8 +16,10 @@ classes:
 - embedded-tinygo
 - workspace-root
 reader: analyzer
-rationale: Law G-17 states a floor from GO_TOPS.md section 8.2 so reviews and gates share one explicit rule.
-fix: Rewrite the code to satisfy the law statement in GO_TOPS.md section 8.2.
+rationale: >
+  Detached contexts hide leaks and break tracing; the ctxroot analyzer flags Background and TODO outside allowed sites.
+fix: >
+  Take ctx from the caller, or from wire/main setup; use Background or TODO only in main, wiring, and tests.
 v01: true
 analyzer: gotops/ctxroot
 fixture: testdata/laws/pending/G-17

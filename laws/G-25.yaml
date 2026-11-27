@@ -16,8 +16,10 @@ classes:
 - embedded-tinygo
 - workspace-root
 reader: analyzer
-rationale: Law G-25 states a floor from GO_TOPS.md section 8.2 so reviews and gates share one explicit rule.
-fix: Rewrite the code to satisfy the law statement in GO_TOPS.md section 8.2.
+rationale: >
+  unsafe bypasses the type system; the analyzer confines it to declared packages with a SAFETY comment on every use.
+fix: >
+  Move unsafe code behind a small API; add a // SAFETY: line per use explaining why it is sound.
 v01: true
 analyzer: gotops/unsafeuse
 fixture: testdata/laws/pending/G-25

@@ -38,7 +38,7 @@
     },
     "classes": {
       "type": "array",
-      "minItems": 0,
+      "minItems": 1,
       "uniqueItems": true,
       "items": {
         "$ref": "go-tops.schema.json#/$defs/class"

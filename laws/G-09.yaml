@@ -5,7 +5,9 @@ status: active
 classes:
 - concurrency-runtime
 reader: analyzer
-rationale: Law G-09 states a floor from GO_TOPS.md section 8.2 so reviews and gates share one explicit rule.
-fix: Rewrite the code to satisfy the law statement in GO_TOPS.md section 8.2.
+rationale: >
+  This law is in the §8.2 catalog but is not in the v0.1 mechanical set; the gate reports it not-evaluated until a later milestone provides a reader.
+fix: >
+  No v0.1 rewrite applies until the law's reader lands in a later milestone.
 analyzer: gotops/g-09
 fixture: testdata/laws/pending/G-09

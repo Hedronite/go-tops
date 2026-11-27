@@ -16,8 +16,10 @@ classes:
 - embedded-tinygo
 - workspace-root
 reader: analyzer
-rationale: Law G-26 states a floor from GO_TOPS.md section 8.2 so reviews and gates share one explicit rule.
-fix: Rewrite the code to satisfy the law statement in GO_TOPS.md section 8.2.
+rationale: >
+  cgo in ordinary modules breaks hermetic builds; the analyzer plus build tags allow cgo only on the cgo-bridge class.
+fix: >
+  Gate cgo behind the cgo-bridge class; ship other classes with CGO_ENABLED=0; keep -race test jobs on cgo where Linux requires it.
 v01: true
 analyzer: gotops/cgobridge
 fixture: testdata/laws/pending/G-26

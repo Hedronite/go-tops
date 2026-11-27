@@ -16,8 +16,10 @@ classes:
 - embedded-tinygo
 - workspace-root
 reader: analyzer
-rationale: Law G-33 states a floor from GO_TOPS.md section 8.2 so reviews and gates share one explicit rule.
-fix: Rewrite the code to satisfy the law statement in GO_TOPS.md section 8.2.
+rationale: >
+  The module must meet the protocol floor and match the pinned toolchain; the analyzer compares the go directive and go env GOVERSION.
+fix: >
+  Set go to at least the protocol floor; align the CI and release toolchain with go-tops.lock and go env GOVERSION.
 v01: true
 analyzer: gotops/goversion
 fixture: testdata/laws/pending/G-33
