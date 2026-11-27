@@ -508,31 +508,65 @@ func Evaluate(cfg gate.MutationConfig, exemptions []report.Exemption, gremlinsJS
 	return EvaluateBatches(cfg, exemptions, [][]byte{gremlinsJSON}, diff, dir, today)
 }
 
-// EvaluateBatches merges one or more gremlins JSON payloads, applies exemptions and ledger matching, and returns Evaluation.
-func EvaluateBatches(cfg gate.MutationConfig, exemptions []report.Exemption, reports [][]byte, diff DiffResult, dir string, today time.Time) (Evaluation, error) {
-	if cfg.Engine != "" && cfg.Engine != "gremlins" {
-		return Evaluation{}, fmt.Errorf("mutation engine %q is not supported in M4 (only gremlins)", cfg.Engine)
+type evalContext struct {
+	idx    *ModuleIndex
+	exRes  exempt.MutationResult
+	ledger Ledger
+}
+
+func prepareEvaluation(cfg gate.MutationConfig, exemptions []report.Exemption, diff DiffResult, dir string, today time.Time, allowOverlay bool) (Evaluation, evalContext, error) {
+	if err := validateEngine(cfg.Engine, allowOverlay); err != nil {
+		return Evaluation{}, evalContext{}, err
 	}
 	notMeasured, err := countNotMeasured(dir, diff.OutOfBuildFiles)
 	if err != nil {
-		return Evaluation{}, err
+		return Evaluation{}, evalContext{}, err
 	}
 	idx, err := ScanModule(dir)
 	if err != nil {
-		return Evaluation{}, err
+		return Evaluation{}, evalContext{}, err
 	}
 	exRes := exempt.MatchMutation(exemptions, idx.Files(), idx.Funcs(), today)
 	ledger, err := loadConfiguredLedger(dir, cfg.Ledger, today)
 	if err != nil {
-		return Evaluation{}, err
+		return Evaluation{}, evalContext{}, err
 	}
 	if err := checkNoLineDirectives(dir, diff.InBuildFiles); err != nil {
-		return Evaluation{}, err
+		return Evaluation{}, evalContext{}, err
 	}
 	ev := newEvaluation(diff, notMeasured, exRes.Problems)
+	return ev, evalContext{idx: idx, exRes: exRes, ledger: ledger}, nil
+}
+
+func validateEngine(engine string, allowOverlay bool) error {
+	switch engine {
+	case "", "gremlins":
+		return nil
+	case "overlay":
+		if allowOverlay {
+			return nil
+		}
+		return fmt.Errorf("mutation engine %q is not supported in M4 (only gremlins)", engine)
+	default:
+		return fmt.Errorf("mutation engine %q is not supported (want gremlins or overlay)", engine)
+	}
+}
+
+// EvaluateOverlayEmpty evaluates a vacuous or out-of-build-only diff under the overlay engine.
+func EvaluateOverlayEmpty(cfg gate.MutationConfig, exemptions []report.Exemption, diff DiffResult, dir string, today time.Time) (Evaluation, error) {
+	ev, _, err := prepareEvaluation(cfg, exemptions, diff, dir, today, true)
+	return ev, err
+}
+
+// EvaluateBatches merges one or more gremlins JSON payloads, applies exemptions and ledger matching, and returns Evaluation.
+func EvaluateBatches(cfg gate.MutationConfig, exemptions []report.Exemption, reports [][]byte, diff DiffResult, dir string, today time.Time) (Evaluation, error) {
+	ev, ec, err := prepareEvaluation(cfg, exemptions, diff, dir, today, false)
+	if err != nil {
+		return Evaluation{}, err
+	}
 	reported := map[string]map[MutantLoc]bool{}
 	for _, raw := range reports {
-		ev, err = applyReport(ev, raw, diff, idx, exRes, ledger, dir, reported)
+		ev, err = applyReport(ev, raw, diff, ec.idx, ec.exRes, ec.ledger, dir, reported)
 		if err != nil {
 			return Evaluation{}, err
 		}
