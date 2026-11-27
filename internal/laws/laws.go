@@ -1,8 +1,8 @@
 // Package laws holds the law catalog of GO_TOPS.md §8.2 and the stub the laws
 // layer runs until the analyzers land (M5).
 //
-// The table in table.go is the §8.2 table. laws_test.go parses GO_TOPS.md and
-// fails on any difference, so the two cannot drift.
+// The catalog loads from embedded laws/G-NN.yaml (§8.3). laws_test.go parses
+// GO_TOPS.md and fails on any difference, so the two cannot drift.
 package laws
 
 import (
@@ -58,6 +58,7 @@ const (
 // Law is one row of §8.2.
 type Law struct {
 	ID       string
+	Title    string
 	Severity Severity
 	Reader   Reader
 	// Tier is where the law is judged (§3.2): 0 for an analyzer, 1 for a
@@ -66,22 +67,21 @@ type Law struct {
 	Tier    int
 	V01     bool // the ✓ column: a live reader is targeted for the first mechanical release
 	Retired bool // the Law cell begins "Retired"
-	// Classes are the classes the law applies to (§8.3). PROVISIONAL: §8.2
-	// has no such column and the law files that hold the list arrive at M5, so
-	// until then the list is derived from the places the protocol does state
-	// it: the ✓ laws every profile requires (§5.3), the "Extra laws" row of
-	// §5.2, and the two laws §5.2 gives to every class (G-42, G-43). For
-	// binary-cli that is the 19 laws of config/gate-report.example.json. The
-	// drift test covers ID, severity, reader, tier, v0.1 and retired, not this
-	// field; M5 replaces it with the law files.
+	Status  string
+	// Classes are the classes the law applies to (§8.3): the classes list in
+	// the law file when status is active. Retired laws apply to none.
 	Classes []string
 }
 
-// Active reports whether the law is neither retired nor planned.
-func (l Law) Active() bool { return !l.Retired }
+// Active reports whether the law's status is active (§8.3).
+func (l Law) Active() bool { return l.Status == "active" }
 
 // Catalog returns every row of §8.2, retired ones included, in table order.
 func Catalog() []Law {
+	ensureCatalog()
+	if catalogErr != nil {
+		panic(catalogErr)
+	}
 	out := make([]Law, len(catalog))
 	copy(out, catalog)
 	return out
@@ -89,6 +89,10 @@ func Catalog() []Law {
 
 // Lookup finds a law by ID.
 func Lookup(id string) (Law, bool) {
+	ensureCatalog()
+	if catalogErr != nil {
+		panic(catalogErr)
+	}
 	for _, l := range catalog {
 		if l.ID == id {
 			return l, true
@@ -100,6 +104,9 @@ func Lookup(id string) (Law, bool) {
 // liveReaders holds the laws that have a reader in this release. The stub
 // judges none, so none is listed; M5 adds each law as its reader lands.
 var liveReaders = map[string]bool{}
+
+// Live reports whether id has a reader implemented in this release.
+func Live(id string) bool { return liveReaders[id] }
 
 // Counts are the release-level figures of §12.3: the same for every class.
 type Counts struct {
@@ -113,8 +120,8 @@ type Counts struct {
 // Release returns the release-level counts.
 func Release() Counts {
 	var c Counts
-	c.Catalog = len(catalog)
-	for _, l := range catalog {
+	for _, l := range Catalog() {
+		c.Catalog++
 		if !l.Active() {
 			continue
 		}
@@ -132,10 +139,10 @@ func Release() Counts {
 }
 
 // Applicable returns the active laws that apply to the class (§8.3), sorted
-// by ID. It reads the provisional Classes field.
+// by ID. It reads the classes list in each law file.
 func Applicable(class string) []Law {
 	var out []Law
-	for _, l := range catalog {
+	for _, l := range Catalog() {
 		if l.Active() && slices.Contains(l.Classes, class) {
 			out = append(out, l)
 		}

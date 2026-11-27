@@ -1,0 +1,11 @@
+id: G-24
+title: No package-level mutable state in `library-core`
+severity: ack
+status: active
+classes:
+- library-core
+reader: analyzer
+rationale: Law G-24 states a floor from GO_TOPS.md section 8.2 so reviews and gates share one explicit rule.
+fix: Rewrite the code to satisfy the law statement in GO_TOPS.md section 8.2.
+analyzer: gotops/g-24
+fixture: testdata/laws/pending/G-24

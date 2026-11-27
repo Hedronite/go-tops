@@ -1,0 +1,23 @@
+id: G-07
+title: Sync primitives are never copied
+severity: refuse
+status: active
+classes:
+- library-core
+- binary-cli
+- tui-app
+- binary-service
+- concurrency-runtime
+- library-util
+- parser-codec
+- unsafe-kernel
+- cgo-bridge
+- codegen
+- embedded-tinygo
+- workspace-root
+reader: tool
+rationale: Law G-07 states a floor from GO_TOPS.md section 8.2 so reviews and gates share one explicit rule.
+fix: Rewrite the code to satisfy the law statement in GO_TOPS.md section 8.2.
+v01: true
+tool: govet
+fixture: testdata/laws/pending/G-07

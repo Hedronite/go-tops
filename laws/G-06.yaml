@@ -1,0 +1,11 @@
+id: G-06
+title: No mutex held across blocking I/O or channel operations
+severity: ack
+status: active
+classes:
+- concurrency-runtime
+reader: analyzer
+rationale: Law G-06 states a floor from GO_TOPS.md section 8.2 so reviews and gates share one explicit rule.
+fix: Rewrite the code to satisfy the law statement in GO_TOPS.md section 8.2.
+analyzer: gotops/g-06
+fixture: testdata/laws/pending/G-06

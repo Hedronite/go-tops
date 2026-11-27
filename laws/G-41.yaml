@@ -1,0 +1,10 @@
+id: G-41
+title: (`binary-cli`) Exit codes are documented and stable; `--json` output matches a versioned schema
+severity: ack
+status: active
+classes:
+- binary-cli
+reader: attested
+rationale: Law G-41 states a floor from GO_TOPS.md section 8.2 so reviews and gates share one explicit rule.
+fix: Rewrite the code to satisfy the law statement in GO_TOPS.md section 8.2.
+fixture: testdata/laws/pending/G-41

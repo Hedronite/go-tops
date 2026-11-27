@@ -1,0 +1,10 @@
+id: G-31
+title: Tests do not depend on wall clock, network, or unseeded randomness
+severity: refuse
+status: active
+classes: []
+reader: analyzer
+rationale: Law G-31 states a floor from GO_TOPS.md section 8.2 so reviews and gates share one explicit rule.
+fix: Rewrite the code to satisfy the law statement in GO_TOPS.md section 8.2.
+analyzer: gotops/g-31
+fixture: testdata/laws/pending/G-31

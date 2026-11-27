@@ -1,0 +1,11 @@
+id: G-05
+title: No unbuffered send that can strand a goroutine on early return (leak pattern)
+severity: ack
+status: active
+classes:
+- concurrency-runtime
+reader: analyzer
+rationale: Law G-05 states a floor from GO_TOPS.md section 8.2 so reviews and gates share one explicit rule.
+fix: Rewrite the code to satisfy the law statement in GO_TOPS.md section 8.2.
+analyzer: gotops/g-05
+fixture: testdata/laws/pending/G-05

@@ -1,0 +1,9 @@
+id: G-30
+title: Golden files change only via an explicit `-update` run and are reviewed
+severity: ack
+status: active
+classes: []
+reader: attested
+rationale: Law G-30 states a floor from GO_TOPS.md section 8.2 so reviews and gates share one explicit rule.
+fix: Rewrite the code to satisfy the law statement in GO_TOPS.md section 8.2.
+fixture: testdata/laws/pending/G-30

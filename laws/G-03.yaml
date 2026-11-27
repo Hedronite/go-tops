@@ -1,0 +1,9 @@
+id: G-03
+title: Absorbed by G-33. The language floor G-33 checks is above 1.22, where loop variables became per-iteration
+severity: refuse
+status: retired
+classes: []
+reader: analyzer
+rationale: Law G-03 states a floor from GO_TOPS.md section 8.2 so reviews and gates share one explicit rule.
+fix: Rewrite the code to satisfy the law statement in GO_TOPS.md section 8.2.
+analyzer: gotops/g-03

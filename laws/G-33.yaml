@@ -1,0 +1,23 @@
+id: G-33
+title: The `go` directive's language version is at least the protocol floor, compared in Go's order (§2), and `go env GOVERSION` equals the pinned toolchain. The `toolchain` line is optional, because the pin is checked by `GOVERSION`, not by that line
+severity: refuse
+status: active
+classes:
+- library-core
+- binary-cli
+- tui-app
+- binary-service
+- concurrency-runtime
+- library-util
+- parser-codec
+- unsafe-kernel
+- cgo-bridge
+- codegen
+- embedded-tinygo
+- workspace-root
+reader: analyzer
+rationale: Law G-33 states a floor from GO_TOPS.md section 8.2 so reviews and gates share one explicit rule.
+fix: Rewrite the code to satisfy the law statement in GO_TOPS.md section 8.2.
+v01: true
+analyzer: gotops/goversion
+fixture: testdata/laws/pending/G-33

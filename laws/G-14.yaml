@@ -1,0 +1,9 @@
+id: G-14
+title: Exported sentinel/typed errors are documented as API
+severity: ack
+status: active
+classes: []
+reader: attested
+rationale: Law G-14 states a floor from GO_TOPS.md section 8.2 so reviews and gates share one explicit rule.
+fix: Rewrite the code to satisfy the law statement in GO_TOPS.md section 8.2.
+fixture: testdata/laws/pending/G-14

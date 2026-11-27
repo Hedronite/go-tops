@@ -110,6 +110,22 @@ jobs:
         working-directory: scripts/docs
         run: go run . -root ../.. -checks parse,markers
 
+
+  laws:
+    name: laws
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: scripts/docs/go.mod
+          cache-dependency-path: scripts/docs/go.sum
+      - name: law YAML schema, parity and fixture paths
+        working-directory: scripts/docs
+        run: go run . -root ../.. -checks parse,laws
+
   floor:
     name: floor
     runs-on: ubuntu-latest
@@ -130,7 +146,7 @@ jobs:
     # Runs even when a dependency failed, was skipped or was cancelled, and
     # fails unless every one of them succeeded: a skipped job must not pass.
     if: ${{ always() }}
-    needs: [lint, selftest, links, counts, examples, markers, floor]
+    needs: [lint, selftest, links, counts, examples, markers, laws, floor]
     runs-on: ubuntu-latest
     steps:
       - name: every docs job succeeded
