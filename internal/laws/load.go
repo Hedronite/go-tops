@@ -46,29 +46,21 @@ func loadCatalog() {
 	catalog = out
 }
 
-// catalogFileCountOK reports whether the glob returned at least one law file.
-func catalogFileCountOK(n int) bool { return n > 0 }
-
 func loadCatalogFrom(fsys fs.FS) ([]Law, error) {
 	names, err := fs.Glob(fsys, "laws/G-*.yaml")
 	if err != nil {
 		return nil, fmt.Errorf("glob embedded laws: %w", err)
 	}
-	if !catalogFileCountOK(len(names)) {
+	if len(names) < 1 {
 		return nil, fmt.Errorf("embedded laws: no G-NN.yaml files")
 	}
 	sort.Slice(names, func(i, j int) bool { return lawIDOrder(names[i]) < lawIDOrder(names[j]) })
-	seen := map[string]bool{}
 	var out []Law
 	for _, name := range names {
 		l, err := readLawFile(fsys, name)
 		if err != nil {
 			return nil, err
 		}
-		if seen[l.ID] {
-			return nil, fmt.Errorf("duplicate law id %s", l.ID)
-		}
-		seen[l.ID] = true
 		out = append(out, l)
 	}
 	return out, nil

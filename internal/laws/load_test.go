@@ -82,12 +82,3 @@ func TestReadLawFileRejectsMismatchedName(t *testing.T) {
 		t.Fatal("want error")
 	}
 }
-
-func TestCatalogFileCountOK(t *testing.T) {
-	if catalogFileCountOK(0) {
-		t.Fatal("0 files should not be ok")
-	}
-	if !catalogFileCountOK(1) || !catalogFileCountOK(43) {
-		t.Fatal("positive counts should be ok")
-	}
-}
