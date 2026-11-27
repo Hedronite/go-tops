@@ -138,6 +138,36 @@
           "tool"
         ]
       }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "active"
+          },
+          "v01": {
+            "const": true
+          }
+        },
+        "required": [
+          "status",
+          "v01"
+        ]
+      },
+      "then": {
+        "properties": {
+          "classes": {
+            "minItems": 1
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "classes": {
+            "minItems": 0
+          }
+        }
+      }
     }
   ]
 }
