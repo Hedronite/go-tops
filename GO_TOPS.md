@@ -645,11 +645,13 @@ Keep the key explicit in every config so scores are comparable across repos.
   | `INVERT_LOGICAL` | `&&` with `\|\|`, `\|\|` with `&&` |
   | `INVERT_NEGATIVES` | `-` with `+` |
 
+  `INVERT_NEGATIVES` replaces a unary `-`, and the other mutators but `INCREMENT_DECREMENT`
+  replace a binary operator, so a `-` gets one mutant and an assignment such as `+=` gets none.
   There is one mutant for each mutator that applies to a token on a changed line, and none on an
   unchanged line. Only the token's bytes change, so every other position, comment and directive
   in the file stays as it was.
-- **The unmutated run:** the tests of each package with a mutant run once on the unmutated
-  files, as `go test` with `-coverprofile` and without `-coverpkg`. They must pass, or the layer
+- **The unmutated run:** the tests of each package with a changed production line run once on
+  the unmutated files, as `go test` with `-coverprofile` and without `-coverpkg`. They must pass, or the layer
   fails and no result counts. This run gives the coverage that the mutant runs use, and its wall
   time is the package's baseline time. The coverage profile of the tests gate, which counts
   every package's tests, is never used for it.
@@ -660,16 +662,18 @@ Keep the key explicit in every config so scores are comparable across repos.
   - an expression of a `case` clause in a `switch`, a type `switch` or a `select` (the send or
     receive of a `select` case included) takes the block in which that statement starts, so the
     tests judge it whenever the statement was reached, whether or not the clause's body ran;
-  - code that follows a function literal in the same statement takes the block in which the
-    statement starts (the literal's body has blocks of its own);
+  - a position in a statement that no block holds, such as code that follows a function literal
+    in the same statement, takes the block in which the statement starts (the literal's body has
+    blocks of its own);
   - a package-level `const`, `var` or `type` declaration has no coverage at all, so its mutants
-    are always run.
+    are always run (the body of a function literal in one has blocks of its own).
 - **Which tests judge a mutant:** the tests of the mutant's own package, and no other package's.
 - **How a mutant is run:** `go test -c -vet=off -overlay=<file> -o <binary> <package>` builds
   the package's test binary with the build of the gate run (its tags, `CGO_ENABLED`, `GOOS` and
   `GOARCH`), and the binary is run in the package's directory with `-test.failfast`, without
   `-race` and without `-shuffle`. It is run as `go test` runs a test binary: with
-  `-test.paniconexit0`, and with the `bin` directory of `GOROOT` first on `PATH`.
+  `-test.paniconexit0`, with `-test.timeout` set to the run's time limit, and with the `bin`
+  directory of `GOROOT` first on `PATH`.
 - **A mutant is `killed` only by tests that pass without it:** the unmutated test binary, built
   and run the same way, must pass before the package's first mutant and again after its last,
   or the layer fails and no result counts. The second run catches what a mutant's run leaves
@@ -681,13 +685,18 @@ Keep the key explicit in every config so scores are comparable across repos.
 - **Compile check:** a mutant whose compile exits with an error is `NOT VIABLE`.
 - **Bounds:** at most four mutants are in progress at once, no more than `GOMAXPROCS` and at
   least one. They compile in parallel. The test binaries of one package run one at a time,
-  because they share its directory; binaries of different packages run in parallel. A mutant's
-  test run is stopped, with its process group, and the mutant is `TIMED OUT`, after five times
-  the package's baseline time and never less than 10 seconds, counted from the start of its
-  binary. The compile has its own limit, five times the baseline time and never less than 60
-  seconds, and a compile that exceeds it fails the layer. An engine that cannot finish every
-  mutant (an interrupt, or a failure to write or to start a run) is `fail`: a partial result is
-  never judged.
+  because they share its directory; binaries of different packages can run at the same time. A
+  mutant's test run is stopped, and the mutant is `TIMED OUT`, after five times the package's
+  baseline time and never less than 10 seconds, counted from the start of its binary. The
+  compile has its own limit, five times the baseline time and never less than 60 seconds, and a
+  compile that exceeds it fails the layer.
+- **Stopping a run:** on Unix every command the gate starts has its own process group, and
+  stopping one kills the group, so what a test started goes with it. A run that ends
+  successfully but leaves a process holding its output open for 2 seconds more is an error. An
+  interrupt (SIGINT or SIGTERM) to `gate` or `baseline` stops the runs the same way, and the
+  mutants' temporary directory is removed. An engine that cannot finish every mutant (an
+  interrupt, an error such as that one, or a failure to write or to start a run) is `fail`: a
+  partial result is never judged.
 - **What the tests read at run time:** an overlay changes what the `go` command compiles, not
   what a test opens. A test that reads its own package's source files sees the unmutated file.
 - **Line directives:** a changed production file with a `//line` or `/*line` directive fails the
@@ -700,7 +709,9 @@ Keep the key explicit in every config so scores are comparable across repos.
   is written to `.go-tops/mutation.diff` with no context lines (`--unified=0`), renames detected
   and module-relative paths, minus the files §6.2 excludes (`_test.go`, generated files,
   `testdata/`), the files of other modules (a directory with its own `go.mod`) and every non-Go
-  file. A **changed line** is a line the diff adds or modifies.
+  file. A **changed line** is a line the diff adds or modifies. The module directory is resolved
+  through symbolic links before files are matched and keys are made, so either path to a module
+  gives the same result.
 - **That diff decides what counts.** Every mutant on a changed line is judged, and no mutant is
   made on an unchanged line.
 - **Diff outcomes:**
@@ -766,7 +777,7 @@ Keep the key explicit in every config so scores are comparable across repos.
   `mutation` exemption whose `path` matches no production file, or whose `symbol` names no
   function in them, fails the layer (§6.8).
 - **Counts:** `mutants` = `killed` + `survived_explained` + `survived_unexplained` + the number
-  of exempt survivors. A timed-out mutant is among the killed. Dropped, skipped and
+  of exempt survivors. A timed-out mutant is among the killed. Dropped and
   not-measured mutants are outside `mutants`.
 - **Allowance:** `unexplained_survivors_max` is **`0` in every class**. Any unexplained survivor
   fails the layer. The key stays in `go-tops.yaml` so the report states the limit; `0` is its only
@@ -2009,10 +2020,10 @@ The schemas are files in `schema/`, JSON Schema 2020-12:
 
 | File | What it validates |
 |---|---|
-| `schema/go-tops.schema.json` | `go-tops.yaml` and the class profiles in `profiles/`: one shape for both. `additionalProperties: false` at every object, so an unknown key at any depth fails. Its `protocol` is the constant `0.4.5` |
+| `schema/go-tops.schema.json` | `go-tops.yaml` and the class profiles in `profiles/`: one shape for both. `additionalProperties: false` at every object, so an unknown key at any depth fails. Its `protocol` is the constant `0.4.6` |
 | `schema/gate-report.schema.json` | `.go-tops/report.json` (§12.3): every layer with its tier and outcome, every law with its verdict and reason code, the laws counts, the vulnerability database timestamp and the shuffle seed |
 | `schema/core.schema.json` | The definitions the configuration and report schemas share: layer outcomes, law verdicts, reason codes, run outcomes, enforcement modes, law IDs, the baseline ledger and the exemption record. Both `$ref` it and define none of these again. It is a local copy: the TOPS shared core will replace it by a checked sync |
-| `schema/lock.schema.json` | `go-tops.lock` (§10): the toolchain, the trust mode and the downloaded binaries, each with an exact version, a URL template and a SHA-256 for each of four platforms. `additionalProperties: false` at every object. Its `protocol` is the constant `0.4.5` |
+| `schema/lock.schema.json` | `go-tops.lock` (§10): the toolchain, the trust mode and the downloaded binaries, each with an exact version, a URL template and a SHA-256 for each of four platforms. `additionalProperties: false` at every object. Its `protocol` is the constant `0.4.6` |
 
 `schema/core.schema.json` also defines the entries of the two ledger files that `check`
 validates: `survivorEntry` for `.go-tops/survivors.yaml` (§6.4) and `ackEntry` for
@@ -2035,7 +2046,7 @@ The plan of record. Each milestone is a set of slices, one branch and one pull r
 | **M1** `gotops` CLI | `init`, `check`, `gate` at tiers 0–1, `report.json`; Go-TOPS gates itself | Self-hosting at tier 1 under the bootstrap rule of §6.7 |
 | **M2** native CRAP and the ratchet | Complexity and CRAP, guard-neutral coverage, the baseline ledger, exemptions | The gate fails a complex uncovered function and passes a legacy repo under `ratchet` |
 | **M3** first adopter | `vigil` gated under `ratchet`; adopt, gate and review skills | One real repo gated |
-| **M4** mutation | A gremlins adapter, the survivor ledger, diff outcomes, a spike on an overlay runner | The gate fails a deliberately weak test |
+| **M4** mutation | An external-engine adapter, the survivor ledger, diff outcomes, a spike on an overlay runner | The gate fails a deliberately weak test |
 | **M5** laws v0.1 | 16 laws judged by analyzers and the kit's law lint pass; the law ratchet and the ack ledger; the kit switches its own gate from `advisory` to `hard` (§6.7) | The report says "16 of 43 laws judged" truthfully for each class; `vigil` runs laws under `ratchet`; Go-TOPS runs `hard` on itself |
 | **M6** deep layers, second and third adopters | Leak and time laws, tier 2 layers; `simplex` adopts as `binary-service` and `augur` adopts | Three Hedronite repos gated |
 | **M7** release tier and 1.0 | Tier 3, distribution through `go tool`, SARIF and JUnit; law IDs frozen | Protocol 1.0 declared on the criterion below. The release is tagged by a human: an act, not a further criterion |

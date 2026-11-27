@@ -4,6 +4,12 @@ All notable changes to this project are listed here. The protocol version and th
 
 ## [Unreleased]
 
+### Package (M4.5): overlay cutover
+
+- **The native engine is the only one.** `internal/mutate` mutates through `go test -overlay` (#45), and protocol 0.4.6 (below) makes it the engine. The external adapter, its tests and its pin are gone from the code and from `tools/go.mod` (12 indirect modules with it); the `mutation` layer needs only `go`.
+  - Added with the engine (#45): every command the gate starts has its own process group, killed as one on a time limit or on SIGINT or SIGTERM (`gate`, `baseline`), with 2 seconds for its output to close; a module reached through a symbolic link gives the same files and survivor keys as by its real path.
+  - The kit gates its own diffs with the engine.
+
 ### Package (M4)
 
 - **Mutation on the diff.** Compiled from the step READYs: the engine probe (G0), the protocol 0.4.5 bundle (G1e, #39), the adapter and diff (G1, #40), the survivor ledger, CLI, drop-in and skills (G2, #41), the overlay spike (G3), the kit's own gate (G4, #43), the `vigil` change (G5, `Hedronite/vigil` #33) and the exit (G6).
@@ -121,7 +127,7 @@ All notable changes to this project are listed here. The protocol version and th
   - A mutant's test binary is built with `go test -c` and run the way `go test` runs it, and the unmutated binary must pass the same way, before a package's mutants and again after them. At most four mutants are in progress at once: they compile in parallel, and one package's test binaries run one at a time. A test run is stopped after five times the package's baseline time (never under 10 seconds) and a compile after five times (never under 60).
   - Only a test kills: `go vet`, which `go test` runs first, is off in every mutant run. Under 0.4.5 a mutant that `vet` rejected counted as killed with no test involved.
   - A mutant that does not compile is `NOT VIABLE` (it read `KILLED` before). A `case` expression (of a `switch`, a type `switch` or a `select`) and code after a function literal take their statement's coverage, and a package-level declaration is always run (all read `NOT COVERED` before). A `NOT COVERED` mutant is not compiled. A mutant is judged by its own package's tests only, and a test that reads its source at run time sees the unmutated file.
-  - Survivor keys are unchanged, so existing ledger entries still match.
+  - A `-` gets one mutant: `ARITHMETIC_BASE` when it is binary, `INVERT_NEGATIVES` when it is unary (0.4.5 made both). Survivor keys are unchanged; a ledger entry for the mutant that is no longer made matches nothing, which is not an error.
   - **Repos on 0.4.5:** set `protocol: "0.4.6"` in `go-tops.yaml` and `go-tops.lock`, delete a `gates.mutation.engine: gremlins` line if there is one, move the `gotops` pin, and drop the engine's pin with `go get -modfile=tools/go.mod -tool github.com/go-gremlins/gremlins/cmd/gremlins@none`. `init` never removes a line from `tools/go.mod`.
 
 - **Protocol 0.4.5** (`GO_TOPS.md`, `schema/`, `profiles/`, `config/`). Mutation, measured before it is built (M4): the text, the schemas and the version for what the engine probe and the design review found. The code that follows it is not in this change.

@@ -116,7 +116,7 @@ Milestones M1 to M4 are done. The `gotops` CLI judges hygiene, tests, coverage, 
 | **M1** CLI (done) | `init`, `check`, `gate` at tier 1 (hygiene, tests, coverage), `report`, `lock`, `doctor`, `report.json`; Go-TOPS gates itself under the advisory bootstrap rule |
 | **M2** CRAP and ratchet (done) | Native CRAP: complexity, guard-neutral coverage, exemptions; `baseline` and the ratchet judge; Go-TOPS gates itself with CRAP on |
 | **M3** first adopter (done) | `vigil` gated under `ratchet`; the first ledger written on the pull request; the adopt, gate and review skills |
-| **M4** mutation (done) | A gremlins adapter judged on gotops' own diff, the survivor ledger, mutation on in this repository and in `vigil` |
+| **M4** mutation (done) | An external-engine adapter judged on gotops' own diff, the survivor ledger, mutation on in this repository and in `vigil` |
 | M5 (next) | Laws v0.1: 16 of 43 laws judged by analyzers; the kit switches its own gate to `hard` |
 | M6–M7 | Deep layers and the second and third adopters; the release tier and protocol 1.0 |
 
