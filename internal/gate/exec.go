@@ -46,6 +46,7 @@ func (OS) Run(ctx context.Context, c Cmd) (Output, error) {
 		return Output{}, errors.New("gate: empty argv")
 	}
 	cmd := exec.CommandContext(ctx, c.Argv[0], c.Argv[1:]...)
+	configureExecCmd(cmd)
 	cmd.Dir = c.Dir
 	if len(c.StripEnv) > 0 || len(c.Env) > 0 {
 		cmd.Env = buildEnv(cmd.Environ(), c.StripEnv, c.Env)

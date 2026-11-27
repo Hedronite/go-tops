@@ -9,7 +9,11 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/Hedronite/go-tops/internal/gate"
+	mutationlayer "github.com/Hedronite/go-tops/internal/layers/mutation"
+	"github.com/Hedronite/go-tops/internal/layers/tests"
 	"github.com/Hedronite/go-tops/internal/report"
 )
 
@@ -83,6 +87,7 @@ gates:
 	runGitFixture(t, dir, "init", "-b", "main")
 	runGitFixture(t, dir, "config", "user.name", "Test Author")
 	runGitFixture(t, dir, "config", "user.email", "author@example.com")
+	runGitFixture(t, dir, "config", "commit.gpgsign", "false")
 	runGitFixture(t, dir, "add", ".")
 	runGitFixture(t, dir, "commit", "-m", "base")
 	runGitFixture(t, dir, "checkout", "-b", "feat")
@@ -113,18 +118,53 @@ func runFixtureGate(t *testing.T, bin, dir string) (string, report.Layer, string
 	if rerr != nil {
 		t.Fatalf("report.Load: %v\n%s", rerr, string(out))
 	}
+	return string(out), findMutationLayer(t, rep), marshalLayerDetails(t, findMutationLayer(t, rep)), err
+}
+
+func findMutationLayer(t *testing.T, rep report.Report) report.Layer {
+	t.Helper()
 	for _, layer := range rep.Layers {
-		if layer.ID != "mutation" {
-			continue
+		if layer.ID == "mutation" {
+			return layer
 		}
-		raw, merr := json.Marshal(layer.Details)
-		if merr != nil {
-			t.Fatal(merr)
-		}
-		return string(out), layer, string(raw), err
 	}
 	t.Fatalf("mutation layer missing in %+v", rep.Layers)
-	return "", report.Layer{}, "", err
+	return report.Layer{}
+}
+
+func marshalLayerDetails(t *testing.T, layer report.Layer) string {
+	t.Helper()
+	raw, err := json.Marshal(layer.Details)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(raw)
+}
+
+func assertWeakSingleRow(t *testing.T, raw, out string) {
+	t.Helper()
+	var details struct {
+		Survivors []map[string]any `json:"survivors"`
+	}
+	if err := json.Unmarshal([]byte(raw), &details); err != nil {
+		t.Fatalf("unmarshal details: %v\n%s", err, raw)
+	}
+	if len(details.Survivors) != 1 {
+		t.Fatalf("expected 1 survivor row, got %d: %s", len(details.Survivors), raw)
+	}
+	row := details.Survivors[0]
+	hash, ok := row["line_hash"].(string)
+	if !ok {
+		t.Fatalf("line_hash missing or not string: %+v", row)
+	}
+	wantKey := "boundary.go:Below:CONDITIONALS_BOUNDARY:" + hash
+	if row["file"] != "boundary.go" || row["function"] != "Below" || row["mutator"] != "CONDITIONALS_BOUNDARY" ||
+		row["status"] != "LIVED" || row["explained"] != nil || len(hash) != 64 || row["key"] != wantKey {
+		t.Fatalf("unexpected weak survivor row: %+v", row)
+	}
+	if !strings.Contains(out, wantKey) {
+		t.Errorf("gate output missing survivor key %q:\n%s", wantKey, out)
+	}
 }
 
 func TestMutationFixtureWeakStrongAndUncovered(t *testing.T) {
@@ -140,11 +180,7 @@ func TestMutationFixtureWeakStrongAndUncovered(t *testing.T) {
 		if err == nil || layer.Outcome != "fail" {
 			t.Fatalf("weak fixture: err=%v, layer=%+v\n%s", err, layer, out)
 		}
-		for _, want := range []string{"CONDITIONALS_BOUNDARY", "LIVED", "boundary.go:Below:CONDITIONALS_BOUNDARY:"} {
-			if !strings.Contains(raw, want) || !strings.Contains(out, want) {
-				t.Errorf("weak fixture missing %q\nout:\n%s\ndetails:\n%s", want, out, raw)
-			}
-		}
+		assertWeakSingleRow(t, raw, out)
 	})
 
 	t.Run("none_uncovered", func(t *testing.T) {
@@ -168,6 +204,74 @@ func TestMutationFixtureWeakStrongAndUncovered(t *testing.T) {
 		}
 		if !strings.Contains(raw, `"survived_unexplained":0`) || !strings.Contains(raw, `"killed":2`) {
 			t.Fatalf("strong fixture did not kill mutants cleanly: %s", raw)
+		}
+	})
+}
+
+func runOverlayFixtureGate(t *testing.T, dir string) (string, report.Layer, string, int) {
+	t.Helper()
+	cfg := gate.Config{
+		Module:  "example.com/mutationfixture",
+		Class:   "library-core",
+		Enforce: "hard",
+		Base:    "main",
+		Layers: map[string]gate.LayerConfig{
+			"hygiene":  {Enabled: false, Reason: "fixture"},
+			"crap":     {Enabled: false, Reason: "fixture"},
+			"bench":    {Enabled: false, Reason: "fixture"},
+			"fuzz":     {Enabled: false, Reason: "fixture"},
+			"mutation": {Enabled: true},
+		},
+		Mutation: gate.MutationConfig{Engine: "overlay", UnexplainedMax: 0},
+	}
+	run, err := gate.Execute(t.Context(), cfg, gate.Options{MaxTier: 1, Only: "mutation", Base: "main"}, gate.Deps{
+		Dir:    dir,
+		Layers: []gate.Layer{tests.Tests{}, mutationlayer.Layer{}},
+		Now:    func() time.Time { return time.Date(2026, 11, 26, 0, 0, 0, 0, time.UTC) },
+	})
+	if err != nil {
+		t.Fatalf("gate.Execute overlay: %v", err)
+	}
+	layer := findMutationLayer(t, run.Report)
+	return run.Text, layer, marshalLayerDetails(t, layer), run.ExitCode
+}
+
+func TestMutationOverlayFixtureWeakStrongAndUncovered(t *testing.T) {
+	repoRoot, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("weak", func(t *testing.T) {
+		dir := prepareMutationFixture(t, repoRoot, "weak")
+		out, layer, raw, code := runOverlayFixtureGate(t, dir)
+		if code == 0 || layer.Outcome != "fail" {
+			t.Fatalf("overlay weak: code=%d layer=%+v\n%s", code, layer, out)
+		}
+		assertWeakSingleRow(t, raw, out)
+	})
+
+	t.Run("none_uncovered", func(t *testing.T) {
+		dir := prepareMutationFixture(t, repoRoot, "none")
+		out, layer, raw, code := runOverlayFixtureGate(t, dir)
+		if code == 0 || layer.Outcome != "fail" {
+			t.Fatalf("overlay none_uncovered: code=%d layer=%+v\n%s", code, layer, out)
+		}
+		for _, want := range []string{"NOT COVERED", "boundary.go:Below:"} {
+			if !strings.Contains(raw, want) || !strings.Contains(out, want) {
+				t.Errorf("overlay none_uncovered missing %q\nout:\n%s\ndetails:\n%s", want, out, raw)
+			}
+		}
+	})
+
+	t.Run("strong", func(t *testing.T) {
+		dir := prepareMutationFixture(t, repoRoot, "strong")
+		out, layer, raw, code := runOverlayFixtureGate(t, dir)
+		if code != 0 || layer.Outcome != "pass" {
+			t.Fatalf("overlay strong: code=%d layer=%+v\n%s", code, layer, out)
+		}
+		if !strings.Contains(raw, `"survived_unexplained":0`) || !strings.Contains(raw, `"killed":2`) {
+			t.Fatalf("overlay strong did not kill mutants cleanly: %s", raw)
 		}
 	})
 }

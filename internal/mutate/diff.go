@@ -298,7 +298,7 @@ func addAllFileLines(dir, rel string, changed map[string]map[int]bool) {
 }
 
 func classifyDiff(dir, base, baseSHA, prefix, diffPath, raw string, changed map[string]map[int]bool, paths []string, build gobuild.Build) (DiffResult, error) {
-	sel, err := crap.Select(dir, build)
+	sel, err := crap.Select(resolvedPath(dir), build)
 	if err != nil {
 		return DiffResult{}, err
 	}
