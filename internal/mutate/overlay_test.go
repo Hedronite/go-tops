@@ -14,6 +14,8 @@ import (
 	"runtime"
 	"slices"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -999,7 +1001,7 @@ func TestReadOverlayPkgMetaAndCompileVerifyErrors(t *testing.T) {
 	compFailEx := scriptedCmdExec{fn: func(context.Context, gate.Cmd) (gate.Output, error) {
 		return gate.Output{ExitCode: 1, Stdout: []byte("bad"), Stderr: []byte("compile")}, nil
 	}}
-	if err := verifyUnmutatedOverlayBinaries(t.Context(), compFailEx, tmpDir, tmpDir, meta, []string{"example.com/p"}, gobuild.Build{}, opts, map[string]time.Duration{}); err == nil || !strings.Contains(err.Error(), "bad\ncompile") {
+	if _, err := verifyUnmutatedOverlayBinaries(t.Context(), compFailEx, tmpDir, tmpDir, meta, []string{"example.com/p"}, gobuild.Build{}, opts, map[string]time.Duration{}); err == nil || !strings.Contains(err.Error(), "bad\ncompile") {
 		t.Errorf("expected compile failure propagation, got %v", err)
 	}
 	// 2. unmutated compile writes binary, then binary run returns exec error -> error propagated.
@@ -1016,7 +1018,7 @@ func TestReadOverlayPkgMetaAndCompileVerifyErrors(t *testing.T) {
 		}
 		return gate.Output{}, errors.New("binary spawn failed")
 	}}
-	if err := verifyUnmutatedOverlayBinaries(t.Context(), execErrEx, tmpDir, tmpDir, meta, []string{"example.com/p"}, gobuild.Build{}, opts, map[string]time.Duration{}); err == nil || !strings.Contains(err.Error(), "binary spawn failed") {
+	if _, err := verifyUnmutatedOverlayBinaries(t.Context(), execErrEx, tmpDir, tmpDir, meta, []string{"example.com/p"}, gobuild.Build{}, opts, map[string]time.Duration{}); err == nil || !strings.Contains(err.Error(), "binary spawn failed") {
 		t.Errorf("expected unmutated run err propagation, got %v", err)
 	}
 }
@@ -1046,7 +1048,7 @@ func TestOverlayLowLevelHelpers(t *testing.T) {
 	sentinel := errors.New("stop inside funclit")
 	var visited []bool
 	calls := 0
-	err = inspectDeclNodes(pf.Decls[1], true, func(n ast.Node, always bool) error {
+	err = inspectOverlayNodes(pf.Decls[1], true, func(n ast.Node, always bool, _ token.Pos) error {
 		if n == nil {
 			t.Fatal("visit called with nil node")
 		}
@@ -1062,7 +1064,7 @@ func TestOverlayLowLevelHelpers(t *testing.T) {
 	}
 	// Sibling stop on package-level decl and n == nil guard:
 	visited = nil
-	err = inspectDeclNodes(pf.Decls[2], true, func(n ast.Node, always bool) error {
+	err = inspectOverlayNodes(pf.Decls[2], true, func(n ast.Node, always bool, _ token.Pos) error {
 		if n == nil {
 			t.Fatal("visit called with nil node")
 		}
@@ -1077,7 +1079,7 @@ func TestOverlayLowLevelHelpers(t *testing.T) {
 	}
 	// Package-level non-FuncLit completes normally with alwaysRun=true and n == nil skipped:
 	visited = nil
-	pfErr := inspectDeclNodes(pf.Decls[0], true, func(n ast.Node, always bool) error {
+	pfErr := inspectOverlayNodes(pf.Decls[0], true, func(n ast.Node, always bool, _ token.Pos) error {
 		if n == nil {
 			t.Fatal("visit called with nil node")
 		}
@@ -1189,4 +1191,641 @@ func TestOverlayLowLevelHelpers(t *testing.T) {
 	if ext := testBinExt(gobuild.Build{GOOS: ""}); (runtime.GOOS == "windows" && ext != ".exe") || (runtime.GOOS != "windows" && ext != ".test") {
 		t.Errorf("default GOOS ext = %q", ext)
 	}
+}
+
+// F1: same-package mutant execution must be serialized across workers while different packages run in parallel.
+func TestRunOverlaySerializesSamePkgAndRunsDifferentPkgsConcurrently(t *testing.T) {
+	t.Run("o_excl_shared_file_with_4_workers_has_zero_false_kills", func(t *testing.T) {
+		dir := gitSetupOverlayRepo(t, map[string]string{
+			"go.mod":  "module example.com/oexcl\n\ngo 1.26\n",
+			"calc.go": "package oexcl\n\nfunc F() int { return 0 }\n",
+			"c_test.go": `package oexcl
+
+import "testing"
+
+func TestBase(t *testing.T) {
+	if F() < 0 {
+		t.Fatal("bad")
+	}
+}
+`,
+		})
+		writeTreeFiles(t, dir, map[string]string{
+			"calc.go": `package oexcl
+
+func F(a, b int) int {
+	n := 0
+	if a < b {
+		n += 1
+	}
+	if a+1 < b+2 {
+		n += 1
+	}
+	return n
+}
+`,
+			"c_test.go": `package oexcl
+
+import (
+	"os"
+	"testing"
+)
+
+func TestOExclInPkgDir(t *testing.T) {
+	f, err := os.OpenFile("shared-oexcl.lock", os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	if err != nil {
+		t.Fatalf("O_EXCL collision: %v", err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove("shared-oexcl.lock"); err != nil {
+		t.Fatal(err)
+	}
+	// Assert-nothing after setup: without per-package serialization, 4 workers collide on O_EXCL and false-kill.
+	_ = F(1, 2)
+}
+`,
+		})
+		ev, err := runOverlayOnDir(t, dir, gobuild.Build{CGOEnabled: true}, OverlayOptions{Workers: 4})
+		if err != nil {
+			t.Fatalf("RunOverlay F1 O_EXCL: %v", err)
+		}
+		if ev.Mutants == 0 || ev.Killed != 0 || ev.SurvivedUnexplained != ev.Mutants {
+			t.Fatalf("expected all %d mutants to LIVE (0 O_EXCL false kills), got %+v", ev.Mutants, ev)
+		}
+	})
+
+	t.Run("different_packages_still_execute_concurrently", func(t *testing.T) {
+		dir := gitSetupOverlayRepo(t, map[string]string{
+			"go.mod":      "module example.com/multipkg\n\ngo 1.26\n",
+			"a/a.go":      "package a\n\nfunc A(x int) int { return x }\n",
+			"a/a_test.go": "package a\n\nimport \"testing\"\n\nfunc TestA(t *testing.T) { _ = A(1) }\n",
+			"b/b.go":      "package b\n\nfunc B(x int) int { return x }\n",
+			"b/b_test.go": "package b\n\nimport \"testing\"\n\nfunc TestB(t *testing.T) { _ = B(1) }\n",
+		})
+		writeTreeFiles(t, dir, map[string]string{
+			"a/a.go":      "package a\n\nfunc A(x int) int { return x + 1 + 2 }\n",
+			"a/a_test.go": "package a\n\nimport \"testing\"\n\nfunc TestA(t *testing.T) { if A(0) != 3 { t.Fatal(\"bad\") } }\n",
+			"b/b.go":      "package b\n\nfunc B(x int) int { return x + 1 + 2 }\n",
+			"b/b_test.go": "package b\n\nimport \"testing\"\n\nfunc TestB(t *testing.T) { if B(0) != 3 { t.Fatal(\"bad\") } }\n",
+		})
+		build := gobuild.Build{CGOEnabled: true}
+		diff, err := ComputeDiff(t.Context(), gate.OS{}, dir, "main", build)
+		if err != nil {
+			t.Fatalf("ComputeDiff: %v", err)
+		}
+		var (
+			mu         sync.Mutex
+			activeBy   = map[string]int{}
+			maxBy      = map[string]int{}
+			totalAct   int
+			maxTotal   int
+			sawBothPkg sync.WaitGroup
+			enteredA   atomic.Bool
+			enteredB   atomic.Bool
+		)
+		sawBothPkg.Add(2)
+		spy := scriptedCmdExec{fn: func(ctx context.Context, c gate.Cmd) (gate.Output, error) {
+			if len(c.Argv) > 0 && strings.HasPrefix(filepath.Base(c.Argv[0]), "mut-") {
+				pkgKey := filepath.Base(c.Dir)
+				firstOfPkg := false
+				if pkgKey == "a" && enteredA.CompareAndSwap(false, true) {
+					firstOfPkg = true
+				}
+				if pkgKey == "b" && enteredB.CompareAndSwap(false, true) {
+					firstOfPkg = true
+				}
+				mu.Lock()
+				activeBy[pkgKey]++
+				if activeBy[pkgKey] > maxBy[pkgKey] {
+					maxBy[pkgKey] = activeBy[pkgKey]
+				}
+				totalAct++
+				if totalAct > maxTotal {
+					maxTotal = totalAct
+				}
+				mu.Unlock()
+				if firstOfPkg {
+					sawBothPkg.Done()
+					doneCh := make(chan struct{})
+					go func() {
+						sawBothPkg.Wait()
+						close(doneCh)
+					}()
+					select {
+					case <-doneCh:
+					case <-ctx.Done():
+					}
+				}
+				res, runErr := (gate.OS{}).Run(ctx, c)
+				mu.Lock()
+				activeBy[pkgKey]--
+				totalAct--
+				mu.Unlock()
+				return res, runErr
+			}
+			return (gate.OS{}).Run(ctx, c)
+		}}
+		env := gate.Env{Dir: dir, Base: "main", Exec: spy, Config: gate.Config{Base: "main", Mutation: gate.MutationConfig{Engine: "overlay"}}}
+		ev, err := RunOverlay(t.Context(), env, diff, build, OverlayOptions{Workers: 4})
+		if err != nil {
+			t.Fatalf("RunOverlay multi-pkg concurrency: %v", err)
+		}
+		if ev.Mutants != 4 || ev.Killed != 4 {
+			t.Fatalf("expected 4 killed mutants, got %+v", ev)
+		}
+		if maxBy["a"] != 1 || maxBy["b"] != 1 {
+			t.Fatalf("expected max active per pkg == 1, got %v", maxBy)
+		}
+		if maxTotal < 2 {
+			t.Fatalf("expected concurrent execution across packages (maxTotal>=2), got %d", maxTotal)
+		}
+	})
+}
+
+// F2: child processes holding stdout must be killed promptly with process-group SIGKILL / WaitDelay.
+func TestRunOverlayChildProcessTimeoutDoesNotHang(t *testing.T) {
+	dir := gitSetupOverlayRepo(t, map[string]string{
+		"go.mod":  "module example.com/childto\n\ngo 1.26\n",
+		"calc.go": "package childto\n\nfunc IsZero(n int) bool { return n > 0 }\n",
+		"c_test.go": `package childto
+
+import "testing"
+
+func TestBase(t *testing.T) {
+	if !IsZero(0) {
+		t.Fatal("bad")
+	}
+}
+`,
+	})
+	writeTreeFiles(t, dir, map[string]string{
+		"calc.go": "package childto\n\nfunc IsZero(n int) bool { return n == 0 }\n",
+		"c_test.go": `package childto
+
+import (
+	"os"
+	"os/exec"
+	"testing"
+)
+
+func TestChildSleepOnMutant(t *testing.T) {
+	if !IsZero(0) {
+		cmd := exec.Command("sleep", "30")
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		_ = cmd.Run()
+		t.Fatal("mutated")
+	}
+}
+`,
+	})
+	start := time.Now()
+	ev, err := runOverlayOnDir(t, dir, gobuild.Build{CGOEnabled: true}, OverlayOptions{
+		TimeoutCoeff: 1,
+		MinTimeout:   800 * time.Millisecond,
+	})
+	elapsed := time.Since(start)
+	if err != nil {
+		t.Fatalf("RunOverlay child timeout: %v", err)
+	}
+	if ev.TimedOut != 1 || ev.Killed != 1 {
+		t.Fatalf("expected 1 TIMED OUT mutant, got %+v", ev)
+	}
+	if elapsed >= 10*time.Second {
+		t.Fatalf("expected fast process-group timeout well under sleep 30s, elapsed=%v", elapsed)
+	}
+}
+
+// F3: select comm clauses and type-switch case clauses inherit enclosing statement cover block (G1).
+func TestRunOverlaySelectAndTypeSwitchClauses(t *testing.T) {
+	t.Run("select_and_type_switch_reached_mutate_and_kill", func(t *testing.T) {
+		dir := gitSetupOverlayRepo(t, map[string]string{
+			"go.mod": "module example.com/selts\n\ngo 1.26\n",
+			"sel.go": "package selts\n\nfunc Recv(chs []chan int, i int) int { return 0 }\n",
+			"sel_test.go": `package selts
+
+import "testing"
+
+func TestBase(t *testing.T) { _ = Recv(nil, 0) }
+`,
+		})
+		writeTreeFiles(t, dir, map[string]string{
+			"sel.go": `package selts
+
+func Recv(chs []chan int, i int) int {
+	select {
+	case v := <-chs[i+1]:
+		return v
+	case chs[i+1] <- i + 10:
+		return 1
+	default:
+		return 0
+	}
+}
+
+func TypeWidth(v any) int {
+	switch v.(type) {
+	case [1 + 1]int:
+		return 2
+	default:
+		return 0
+	}
+}
+`,
+			"sel_test.go": `package selts
+
+import "testing"
+
+func TestSelectAndTypeSwitchStrong(t *testing.T) {
+	ch := make(chan int, 1)
+	ch <- 9
+	if got := Recv([]chan int{nil, ch}, 0); got != 9 {
+		t.Fatalf("recv got %d, want 9", got)
+	}
+	outCh := make(chan int, 1)
+	if got := Recv([]chan int{nil, outCh}, 0); got != 1 {
+		t.Fatalf("send got %d, want 1", got)
+	}
+	if got := <-outCh; got != 10 {
+		t.Fatalf("sent val got %d, want 10", got)
+	}
+	blocked := make(chan int)
+	if got := Recv([]chan int{nil, blocked}, 0); got != 0 {
+		t.Fatalf("default got %d, want 0", got)
+	}
+	var arr [2]int
+	if got := TypeWidth(arr); got != 2 {
+		t.Fatalf("TypeWidth([2]int) = %d, want 2", got)
+	}
+	if got := TypeWidth(42); got != 0 {
+		t.Fatalf("TypeWidth(int) = %d, want 0", got)
+	}
+}
+`,
+		})
+		ev, err := runOverlayOnDir(t, dir, gobuild.Build{CGOEnabled: true}, OverlayOptions{})
+		if err != nil {
+			t.Fatalf("RunOverlay select/typeswitch: %v", err)
+		}
+		// 4 '+' tokens (3 in select clauses, 1 in type-switch case clause): all 4 are reached and killed (0 NOT COVERED!).
+		if ev.Mutants != 4 || ev.Killed != 4 || ev.SurvivedUnexplained != 0 {
+			t.Fatalf("expected 4/4 KILLED (0 NOT COVERED), got %+v", ev)
+		}
+	})
+
+	t.Run("unreached_select_and_typeswitch_are_not_covered", func(t *testing.T) {
+		dir := gitSetupOverlayRepo(t, map[string]string{
+			"go.mod": "module example.com/seluncov\n\ngo 1.26\n",
+			"sel.go": "package seluncov\n\nfunc Dead(ch chan int, v any, take bool) int { return 0 }\n",
+			"sel_test.go": `package seluncov
+
+import "testing"
+
+func TestNeverTake(t *testing.T) { _ = Dead(nil, 1, false) }
+`,
+		})
+		writeTreeFiles(t, dir, map[string]string{
+			"sel.go": `package seluncov
+
+func Dead(ch chan int, v any, take bool) int {
+	if take {
+		select {
+		case x := <-[]chan int{ch}[0+0]:
+			return x
+		default:
+			return 1
+		}
+	}
+	if take {
+		switch v.(type) {
+		case [1 + 1]int:
+			return 2
+		}
+	}
+	return 0
+}
+`,
+		})
+		ev, err := runOverlayOnDir(t, dir, gobuild.Build{CGOEnabled: true}, OverlayOptions{})
+		if err != nil {
+			t.Fatalf("RunOverlay unreached select: %v", err)
+		}
+		if ev.Mutants != 2 || ev.SurvivedUnexplained != 2 {
+			t.Fatalf("expected 2 NOT COVERED survivors, got %+v", ev)
+		}
+		for _, s := range ev.Survivors {
+			if s.Status != "NOT COVERED" {
+				t.Errorf("expected NOT COVERED, got %+v", s)
+			}
+		}
+	})
+}
+
+// F4: code after a FuncLit in the same statement falls in no cover block and must inherit stmt.Pos().
+func TestRunOverlayPostFuncLitSameStatement(t *testing.T) {
+	t.Run("reached_post_funclit_runs_while_uninvoked_funclit_body_stays_not_covered", func(t *testing.T) {
+		dir := gitSetupOverlayRepo(t, map[string]string{
+			"go.mod": "module example.com/postfl\n\ngo 1.26\n",
+			"fl.go":  "package postfl\n\nfunc Check(apply func(func(int) int) int, a, b int) int { return 0 }\n",
+			"fl_test.go": `package postfl
+
+import "testing"
+
+func TestBase(t *testing.T) { _ = Check(func(func(int) int) int { return 1 }, 1, 2) }
+`,
+		})
+		writeTreeFiles(t, dir, map[string]string{
+			"fl.go": `package postfl
+
+func Check(apply func(func(int) int) int, a, b int) int {
+	if apply(func(x int) int { return x + 1 }) > 0 && b > a {
+		return 1
+	}
+	return 0
+}
+`,
+			// Test calls Check with an apply that does NOT invoke the FuncLit (so `x + 1` inside FuncLit is NOT COVERED),
+			// while the reached `if ... && b > a` post-FuncLit expressions DO run and are KILLED!
+			"fl_test.go": `package postfl
+
+import "testing"
+
+func TestReachedPostFuncLitStrong(t *testing.T) {
+	noCall := func(func(int) int) int { return 1 }
+	if Check(noCall, 1, 2) != 1 {
+		t.Fatal("1 < 2 should return 1")
+	}
+	if Check(noCall, 2, 2) != 0 {
+		t.Fatal("2 == 2 should return 0")
+	}
+	if Check(noCall, 3, 2) != 0 {
+		t.Fatal("3 > 2 should return 0")
+	}
+	zeroCall := func(func(int) int) int { return 0 }
+	if Check(zeroCall, 1, 2) != 0 {
+		t.Fatal("apply == 0 should return 0")
+	}
+	if Check(func(func(int) int) int { return -1 }, 1, 2) != 0 {
+		t.Fatal("apply < 0 should return 0")
+	}
+}
+`,
+		})
+		ev, err := runOverlayOnDir(t, dir, gobuild.Build{CGOEnabled: true}, OverlayOptions{})
+		if err != nil {
+			t.Fatalf("RunOverlay reached post-FuncLit: %v", err)
+		}
+		// Inside FuncLit (`x + 1` line 4): NOT COVERED (1 survivor).
+		// Post-FuncLit (`> 0` has 2 muts, `&&` has 1 mut, `> a` has 2 muts = 5 muts): all 5 run and are KILLED!
+		if ev.Mutants != 6 || ev.Killed != 5 || ev.SurvivedUnexplained != 1 {
+			t.Fatalf("expected 5 KILLED + 1 NOT COVERED (inside uninvoked FuncLit), got %+v", ev)
+		}
+		if ev.Survivors[0].Status != "NOT COVERED" || ev.Survivors[0].Line != 4 {
+			t.Fatalf("expected survivor to be NOT COVERED inside FuncLit, got %+v", ev.Survivors[0])
+		}
+	})
+
+	t.Run("unreached_post_funclit_reports_not_covered", func(t *testing.T) {
+		dir := gitSetupOverlayRepo(t, map[string]string{
+			"go.mod": "module example.com/postfluncov\n\ngo 1.26\n",
+			"fl.go":  "package postfluncov\n\nfunc Check(apply func(func(int) int) int, a, b int, take bool) int { return 0 }\n",
+			"fl_test.go": `package postfluncov
+
+import "testing"
+
+func TestBase(t *testing.T) { _ = Check(nil, 1, 2, false) }
+`,
+		})
+		writeTreeFiles(t, dir, map[string]string{
+			"fl.go": `package postfluncov
+
+func Check(apply func(func(int) int) int, a, b int, take bool) int {
+	if take {
+		if apply(func(x int) int { return x + 1 }) > 0 && b > a {
+			return 1
+		}
+	}
+	return 0
+}
+`,
+		})
+		ev, err := runOverlayOnDir(t, dir, gobuild.Build{CGOEnabled: true}, OverlayOptions{})
+		if err != nil {
+			t.Fatalf("RunOverlay unreached post-FuncLit: %v", err)
+		}
+		if ev.Mutants != 6 || ev.SurvivedUnexplained != 6 {
+			t.Fatalf("expected all 6 mutants NOT COVERED, got %+v", ev)
+		}
+		for _, s := range ev.Survivors {
+			if s.Status != "NOT COVERED" {
+				t.Errorf("expected NOT COVERED, got %+v", s)
+			}
+		}
+	})
+
+	t.Run("isMutantCovered_explicit_zero_block_not_overridden_by_stmtPos", func(t *testing.T) {
+		src := "package p\nfunc f() int {\n\tif true {\n\t\treturn 1 + 2\n\t}\n\treturn 0\n}\n"
+		fset := token.NewFileSet()
+		pf, err := parser.ParseFile(fset, "p.go", src, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		fn, ok1 := pf.Decls[0].(*ast.FuncDecl)
+		if !ok1 {
+			t.Fatal("expected FuncDecl")
+		}
+		ifStmt, ok2 := fn.Body.List[0].(*ast.IfStmt)
+		if !ok2 {
+			t.Fatal("expected IfStmt")
+		}
+		retStmt, ok3 := ifStmt.Body.List[0].(*ast.ReturnStmt)
+		if !ok3 {
+			t.Fatal("expected ReturnStmt")
+		}
+		addExpr, ok4 := retStmt.Results[0].(*ast.BinaryExpr)
+		if !ok4 {
+			t.Fatal("expected BinaryExpr")
+		}
+		addPos := fset.PositionFor(addExpr.OpPos, false)
+		// outer `if` block at line 3 is covered (Count=1), inner `return 1 + 2` block at line 4 has Count=0:
+		// explicit Count=0 block must win over stmtPos fallback, and NoPos outside any block must be false.
+		blocks := []cover.Block{
+			{File: "p.go", StartLine: 2, StartCol: 14, EndLine: 3, EndCol: 10, Count: 1},
+			{File: "p.go", StartLine: 4, StartCol: 3, EndLine: 4, EndCol: 16, Count: 0},
+		}
+		if isMutantCovered(fset, blocks, nil, ifStmt.Pos(), addPos.Line, addPos.Column, 0) {
+			t.Fatal("expected explicit Count=0 block to stay NOT COVERED")
+		}
+		if isMutantCovered(fset, blocks, nil, token.NoPos, 50, 1, 0) {
+			t.Fatal("expected invalid stmtPos outside blocks to return false")
+		}
+	})
+}
+
+// Ruling (A): per-mutant timeout starts AFTER acquiring the per-package lock, not while waiting in queue.
+func TestRunOverlayTimeoutStartsAfterPerPkgLock(t *testing.T) {
+	dir := gitSetupOverlayRepo(t, map[string]string{
+		"go.mod":    "module example.com/queueto\n\ngo 1.26\n",
+		"calc.go":   "package queueto\n\nfunc Triple(a, b, c int) int { return 0 }\n",
+		"c_test.go": "package queueto\n\nimport \"testing\"\n\nfunc TestBase(t *testing.T) { _ = Triple(1, 2, 3) }\n",
+	})
+	writeTreeFiles(t, dir, map[string]string{
+		"calc.go": "package queueto\n\nfunc Triple(a, b, c int) int { return a + b + c }\n",
+	})
+	build := gobuild.Build{CGOEnabled: true}
+	diff, err := ComputeDiff(t.Context(), gate.OS{}, dir, "main", build)
+	if err != nil {
+		t.Fatalf("ComputeDiff: %v", err)
+	}
+	const minTO = 1200 * time.Millisecond
+	var (
+		mu       sync.Mutex
+		covDur   time.Duration
+		minRem   time.Duration
+		mutCalls int
+	)
+	spy := scriptedCmdExec{fn: func(ctx context.Context, c gate.Cmd) (gate.Output, error) {
+		for _, a := range c.Argv {
+			if strings.HasPrefix(a, "-coverprofile=") {
+				t0 := time.Now()
+				out, rerr := (gate.OS{}).Run(ctx, c)
+				mu.Lock()
+				covDur = time.Since(t0)
+				mu.Unlock()
+				return out, rerr
+			}
+		}
+		if len(c.Argv) > 0 && strings.HasPrefix(filepath.Base(c.Argv[0]), "mut-") {
+			dl, ok := ctx.Deadline()
+			if !ok {
+				return gate.Output{ExitCode: 1}, nil
+			}
+			rem := time.Until(dl)
+			mu.Lock()
+			mutCalls++
+			if minRem == 0 || rem < minRem {
+				minRem = rem
+			}
+			hold := max(covDur, minTO) * 2 / 3
+			mu.Unlock()
+			select {
+			case <-time.After(hold):
+				return gate.Output{ExitCode: 0}, nil
+			case <-ctx.Done():
+				return gate.Output{ExitCode: -1}, ctx.Err()
+			}
+		}
+		return (gate.OS{}).Run(ctx, c)
+	}}
+	env := gate.Env{Dir: dir, Base: "main", Exec: spy, Config: gate.Config{Base: "main", Mutation: gate.MutationConfig{Engine: "overlay"}}}
+	ev, err := RunOverlay(t.Context(), env, diff, build, OverlayOptions{
+		Workers:      3,
+		TimeoutCoeff: 1,
+		MinTimeout:   minTO,
+	})
+	if err != nil {
+		t.Fatalf("RunOverlay queued timeout: %v", err)
+	}
+	if mutCalls != 2 || ev.TimedOut != 0 || ev.Mutants != 2 || ev.SurvivedUnexplained != 2 {
+		t.Fatalf("expected 2 LIVED with 0 TIMED OUT (calls=%d), got %+v", mutCalls, ev)
+	}
+	if minRem < minTO-100*time.Millisecond {
+		t.Fatalf("expected full post-lock timeout budget (>= %v), got min remaining %v", minTO-100*time.Millisecond, minRem)
+	}
+}
+
+// F8: timed-out mutant leaving a file in pkgDir must fail postflight instead of turning later mutants into false kills.
+func TestRunOverlayF8Postflight(t *testing.T) {
+	t.Run("timeout_leftover_o_excl_fails_postflight", func(t *testing.T) {
+		dir := gitSetupOverlayRepo(t, map[string]string{
+			"go.mod":  "module example.com/f8post\n\ngo 1.26\n",
+			"calc.go": "package f8post\n\nfunc IsZero(n int) bool { return n > 0 }\n",
+			"c_test.go": `package f8post
+
+import "testing"
+
+func TestBase(t *testing.T) {
+	if !IsZero(0) {
+		t.Fatal("bad")
+	}
+}
+`,
+		})
+		writeTreeFiles(t, dir, map[string]string{
+			"calc.go": "package f8post\n\nfunc IsZero(n int) bool { return n == 0 }\n\nfunc Alive(n int) bool { return n == 1 }\n",
+			"c_test.go": `package f8post
+
+import (
+	"os"
+	"os/exec"
+	"testing"
+)
+
+func TestPostflightPollutedPkgDir(t *testing.T) {
+	f, err := os.OpenFile("leaked.lock", os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	if err != nil {
+		t.Fatalf("O_EXCL leaked artifact present: %v", err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if !IsZero(0) {
+		// Timed-out mutant leaves leaked.lock behind via SIGKILL before cleanup!
+		_ = exec.Command("sleep", "30").Run()
+	}
+	if err := os.Remove("leaked.lock"); err != nil {
+		t.Fatal(err)
+	}
+	_ = Alive(1)
+}
+`,
+		})
+		_, err := runOverlayOnDir(t, dir, gobuild.Build{CGOEnabled: true}, OverlayOptions{
+			Workers:      2,
+			TimeoutCoeff: 1,
+			MinTimeout:   800 * time.Millisecond,
+		})
+		if err == nil || !strings.Contains(err.Error(), "postflight") {
+			t.Fatalf("expected postflight failure from leftover O_EXCL lock, got %v", err)
+		}
+	})
+
+	t.Run("skipped_when_no_mutant_binary_executed", func(t *testing.T) {
+		dir := gitSetupOverlayRepo(t, map[string]string{
+			"go.mod":    "module example.com/f8skip\n\ngo 1.26\n",
+			"calc.go":   "package f8skip\n\nfunc Dead(take bool) int { return 0 }\n",
+			"c_test.go": "package f8skip\n\nimport \"testing\"\n\nfunc TestDead(t *testing.T) { _ = Dead(false) }\n",
+		})
+		writeTreeFiles(t, dir, map[string]string{
+			"calc.go": "package f8skip\n\nfunc Dead(take bool) int {\n\tif take {\n\t\treturn 1 + 2\n\t}\n\treturn 0\n}\n",
+		})
+		var baseRuns int
+		var mu sync.Mutex
+		spy := scriptedCmdExec{fn: func(ctx context.Context, c gate.Cmd) (gate.Output, error) {
+			if len(c.Argv) > 0 && strings.HasPrefix(filepath.Base(c.Argv[0]), "base-") {
+				mu.Lock()
+				baseRuns++
+				mu.Unlock()
+			}
+			return (gate.OS{}).Run(ctx, c)
+		}}
+		build := gobuild.Build{CGOEnabled: true}
+		diff, err := ComputeDiff(t.Context(), gate.OS{}, dir, "main", build)
+		if err != nil {
+			t.Fatal(err)
+		}
+		env := gate.Env{Dir: dir, Base: "main", Exec: spy, Config: gate.Config{Base: "main", Mutation: gate.MutationConfig{Engine: "overlay"}}}
+		ev, err := RunOverlay(t.Context(), env, diff, build, OverlayOptions{})
+		if err != nil {
+			t.Fatalf("RunOverlay unreached: %v", err)
+		}
+		if ev.Mutants != 1 || ev.SurvivedUnexplained != 1 {
+			t.Fatalf("expected 1 NOT COVERED, got %+v", ev)
+		}
+		if baseRuns != 1 {
+			t.Fatalf("expected 1 unmutated run (preflight only, no postflight when 0 mutant binaries ran), got %d", baseRuns)
+		}
+	})
 }

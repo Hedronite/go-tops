@@ -121,7 +121,8 @@ func executeOverlayRun(ctx context.Context, ex gate.Executor, dir, tmpDir string
 	if err != nil {
 		return Evaluation{}, err
 	}
-	if err := verifyUnmutatedOverlayBinaries(ctx, ex, dir, tmpDir, meta, pkgs, build, opts, pkgDurs); err != nil {
+	baseBins, err := verifyUnmutatedOverlayBinaries(ctx, ex, dir, tmpDir, meta, pkgs, build, opts, pkgDurs)
+	if err != nil {
 		return Evaluation{}, err
 	}
 	plan, err := buildOverlayJobs(dir, tmpDir, meta, diff.InBuildFiles, blocks)
@@ -133,9 +134,12 @@ func executeOverlayRun(ctx context.Context, ex gate.Executor, dir, tmpDir string
 			return Evaluation{}, err
 		}
 	}
-	statuses, runErr := runOverlayWorkers(ctx, ex, dir, meta.gorootBin, build, opts, pkgDurs, plan.jobs)
+	statuses, ranPkgs, runErr := runOverlayWorkers(ctx, ex, dir, meta.gorootBin, build, opts, pkgDurs, plan.jobs)
 	if runErr != nil {
 		return Evaluation{}, runErr
+	}
+	if err := verifyPostflightOverlayBinaries(ctx, ex, meta, pkgs, baseBins, ranPkgs, build, opts, pkgDurs); err != nil {
+		return Evaluation{}, err
 	}
 	for i, job := range plan.jobs {
 		if err := recordMutant(&ev, job.rel, toMutation(job, statuses[i]), job.src, ec.idx, ec.exRes, ec.ledger); err != nil {
@@ -146,8 +150,8 @@ func executeOverlayRun(ctx context.Context, ex gate.Executor, dir, tmpDir string
 	return ev, nil
 }
 
-func toMutation(j overlayJob, status string) GremlinsMutation {
-	return GremlinsMutation{Type: j.mutator, Status: status, Line: j.line, Column: j.col}
+func toMutation(j overlayJob, status string) MutantOutcome {
+	return MutantOutcome{Type: j.mutator, Status: status, Line: j.line, Column: j.col}
 }
 
 func scaledTimeout(baseline time.Duration, coeff int, floor time.Duration) time.Duration {
@@ -278,20 +282,20 @@ func mergeCoverFile(path, modPath string, byFile map[string][]cover.Block) error
 
 // verifyUnmutatedOverlayBinaries builds and executes the unmutated compiled test binary
 // with GOROOT/bin first on PATH and -test.paniconexit0 before judging any mutant (V2).
-func verifyUnmutatedOverlayBinaries(ctx context.Context, ex gate.Executor, dir, tmpDir string, meta overlayPkgMeta, pkgs []string, build gobuild.Build, opts OverlayOptions, pkgDurs map[string]time.Duration) error {
+func verifyUnmutatedOverlayBinaries(ctx context.Context, ex gate.Executor, dir, tmpDir string, meta overlayPkgMeta, pkgs []string, build gobuild.Build, opts OverlayOptions, pkgDurs map[string]time.Duration) (map[string]string, error) {
+	bins := make(map[string]string, len(pkgs))
 	for i, pkg := range pkgs {
 		binPath := filepath.Join(tmpDir, fmt.Sprintf("base-%d%s", i, testBinExt(build)))
-		if err := verifyOneUnmutatedBinary(ctx, ex, dir, meta, pkg, binPath, build, opts, pkgDurs[pkg]); err != nil {
-			return err
+		kept, err := verifyOneUnmutatedBinary(ctx, ex, dir, meta, pkg, binPath, build, opts, pkgDurs[pkg])
+		if err != nil {
+			return nil, err
 		}
+		bins[pkg] = kept
 	}
-	return nil
+	return bins, nil
 }
 
-func verifyOneUnmutatedBinary(ctx context.Context, ex gate.Executor, dir string, meta overlayPkgMeta, pkg, binPath string, build gobuild.Build, opts OverlayOptions, pkgDur time.Duration) error {
-	defer func() {
-		_ = os.Remove(binPath) //nolint:errcheck // best-effort cleanup inside MkdirTemp
-	}()
+func verifyOneUnmutatedBinary(ctx context.Context, ex gate.Executor, dir string, meta overlayPkgMeta, pkg, binPath string, build gobuild.Build, opts OverlayOptions, pkgDur time.Duration) (string, error) {
 	compTO := scaledTimeout(pkgDur, opts.TimeoutCoeff, opts.MinCompileTimeout)
 	cctx, cancelCompile := context.WithTimeout(ctx, compTO)
 	defer cancelCompile()
@@ -301,18 +305,40 @@ func verifyOneUnmutatedBinary(ctx context.Context, ex gate.Executor, dir string,
 		Env:  build.Env(),
 	})
 	if err := checkCompileOutcome(ctx, cctx, "unmutated baseline "+pkg, compRes, err); err != nil {
-		return err
+		return "", err
 	}
 	if _, statErr := os.Stat(binPath); errors.Is(statErr, os.ErrNotExist) {
-		return nil // package has no test files
+		return "", nil // package has no test files
 	}
+	if err := runUnmutatedBinary(ctx, ex, meta, pkg, binPath, build, opts, pkgDur, "preflight"); err != nil {
+		return "", err
+	}
+	return binPath, nil
+}
+
+// verifyPostflightOverlayBinaries re-runs the unmutated binary after mutant execution for any
+// package that ran >=1 mutant binary so leftover test/artifact state fails the layer (F8).
+func verifyPostflightOverlayBinaries(ctx context.Context, ex gate.Executor, meta overlayPkgMeta, pkgs []string, baseBins map[string]string, ranPkgs map[string]bool, build gobuild.Build, opts OverlayOptions, pkgDurs map[string]time.Duration) error {
+	for _, pkg := range pkgs {
+		if !ranPkgs[pkg] || baseBins[pkg] == "" {
+			continue
+		}
+		if err := runUnmutatedBinary(ctx, ex, meta, pkg, baseBins[pkg], build, opts, pkgDurs[pkg], "postflight"); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func runUnmutatedBinary(ctx context.Context, ex gate.Executor, meta overlayPkgMeta, pkg, binPath string, build gobuild.Build, opts OverlayOptions, pkgDur time.Duration, stage string) error {
 	execTO := scaledTimeout(pkgDur, opts.TimeoutCoeff, opts.MinTimeout)
-	status, err := runCompiledTestBinary(ctx, ex, meta.pkgDirs[pkg], binPath, meta.gorootBin, build, execTO, "unmutated baseline "+pkg)
+	label := stage + " unmutated baseline " + pkg
+	status, err := runCompiledTestBinary(ctx, ex, meta.pkgDirs[pkg], binPath, meta.gorootBin, build, execTO, label)
 	if err != nil {
 		return err
 	}
 	if status != "LIVED" {
-		return fmt.Errorf("unmutated compiled test binary failed for %s (%s)", pkg, status)
+		return fmt.Errorf("%s unmutated compiled test binary failed for %s (%s)", stage, pkg, status)
 	}
 	return nil
 }
@@ -384,42 +410,74 @@ func replaceTargets(pkgDir, fullPath, base string) []string {
 	return targets
 }
 
-// collectSwitchCaseSpans maps case-expression spans in both tagged and tagless switch
-// statements to the cover block holding the enclosing switch keyword (E25 / ruling G1).
+// collectSwitchCaseSpans maps switch, type-switch, and select clause-expression spans
+// to the cover block holding the enclosing statement keyword (E25 / ruling G1 / F3).
 func collectSwitchCaseSpans(fset *token.FileSet, pf *ast.File, blocks []cover.Block) []switchCaseSpan {
 	tf := fset.File(pf.Pos())
 	var spans []switchCaseSpan
 	ast.Inspect(pf, func(n ast.Node) bool {
-		sw, ok := n.(*ast.SwitchStmt)
-		if !ok || sw.Body == nil {
+		pos, body := clauseHeaderTarget(n)
+		if body == nil {
 			return true
 		}
-		covered := isSwitchStmtCovered(fset, blocks, sw)
-		for _, stmt := range sw.Body.List {
-			cc, ok := stmt.(*ast.CaseClause)
-			if !ok || len(cc.List) == 0 {
-				continue
+		covered := isPosCovered(fset, blocks, pos)
+		for _, stmt := range body.List {
+			if first, last, hasExpr := clauseExprRange(stmt); hasExpr {
+				spans = append(spans, switchCaseSpan{
+					startOff: tf.Offset(first),
+					endOff:   tf.Offset(last),
+					covered:  covered,
+				})
 			}
-			first, last := cc.List[0].Pos(), cc.List[len(cc.List)-1].End()
-			spans = append(spans, switchCaseSpan{
-				startOff: tf.Offset(first),
-				endOff:   tf.Offset(last),
-				covered:  covered,
-			})
 		}
 		return true
 	})
 	return spans
 }
 
-func isSwitchStmtCovered(fset *token.FileSet, blocks []cover.Block, sw *ast.SwitchStmt) bool {
-	swPos := fset.PositionFor(sw.Switch, false)
+func clauseHeaderTarget(n ast.Node) (token.Pos, *ast.BlockStmt) {
+	switch s := n.(type) {
+	case *ast.SwitchStmt:
+		return s.Switch, s.Body
+	case *ast.TypeSwitchStmt:
+		return s.Switch, s.Body
+	case *ast.SelectStmt:
+		return s.Select, s.Body
+	default:
+		return token.NoPos, nil
+	}
+}
+
+func clauseExprRange(stmt ast.Stmt) (token.Pos, token.Pos, bool) {
+	switch c := stmt.(type) {
+	case *ast.CaseClause:
+		if len(c.List) == 0 {
+			return token.NoPos, token.NoPos, false
+		}
+		return c.List[0].Pos(), c.List[len(c.List)-1].End(), true
+	case *ast.CommClause:
+		if c.Comm == nil {
+			return token.NoPos, token.NoPos, false
+		}
+		return c.Comm.Pos(), c.Comm.End(), true
+	default:
+		return token.NoPos, token.NoPos, false
+	}
+}
+
+func isPosCovered(fset *token.FileSet, blocks []cover.Block, p token.Pos) bool {
+	pos := fset.PositionFor(p, false)
 	for _, b := range blocks {
-		if b.Count > 0 && blockContainsPos(b, swPos.Line, swPos.Column) {
+		if b.Count > 0 && blockContainsPos(b, pos.Line, pos.Column) {
 			return true
 		}
 	}
 	return false
+}
+
+type overlayWalkFrame struct {
+	alwaysRun bool
+	stmtPos   token.Pos
 }
 
 func collectFileOverlayJobs(tmpDir, rel, pkgImp, pkgDir string, targetPaths []string, src []byte, fset *token.FileSet, pf *ast.File, lines map[int]bool, blocks []cover.Block, spans []switchCaseSpan, seq int) (fileMutantPlan, error) {
@@ -427,8 +485,8 @@ func collectFileOverlayJobs(tmpDir, rel, pkgImp, pkgDir string, targetPaths []st
 	plan := fileMutantPlan{nextSeq: seq}
 	for _, decl := range pf.Decls {
 		inPkgDecl := isPkgLevelNonFuncDecl(decl)
-		err := inspectDeclNodes(decl, inPkgDecl, func(n ast.Node, alwaysRun bool) error {
-			return visitMutantNode(&plan, tmpDir, rel, pkgImp, pkgDir, targetPaths, src, tf, fset, lines, blocks, spans, n, alwaysRun)
+		err := inspectOverlayNodes(decl, inPkgDecl, func(n ast.Node, alwaysRun bool, stmtPos token.Pos) error {
+			return visitMutantNode(&plan, tmpDir, rel, pkgImp, pkgDir, targetPaths, src, tf, fset, lines, blocks, spans, n, alwaysRun, stmtPos)
 		})
 		if err != nil {
 			return fileMutantPlan{}, err
@@ -445,30 +503,50 @@ func isPkgLevelNonFuncDecl(decl ast.Decl) bool {
 	return gd.Tok == token.CONST || gd.Tok == token.VAR || gd.Tok == token.TYPE
 }
 
-// inspectDeclNodes walks decl passing alwaysRun=true for package-level var/const/type expressions
-// (which Go cover does not instrument, ruling G2) and resetting alwaysRun=false inside FuncLit bodies.
-func inspectDeclNodes(root ast.Node, alwaysRun bool, visit func(ast.Node, bool) error) error {
+func isContainerStmt(st ast.Stmt) bool {
+	switch st.(type) {
+	case *ast.BlockStmt, *ast.CaseClause, *ast.CommClause:
+		return true
+	default:
+		return false
+	}
+}
+
+// inspectOverlayNodes tracks package-level G2 scope and enclosing executable statement starts (F4),
+// resetting both inside *ast.FuncLit bodies.
+func inspectOverlayNodes(root ast.Node, alwaysRun bool, visit func(ast.Node, bool, token.Pos) error) error {
 	var visitErr error
+	stack := []overlayWalkFrame{{alwaysRun: alwaysRun, stmtPos: token.NoPos}}
 	ast.Inspect(root, func(n ast.Node) bool {
-		if visitErr != nil || n == nil {
+		if visitErr != nil {
 			return false
 		}
-		if fl, ok := n.(*ast.FuncLit); ok && alwaysRun {
-			if err := inspectDeclNodes(fl.Body, false, visit); err != nil {
-				visitErr = err
-			}
+		if n == nil {
+			stack = stack[:len(stack)-1]
 			return false
 		}
-		if err := visit(n, alwaysRun); err != nil {
+		next := nextWalkFrame(stack[len(stack)-1], n)
+		if err := visit(n, next.alwaysRun, next.stmtPos); err != nil {
 			visitErr = err
 			return false
 		}
+		stack = append(stack, next)
 		return true
 	})
 	return visitErr
 }
 
-func visitMutantNode(plan *fileMutantPlan, tmpDir, rel, pkgImp, pkgDir string, targetPaths []string, src []byte, tf *token.File, fset *token.FileSet, lines map[int]bool, blocks []cover.Block, spans []switchCaseSpan, n ast.Node, alwaysRun bool) error {
+func nextWalkFrame(cur overlayWalkFrame, n ast.Node) overlayWalkFrame {
+	if _, ok := n.(*ast.FuncLit); ok {
+		return overlayWalkFrame{alwaysRun: false, stmtPos: token.NoPos}
+	}
+	if st, ok := n.(ast.Stmt); ok && !isContainerStmt(st) {
+		cur.stmtPos = st.Pos()
+	}
+	return cur
+}
+
+func visitMutantNode(plan *fileMutantPlan, tmpDir, rel, pkgImp, pkgDir string, targetPaths []string, src []byte, tf *token.File, fset *token.FileSet, lines map[int]bool, blocks []cover.Block, spans []switchCaseSpan, n ast.Node, alwaysRun bool, stmtPos token.Pos) error {
 	muts, tok, tokPos, ok := overlayMutatorsForNode(n)
 	if !ok {
 		return nil
@@ -478,7 +556,7 @@ func visitMutantNode(plan *fileMutantPlan, tmpDir, rel, pkgImp, pkgDir string, t
 		return nil
 	}
 	off := tf.Offset(tokPos)
-	cov := alwaysRun || isMutantCovered(blocks, spans, pos.Line, pos.Column, off)
+	cov := alwaysRun || isMutantCovered(fset, blocks, spans, stmtPos, pos.Line, pos.Column, off)
 	return appendNodeJobs(plan, tmpDir, rel, pkgImp, pkgDir, targetPaths, src, muts, tok, off, pos, cov)
 }
 
@@ -565,16 +643,31 @@ func spliceTokenBytes(src []byte, off int, orig, rep token.Token) ([]byte, error
 	return slices.Concat(src[:off], []byte(repStr), src[off+len(origStr):]), nil
 }
 
-func isMutantCovered(blocks []cover.Block, spans []switchCaseSpan, line, col, off int) bool {
+func isMutantCovered(fset *token.FileSet, blocks []cover.Block, spans []switchCaseSpan, stmtPos token.Pos, line, col, off int) bool {
 	if cov, matched := innermostSwitchCaseCovered(spans, off); matched {
 		return cov
 	}
-	for _, b := range blocks {
-		if b.Count > 0 && blockContainsPos(b, line, col) {
-			return true
-		}
+	if cov, inBlock := coverBlockCovered(blocks, line, col); inBlock {
+		return cov
+	}
+	if stmtPos.IsValid() {
+		return isPosCovered(fset, blocks, stmtPos)
 	}
 	return false
+}
+
+func coverBlockCovered(blocks []cover.Block, line, col int) (bool, bool) {
+	found := false
+	for _, b := range blocks {
+		if !blockContainsPos(b, line, col) {
+			continue
+		}
+		if b.Count > 0 {
+			return true, true
+		}
+		found = true
+	}
+	return false, found
 }
 
 func innermostSwitchCaseCovered(spans []switchCaseSpan, off int) (bool, bool) {
@@ -599,11 +692,14 @@ func blockContainsPos(b cover.Block, line, col int) bool {
 	return afterStart && beforeEnd
 }
 
-func runOverlayWorkers(ctx context.Context, ex gate.Executor, dir, gorootBin string, build gobuild.Build, opts OverlayOptions, pkgDurs map[string]time.Duration, jobs []overlayJob) ([]string, error) {
+func runOverlayWorkers(ctx context.Context, ex gate.Executor, dir, gorootBin string, build gobuild.Build, opts OverlayOptions, pkgDurs map[string]time.Duration, jobs []overlayJob) ([]string, map[string]bool, error) {
 	statuses := make([]string, len(jobs))
+	ranPkgs := map[string]bool{}
 	if len(jobs) == 0 {
-		return statuses, nil
+		return statuses, ranPkgs, nil
 	}
+	ranBins := make([]bool, len(jobs))
+	pkgLocks := makePkgMutexes(jobs)
 	ch := make(chan int, len(jobs))
 	for i := range jobs {
 		ch <- i
@@ -621,7 +717,7 @@ func runOverlayWorkers(ctx context.Context, ex gate.Executor, dir, gorootBin str
 				pkgDur := pkgDurs[job.pkgImport]
 				compTO := scaledTimeout(pkgDur, opts.TimeoutCoeff, opts.MinCompileTimeout)
 				execTO := scaledTimeout(pkgDur, opts.TimeoutCoeff, opts.MinTimeout)
-				status, err := executeOneOverlayMutant(ctx, ex, dir, gorootBin, build, compTO, execTO, idx, job)
+				status, ran, err := executeOneOverlayMutant(ctx, ex, dir, gorootBin, build, compTO, execTO, idx, job, pkgLocks[job.pkgImport])
 				if err != nil {
 					mu.Lock()
 					if firstErr == nil {
@@ -631,17 +727,33 @@ func runOverlayWorkers(ctx context.Context, ex gate.Executor, dir, gorootBin str
 					return
 				}
 				statuses[idx] = status
+				ranBins[idx] = ran
 			}
 		}()
 	}
 	wg.Wait()
 	if firstErr != nil {
-		return nil, firstErr
+		return nil, nil, firstErr
 	}
-	return statuses, nil
+	for i, ran := range ranBins {
+		if ran {
+			ranPkgs[jobs[i].pkgImport] = true
+		}
+	}
+	return statuses, ranPkgs, nil
 }
 
-func executeOneOverlayMutant(ctx context.Context, ex gate.Executor, dir, gorootBin string, build gobuild.Build, compTO, execTO time.Duration, seq int, job overlayJob) (string, error) {
+func makePkgMutexes(jobs []overlayJob) map[string]*sync.Mutex {
+	locks := make(map[string]*sync.Mutex)
+	for _, job := range jobs {
+		if _, ok := locks[job.pkgImport]; !ok {
+			locks[job.pkgImport] = &sync.Mutex{}
+		}
+	}
+	return locks
+}
+
+func executeOneOverlayMutant(ctx context.Context, ex gate.Executor, dir, gorootBin string, build gobuild.Build, compTO, execTO time.Duration, seq int, job overlayJob, pkgMu *sync.Mutex) (string, bool, error) {
 	cctx, cancelCompile := context.WithTimeout(ctx, compTO)
 	defer cancelCompile()
 	binPath := filepath.Join(filepath.Dir(job.overlayPath), fmt.Sprintf("mut-%d%s", seq, testBinExt(build)))
@@ -653,26 +765,43 @@ func executeOneOverlayMutant(ctx context.Context, ex gate.Executor, dir, gorootB
 		Argv: []string{"go", "test", "-vet=off", "-overlay=" + job.overlayPath, "-c=true", "-o", binPath, job.pkgImport},
 		Env:  build.Env(),
 	})
-	if ctx.Err() != nil {
-		return "", ctx.Err()
-	}
-	if errors.Is(cctx.Err(), context.DeadlineExceeded) {
-		return "", fmt.Errorf("compile mutant %s:%d timed out after %s", job.rel, job.line, compTO)
-	}
-	if err != nil {
-		return "", fmt.Errorf("compile mutant %s:%d: %w", job.rel, job.line, err)
+	if err := checkMutantCompileOutcome(ctx, cctx, job, compTO, compileRes, err); err != nil {
+		return "", false, err
 	}
 	if compileRes.ExitCode != 0 {
-		return "NOT VIABLE", nil
+		return "NOT VIABLE", false, nil
 	}
 	if _, statErr := os.Stat(binPath); errors.Is(statErr, os.ErrNotExist) {
-		return "NOT COVERED", nil
+		return "NOT COVERED", false, nil
 	}
 	runDir := job.pkgDir
 	if runDir == "" {
 		runDir = filepath.Dir(job.overlayPath)
 	}
-	return runCompiledTestBinary(ctx, ex, runDir, binPath, gorootBin, build, execTO, fmt.Sprintf("mutant %s:%d", job.rel, job.line))
+	status, err := runLockedCompiledBinary(ctx, pkgMu, ex, runDir, binPath, gorootBin, build, execTO, fmt.Sprintf("mutant %s:%d", job.rel, job.line))
+	if err != nil {
+		return "", true, err
+	}
+	return status, true, nil
+}
+
+func checkMutantCompileOutcome(ctx, cctx context.Context, job overlayJob, compTO time.Duration, _ gate.Output, err error) error {
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	if errors.Is(cctx.Err(), context.DeadlineExceeded) {
+		return fmt.Errorf("compile mutant %s:%d timed out after %s", job.rel, job.line, compTO)
+	}
+	if err != nil {
+		return fmt.Errorf("compile mutant %s:%d: %w", job.rel, job.line, err)
+	}
+	return nil
+}
+
+func runLockedCompiledBinary(ctx context.Context, mu *sync.Mutex, ex gate.Executor, runDir, binPath, gorootBin string, build gobuild.Build, execTO time.Duration, label string) (string, error) {
+	mu.Lock()
+	defer mu.Unlock()
+	return runCompiledTestBinary(ctx, ex, runDir, binPath, gorootBin, build, execTO, label)
 }
 
 func runCompiledTestBinary(ctx context.Context, ex gate.Executor, runDir, binPath, gorootBin string, build gobuild.Build, execTO time.Duration, label string) (string, error) {

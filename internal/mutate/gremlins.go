@@ -25,34 +25,6 @@ import (
 	"github.com/Hedronite/go-tops/internal/report"
 )
 
-// ProtocolMutatorsOn lists the 6 mutators enabled under protocol 0.4.5 (M4-R10).
-var ProtocolMutatorsOn = []string{
-	"ARITHMETIC_BASE",
-	"CONDITIONALS_BOUNDARY",
-	"CONDITIONALS_NEGATION",
-	"INCREMENT_DECREMENT",
-	"INVERT_LOGICAL",
-	"INVERT_NEGATIVES",
-}
-
-// ProtocolMutatorsOff lists the 5 mutators explicitly disabled under protocol 0.4.5.
-var ProtocolMutatorsOff = []string{
-	"INVERT_ASSIGNMENTS",
-	"INVERT_BITWISE",
-	"INVERT_BWASSIGN",
-	"INVERT_LOOPCTRL",
-	"REMOVE_SELF_ASSIGNMENTS",
-}
-
-// EnabledMutators returns a lookup set of the 6 protocol-enabled mutators.
-func EnabledMutators() map[string]bool {
-	out := make(map[string]bool, len(ProtocolMutatorsOn))
-	for _, m := range ProtocolMutatorsOn {
-		out[m] = true
-	}
-	return out
-}
-
 // GremlinsReport mirrors the machine-readable JSON file written by gremlins v0.6.0.
 type GremlinsReport struct {
 	GoModule          string         `json:"go_module"`
@@ -74,13 +46,8 @@ type GremlinsFile struct {
 	Mutations []GremlinsMutation `json:"mutations"`
 }
 
-// GremlinsMutation represents a single mutant entry reported by gremlins.
-type GremlinsMutation struct {
-	Type   string `json:"type"`
-	Status string `json:"status"`
-	Line   int    `json:"line"`
-	Column int    `json:"column"`
-}
+// GremlinsMutation aliases MutantOutcome for gremlins JSON decoding.
+type GremlinsMutation = MutantOutcome
 
 // ParseGremlinsOutput strictly decodes a gremlins v0.6.0 JSON report.
 func ParseGremlinsOutput(data []byte) (GremlinsReport, error) {
@@ -330,16 +297,6 @@ func buildGremlinsArgv(dir string, prefix []string, cfgFile, outPath string, dif
 	return appendScopeFlags(dir, argv, diff, keep, useDiff, useExclude)
 }
 
-func boundWorkers(procs int) int {
-	if procs < 1 {
-		return 1
-	}
-	if procs > 4 {
-		return 4
-	}
-	return procs
-}
-
 func appendMutatorFlags(argv []string) []string {
 	for _, m := range ProtocolMutatorsOn {
 		argv = append(argv, mutatorFlag(m, true))
@@ -436,126 +393,12 @@ func handleMissingJSON(res gate.Output) ([]byte, bool, error) {
 		res.ExitCode, strings.TrimSpace(string(res.Stdout)), strings.TrimSpace(string(res.Stderr)))
 }
 
-// Evaluation holds the protocol-mapped mutation outcome, counts, and survivor rows.
-type Evaluation struct {
-	Mutants             int
-	Killed              int
-	SurvivedExplained   int
-	SurvivedUnexplained int
-	TimedOut            int
-	TimedOutKeys        []string
-	Dropped             int
-	Exempt              []string
-	NotMeasured         int
-	Base                string
-	BaseSHA             string
-	Survivors           []Survivor
-	ExemptionProblems   []exempt.Problem
-}
-
-// Details renders Evaluation into the protocol 0.4.5 mutationDetails JSON map.
-func (e Evaluation) Details() map[string]any {
-	rows := make([]map[string]any, 0, len(e.Survivors))
-	for _, s := range e.Survivors {
-		rows = append(rows, survivorRow(s))
-	}
-	return map[string]any{
-		"mutants":              e.Mutants,
-		"killed":               e.Killed,
-		"survived_explained":   e.SurvivedExplained,
-		"survived_unexplained": e.SurvivedUnexplained,
-		"max":                  0,
-		"timed_out":            e.TimedOut,
-		"timed_out_keys":       nonNilStrings(e.TimedOutKeys),
-		"dropped":              e.Dropped,
-		"exempt":               nonNilStrings(e.Exempt),
-		"not_measured":         e.NotMeasured,
-		"base":                 e.Base,
-		"base_sha":             e.BaseSHA,
-		"survivors":            rows,
-	}
-}
-
-func survivorRow(s Survivor) map[string]any {
-	var explained any
-	if s.Explained != nil {
-		explained = *s.Explained
-	}
-	return map[string]any{
-		"key":       s.Key.String(),
-		"file":      s.Key.File,
-		"function":  s.Key.Function,
-		"mutator":   s.Key.Mutator,
-		"line_hash": s.Key.LineHash,
-		"line":      s.Line,
-		"status":    s.Status,
-		"explained": explained,
-	}
-}
-
-func nonNilStrings(in []string) []string {
-	if in == nil {
-		return []string{}
-	}
-	return in
-}
-
 // Evaluate validates one gremlins output, applies exemptions and ledger matching, and returns the mutation Evaluation.
 func Evaluate(cfg gate.MutationConfig, exemptions []report.Exemption, gremlinsJSON []byte, noMutants bool, diff DiffResult, dir string, today time.Time) (Evaluation, error) {
 	if noMutants {
 		return EvaluateBatches(cfg, exemptions, nil, diff, dir, today)
 	}
 	return EvaluateBatches(cfg, exemptions, [][]byte{gremlinsJSON}, diff, dir, today)
-}
-
-type evalContext struct {
-	idx    *ModuleIndex
-	exRes  exempt.MutationResult
-	ledger Ledger
-}
-
-func prepareEvaluation(cfg gate.MutationConfig, exemptions []report.Exemption, diff DiffResult, dir string, today time.Time, allowOverlay bool) (Evaluation, evalContext, error) {
-	if err := validateEngine(cfg.Engine, allowOverlay); err != nil {
-		return Evaluation{}, evalContext{}, err
-	}
-	notMeasured, err := countNotMeasured(dir, diff.OutOfBuildFiles)
-	if err != nil {
-		return Evaluation{}, evalContext{}, err
-	}
-	idx, err := ScanModule(dir)
-	if err != nil {
-		return Evaluation{}, evalContext{}, err
-	}
-	exRes := exempt.MatchMutation(exemptions, idx.Files(), idx.Funcs(), today)
-	ledger, err := loadConfiguredLedger(dir, cfg.Ledger, today)
-	if err != nil {
-		return Evaluation{}, evalContext{}, err
-	}
-	if err := checkNoLineDirectives(dir, diff.InBuildFiles); err != nil {
-		return Evaluation{}, evalContext{}, err
-	}
-	ev := newEvaluation(diff, notMeasured, exRes.Problems)
-	return ev, evalContext{idx: idx, exRes: exRes, ledger: ledger}, nil
-}
-
-func validateEngine(engine string, allowOverlay bool) error {
-	switch engine {
-	case "", "gremlins":
-		return nil
-	case "overlay":
-		if allowOverlay {
-			return nil
-		}
-		return fmt.Errorf("mutation engine %q is not supported in M4 (only gremlins)", engine)
-	default:
-		return fmt.Errorf("mutation engine %q is not supported (want gremlins or overlay)", engine)
-	}
-}
-
-// EvaluateOverlayEmpty evaluates a vacuous or out-of-build-only diff under the overlay engine.
-func EvaluateOverlayEmpty(cfg gate.MutationConfig, exemptions []report.Exemption, diff DiffResult, dir string, today time.Time) (Evaluation, error) {
-	ev, _, err := prepareEvaluation(cfg, exemptions, diff, dir, today, true)
-	return ev, err
 }
 
 // EvaluateBatches merges one or more gremlins JSON payloads, applies exemptions and ledger matching, and returns Evaluation.
@@ -575,67 +418,6 @@ func EvaluateBatches(cfg gate.MutationConfig, exemptions []report.Exemption, rep
 		return Evaluation{}, err
 	}
 	return ev, nil
-}
-
-func countNotMeasured(dir string, outFiles map[string]map[int]bool) (int, error) {
-	enabled := EnabledMutators()
-	total := 0
-	for rel, lines := range outFiles {
-		src, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(rel)))
-		if err != nil {
-			return 0, fmt.Errorf("read out-of-build file %s: %w", rel, err)
-		}
-		n, err := CountMutantsOnLines(src, lines, enabled)
-		if err != nil {
-			return 0, fmt.Errorf("count mutants in %s: %w", rel, err)
-		}
-		total += n
-	}
-	return total, nil
-}
-
-func loadConfiguredLedger(dir, ledgerPath string, today time.Time) (Ledger, error) {
-	if ledgerPath == "" {
-		return nil, nil
-	}
-	slash := filepath.ToSlash(ledgerPath)
-	if DefaultLedger != nil {
-		return DefaultLedger(dir, slash, today)
-	}
-	if _, err := os.Stat(filepath.Join(dir, filepath.FromSlash(slash))); err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	return nil, fmt.Errorf("mutation ledger %q exists, but no ledger reader is registered", slash)
-}
-
-func newEvaluation(diff DiffResult, notMeasured int, problems []exempt.Problem) Evaluation {
-	return Evaluation{
-		TimedOutKeys:      []string{},
-		Exempt:            []string{},
-		NotMeasured:       notMeasured,
-		Base:              diff.Base,
-		BaseSHA:           diff.BaseSHA,
-		Survivors:         []Survivor{},
-		ExemptionProblems: problems,
-	}
-}
-
-func checkNoLineDirectives(dir string, inBuild map[string]map[int]bool) error {
-	for _, rel := range sortedMapKeys(inBuild) {
-		src, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(rel)))
-		if err != nil {
-			return fmt.Errorf("read in-build file %s: %w", rel, err)
-		}
-		if ln, text, ok, err := FindLineDirective(src); err != nil {
-			return err
-		} else if ok {
-			return fmt.Errorf("line directive not allowed in %s:%d (%s)", rel, ln, text)
-		}
-	}
-	return nil
 }
 
 func applyReport(ev Evaluation, data []byte, diff DiffResult, idx *ModuleIndex, exRes exempt.MutationResult, ledger Ledger, dir string, reported map[string]map[MutantLoc]bool) (Evaluation, error) {
@@ -739,15 +521,6 @@ func checkFileExpectedMutants(rel string, src []byte, lines map[int]bool, repLoc
 	return nil
 }
 
-func sortedMapKeys(m map[string]map[int]bool) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	sort.Strings(out)
-	return out
-}
-
 func sortedBoolKeys(m map[int]bool) []int {
 	out := make([]int, 0, len(m))
 	for k := range m {
@@ -767,88 +540,6 @@ func readCachedFile(dir, rel string, cache map[string][]byte) ([]byte, error) {
 	}
 	cache[rel] = src
 	return src, nil
-}
-
-func recordMutant(ev *Evaluation, rel string, m GremlinsMutation, src []byte, idx *ModuleIndex, exRes exempt.MutationResult, ledger Ledger) error {
-	switch m.Status {
-	case "SKIPPED":
-		return fmt.Errorf("gremlins skipped mutant on changed line %s:%d:%d", rel, m.Line, m.Column)
-	case "RUNNABLE":
-		return fmt.Errorf("gremlins left mutant RUNNABLE at %s:%d:%d", rel, m.Line, m.Column)
-	case "NOT VIABLE":
-		ev.Dropped++
-		return nil
-	case "KILLED":
-		ev.Mutants++
-		ev.Killed++
-		return nil
-	case "TIMED OUT":
-		ev.Mutants++
-		return recordTimedOut(ev, rel, m, src, idx)
-	case "LIVED", "NOT COVERED":
-		ev.Mutants++
-		return recordSurvivor(ev, rel, m, src, idx, exRes, ledger)
-	default:
-		return fmt.Errorf("unexpected mutant status %q at %s:%d:%d", m.Status, rel, m.Line, m.Column)
-	}
-}
-
-func buildKey(rel string, m GremlinsMutation, src []byte, idx *ModuleIndex) (SurvivorKey, error) {
-	hash, err := MutatedLineHash(src, m.Line, m.Column, m.Type)
-	if err != nil {
-		return SurvivorKey{}, err
-	}
-	fn := idx.EnclosingFunc(rel, m.Line, m.Column)
-	return SurvivorKey{File: rel, Function: fn, Mutator: m.Type, LineHash: hash}, nil
-}
-
-func recordTimedOut(ev *Evaluation, rel string, m GremlinsMutation, src []byte, idx *ModuleIndex) error {
-	key, err := buildKey(rel, m, src, idx)
-	if err != nil {
-		return err
-	}
-	ev.Killed++
-	ev.TimedOut++
-	ev.TimedOutKeys = append(ev.TimedOutKeys, key.String())
-	return nil
-}
-
-func recordSurvivor(ev *Evaluation, rel string, m GremlinsMutation, src []byte, idx *ModuleIndex, exRes exempt.MutationResult, ledger Ledger) error {
-	key, err := buildKey(rel, m, src, idx)
-	if err != nil {
-		return err
-	}
-	if exRes.Covers(rel, key.Function) {
-		ev.Exempt = append(ev.Exempt, key.String())
-		ev.Survivors = append(ev.Survivors, Survivor{Key: key, Line: m.Line, Status: m.Status, Explained: nil})
-		return nil
-	}
-	if ledger != nil && ledger.Explains(key) {
-		srcTag := "ledger"
-		ev.SurvivedExplained++
-		ev.Survivors = append(ev.Survivors, Survivor{Key: key, Line: m.Line, Status: m.Status, Explained: &srcTag})
-		return nil
-	}
-	ev.SurvivedUnexplained++
-	ev.Survivors = append(ev.Survivors, Survivor{Key: key, Line: m.Line, Status: m.Status, Explained: nil})
-	return nil
-}
-
-func sortEvaluation(ev *Evaluation) {
-	slices.Sort(ev.TimedOutKeys)
-	slices.Sort(ev.Exempt)
-	slices.SortFunc(ev.Survivors, func(a, b Survivor) int {
-		if a.Key.File != b.Key.File {
-			return strings.Compare(a.Key.File, b.Key.File)
-		}
-		if a.Line != b.Line {
-			return a.Line - b.Line
-		}
-		if a.Key.Mutator != b.Key.Mutator {
-			return strings.Compare(a.Key.Mutator, b.Key.Mutator)
-		}
-		return strings.Compare(a.Key.LineHash, b.Key.LineHash)
-	})
 }
 
 // VerifyUnmutatedCopy copies dir without symlinks (matching gremlins CachedDealer) and runs the target tests once.
