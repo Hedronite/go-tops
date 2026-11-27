@@ -810,7 +810,7 @@ func runCompiledTestBinary(ctx context.Context, ex gate.Executor, runDir, binPat
 	strip, env := testBinaryEnv(build, gorootBin)
 	res, err := ex.Run(mctx, gate.Cmd{
 		Dir:      runDir,
-		Argv:     []string{binPath, "-test.failfast", "-test.paniconexit0"},
+		Argv:     []string{binPath, "-test.failfast", "-test.paniconexit0", "-test.timeout=" + execTO.String()},
 		Env:      env,
 		StripEnv: strip,
 	})

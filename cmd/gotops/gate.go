@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -22,7 +21,9 @@ func init() {
 }
 
 func runGate(env cli.Env, args []string) int {
-	return gate.Main(context.Background(), args, gate.CommandDeps{
+	ctx, stop := signalContext()
+	defer stop()
+	return gate.Main(ctx, args, gate.CommandDeps{
 		LoadConfig:  loadGateConfig,
 		CI:          os.Getenv("CI") == "true",
 		ToolVersion: toolVersion(),

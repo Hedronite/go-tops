@@ -1829,3 +1829,89 @@ func TestPostflightPollutedPkgDir(t *testing.T) {
 		}
 	})
 }
+
+// Q1(b): every compiled test binary receives -test.timeout=<execTO> alongside -test.failfast and -test.paniconexit0.
+func TestRunOverlayPassesTestTimeoutFlag(t *testing.T) {
+	dir := gitSetupOverlayRepo(t, map[string]string{
+		"go.mod":    "module example.com/toflag\n\ngo 1.26\n",
+		"calc.go":   "package toflag\n\nfunc Add(a, b int) int { return a - b }\n",
+		"c_test.go": "package toflag\n\nimport \"testing\"\n\nfunc TestAdd(t *testing.T) { if Add(3, 2) != 1 { t.Fatal(\"bad\") } }\n",
+	})
+	writeTreeFiles(t, dir, map[string]string{
+		"calc.go":   "package toflag\n\nfunc Add(a, b int) int { return a + b }\n",
+		"c_test.go": "package toflag\n\nimport \"testing\"\n\nfunc TestAdd(t *testing.T) { if Add(2, 3) != 5 { t.Fatal(\"bad\") } }\n",
+	})
+	var seenFlags []string
+	var mu sync.Mutex
+	spy := scriptedCmdExec{fn: func(ctx context.Context, c gate.Cmd) (gate.Output, error) {
+		if len(c.Argv) > 0 && strings.HasPrefix(filepath.Base(c.Argv[0]), "mut-") {
+			mu.Lock()
+			seenFlags = slices.Clone(c.Argv)
+			mu.Unlock()
+		}
+		return (gate.OS{}).Run(ctx, c)
+	}}
+	build := gobuild.Build{CGOEnabled: true}
+	diff, err := ComputeDiff(t.Context(), gate.OS{}, dir, "main", build)
+	if err != nil {
+		t.Fatal(err)
+	}
+	env := gate.Env{Dir: dir, Base: "main", Exec: spy, Config: gate.Config{Base: "main", Mutation: gate.MutationConfig{Engine: "overlay"}}}
+	ev, err := RunOverlay(t.Context(), env, diff, build, OverlayOptions{MinTimeout: 10 * time.Second})
+	if err != nil || ev.Killed != 1 {
+		t.Fatalf("RunOverlay got ev=%+v err=%v", ev, err)
+	}
+	for _, want := range []string{"-test.failfast", "-test.paniconexit0", "-test.timeout=10s"} {
+		if !slices.Contains(seenFlags, want) {
+			t.Fatalf("expected %q in mutant argv %v", want, seenFlags)
+		}
+	}
+}
+
+// O1: running ComputeDiff / RunOverlay via a symlinked module path must classify in-build files properly (not not_measured).
+func TestComputeDiffAndRunOverlaySymlinkedDir(t *testing.T) {
+	realDir := gitSetupOverlayRepo(t, map[string]string{
+		"go.mod":  "module example.com/symmod\n\ngo 1.26\n",
+		"calc.go": "package symmod\n\nfunc Lt(a, b int) bool { return a == b }\n",
+		"c_test.go": `package symmod
+
+import "testing"
+
+func TestBase(t *testing.T) { _ = Lt(1, 2) }
+`,
+	})
+	writeTreeFiles(t, realDir, map[string]string{
+		"calc.go": "package symmod\n\nfunc Lt(a, b int) bool { return a < b }\n",
+		"c_test.go": `package symmod
+
+import "testing"
+
+func TestWeak(t *testing.T) {
+	if !Lt(1, 5) || Lt(6, 5) {
+		t.Fatal("wrong")
+	}
+}
+`,
+	})
+	linkParent := t.TempDir()
+	symDir := filepath.Join(linkParent, "link-to-mod")
+	if err := os.Symlink(realDir, symDir); err != nil {
+		t.Fatal(err)
+	}
+	build := gobuild.Build{CGOEnabled: true}
+	diff, err := ComputeDiff(t.Context(), gate.OS{}, symDir, "main", build)
+	if err != nil {
+		t.Fatalf("ComputeDiff through symlink: %v", err)
+	}
+	if len(diff.InBuildFiles) != 1 || len(diff.OutOfBuildFiles) != 0 {
+		t.Fatalf("expected calc.go in InBuildFiles and 0 OutOfBuildFiles via symlink, got in=%v out=%v", diff.InBuildFiles, diff.OutOfBuildFiles)
+	}
+	env := gate.Env{Dir: symDir, Base: "main", Exec: gate.OS{}, Config: gate.Config{Base: "main", Mutation: gate.MutationConfig{Engine: "overlay"}}}
+	ev, err := RunOverlay(t.Context(), env, diff, build, OverlayOptions{})
+	if err != nil {
+		t.Fatalf("RunOverlay through symlink: %v", err)
+	}
+	if ev.NotMeasured != 0 || ev.Mutants != 2 || ev.Killed != 1 || ev.SurvivedUnexplained != 1 {
+		t.Fatalf("expected NotMeasured=0, 2 mutants (1 KILLED, 1 LIVED) via symlink, got %+v", ev)
+	}
+}
