@@ -671,8 +671,10 @@ Keep the key explicit in every config so scores are comparable across repos.
   `-race` and without `-shuffle`. It is run as `go test` runs a test binary: with
   `-test.paniconexit0`, and with the `bin` directory of `GOROOT` first on `PATH`.
 - **A mutant is `killed` only by tests that pass without it:** the unmutated test binary, built
-  and run the same way, must pass too, or the layer fails. A package with no test files has no
-  binary, and every mutant in it is `NOT COVERED`.
+  and run the same way, must pass before the package's first mutant and again after its last,
+  or the layer fails and no result counts. The second run catches what a mutant's run leaves
+  behind: one stopped part way can leave a file that makes every later run fail. A package with
+  no test files has no binary, and every mutant in it is `NOT COVERED`.
 - **Only a test kills.** `-vet=off` is required: `go test` runs `go vet` checks first, and a
   mutant that `vet` rejects (`x != 1 || x != 2`, for one) would fail the build and count as
   killed with no test involved.
@@ -1926,7 +1928,7 @@ wrong; the config wins.
 36. **The ledger leg:** the baseline records its build, only the run with that build writes it or judges the ratchet, every entry of a first ledger is measured there, and the other legs report the ratchet judgment as `skip`, never `pass`. A function the ledger leg does not compile has no entry and takes a `crap` exemption. A repo under `ratchet` names exactly one CI leg as its ledger leg, and CI fails when that leg's ratchet outcome is `skip`. (§6.7, §11, §12.1, §12.3) *New in 0.4.3.*
 37. **The first adoption of a real repository (M3):** the kit lint pass reads `.go-tops/golangci.yml` and never the adopter's `.golangci.yml`, which `init` leaves byte for byte; `init` adds the kit's pins to an existing `tools/go.mod`, writes a marked `.gitignore` block and keeps the whole release of the `go` line as the floor; the first ledger is written by the ledger leg on the adoption pull request, asked by `baseline --status`; a repository whose tests walk the tree keeps the lint binary outside it. (§4.1, §6.7, §8.1, §10, §11, §12.1) *New in 0.4.4.*
 38. **Mutation, measured before it was built (M4):** `gotops` configures the engine by flags alone and ignores its files and variables; six mutators are on; the kit's own diff, from the diff base to the working tree, decides which mutants count; a survivor key has one text form and the report lists every survivor; mutants in files a build does not compile are counted apart; an expired survivor entry fails at tier 0; `survivors list`, `explain` and `expire` are defined; the engine's per-package meaning of `NOT COVERED` is stated; the tier 2 ledger kind is M6. (§6.4, §6.7, §9, §11, §12.1, §12.3) *New in 0.4.5.*
-39. **The native mutation engine:** `overlay` is the only engine, and the external one and its pin are gone; `vet` is off in every mutant run, so only a test kills; a mutant that does not compile is `NOT VIABLE`; a `case` expression and code after a function literal take their statement's coverage, and a package-level declaration is always run; one package's test binaries run one at a time; a test's run-time reads see unmutated files. (§2, §4.1, §6.4, §9, §10) *New in 0.4.6.*
+39. **The native mutation engine:** `overlay` is the only engine, and the external one and its pin are gone; `vet` is off in every mutant run, so only a test kills; a mutant that does not compile is `NOT VIABLE`; a `case` expression and code after a function literal take their statement's coverage, and a package-level declaration is always run; one package's test binaries run one at a time, and its unmutated binary must pass before and after them; a test's run-time reads see unmutated files. (§2, §4.1, §6.4, §9, §10) *New in 0.4.6.*
 
 ---
 
