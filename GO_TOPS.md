@@ -1,6 +1,18 @@
 # Go-TOPS: Go Testing and Optimization Protocol Suite
 
-**Spec status:** 0.4.6 (0.4.5 was the previous revision) · **Date:** 2026-11-26 · **Owner:** Hedronite
+**Spec status:** 0.4.7 (0.4.6 was the previous revision) · **Date:** 2026-11-27 · **Owner:** Hedronite
+
+> **Changes from 0.4.6 to 0.4.7:** Laws v0.1 protocol locks (M5 G1e): custom
+> `go/analysis` analyzers run in-process in `gotops`, with an optional standalone
+> `cmd/gotops-laws` multichecker (`go vet -vettool`); the law lint pass embeds an
+> `issues` uncap (`max-issues-per-linter: 0`, `max-same-issues: 0`,
+> `uniq-by-line: false`); `//tops:ack G-NN <reason>` and `.go-tops/acks.yaml` semantics
+> (R-severity laws are never ackable); `gotops laws list | explain G-NN | run` CLI contract;
+> `schema/law.schema.json` for `laws/G-NN.yaml`; the CRAP layer report carries a full
+> `functions` score list (F18); ruling **C9** retires once the run judges the class's required
+> laws (`gotops gate` exits `0` when every required law is judged and none refuses). Protocol
+> version bumped.
+>
 **Modeled on:** [Rust-TOPS](https://github.com/Hedronite/rust-tops) (protocol 1.2.0 on `main`; the latest release tag, `cargo-tops` v0.3.0, carries protocol 1.1.0, and `main` holds package 0.4.0, untagged; read 2026-11-17)
 
 > **Changes from 0.2.0 to 0.3.0:** One CRAP cap per class; authorship marking removed (§5.2, §6.2).
@@ -75,7 +87,7 @@ Plus a practice layer (human and agent working rules, §13 and `AGENTS.md`) and 
 
 | Item | Value |
 |---|---|
-| Protocol version | **0.4.6** (0.4.5 was the previous revision; 1.0.0 is set by the criterion in §19) |
+| Protocol version | **0.4.7** (0.4.6 was the previous revision; 1.0.0 is set by the criterion in §19) |
 | Package version | 0.0.0 (unreleased) |
 | Language floor ("MSRV" analogue) | Go **1.26**, the oldest Go release still supported upstream (a policy: the floor moves when upstream drops support). The floor is a language version, compared in Go's own order (`go/version.Lang`), so a `go 1.26` and a `go 1.26.4` directive both meet it. Matrix tests floor and current (current: Go 1.27) |
 | Toolchain pin | The exact Go release in `go-tops.lock` (§10). `GOTOOLCHAIN=local` makes the `go` command use the toolchain it ships with and never reads the `toolchain` line, so a runner with another patch release would pass silently: the gate therefore checks that `go env GOVERSION` equals the pin (§3.1, G-33). A `toolchain` line is optional: with or without one, and whether the `go` line names a language version (`go 1.26`) or a patch release (`go 1.27.4`), the pin is the release in the lock |
@@ -225,9 +237,12 @@ it (§3.4 rule 6, §12.2).
 
 **Severity and acknowledgement.** Each law has a severity in §8.2: **R** or **A**. An instance of
 an R law is `refuse`. An instance of an A law is `ack` when it carries a recorded
-acknowledgement and `refuse` when it does not. A recorded acknowledgement is an inline
-`//tops:ack G-NN reason="…" owner="…"` comment, or an entry (law, file, reason, owner) in
-`.go-tops/acks.yaml` (`laws.ack_ledger`); both need a reason and an owner (§13 rule 6). Under
+acknowledgement and `refuse` when it does not. A recorded acknowledgement is an inline `//tops:ack G-NN <reason>` comment, where
+`<reason>` is free text of at least three words, or an entry (law, file, reason, owner) in
+`.go-tops/acks.yaml` (`laws.ack_ledger`). The comment carries the reason only; the file entry
+carries reason and owner (§13 rule 6). A law whose catalog severity is **R** is never ackable:
+an inline comment or a file entry for it counts toward the `suppressions` ledger (§6.7) but
+does not change its verdict, which stays `refuse`. Under
 `hard` an `ack` does not fail. Under `ratchet` the acknowledgements for a law in a file are
 counted against that file's `suppressions` entry for the law (§6.7): up to the entry they are
 `ack`, and when the count is above the entry the law's verdict for that file is `refuse`.
@@ -412,7 +427,7 @@ its own fuzz globs in `layers.fuzz.targets`, which G-43 reads.
 ```yaml
 # profiles/binary-cli.yaml
 class: binary-cli
-protocol: "0.4.6"
+protocol: "0.4.7"
 gates:
   coverage: { statements_floor: 70 }
   crap: { cap: 10, complexity: { err_guard_discount: true, wrap_functions: [] } }
@@ -428,7 +443,7 @@ laws:
 ```yaml
 # profiles/binary-service.yaml
 class: binary-service
-protocol: "0.4.6"
+protocol: "0.4.7"
 gates:
   coverage: { statements_floor: 75 }
   crap: { cap: 10, complexity: { err_guard_discount: true, wrap_functions: [] } }
@@ -444,7 +459,7 @@ laws:
 ```yaml
 # profiles/library-core.yaml
 class: library-core
-protocol: "0.4.6"
+protocol: "0.4.7"
 gates:
   coverage: { statements_floor: 85 }
   crap: { cap: 8, complexity: { err_guard_discount: true, wrap_functions: [] } }   # provisional (§5.2)
@@ -1128,16 +1143,20 @@ the lock or the tools file is wrong, and it is still `tool-missing`, exit 1 (§1
 Laws encode Go-specific hazards as named, numbered rules. Rust-TOPS 1.1.0 defines 53 laws
 (H-01…H-53) in a Bend2-based layer where 15 have fact readers judged by `bend` and 38 report
 `not-evaluated`. Go-TOPS uses the same honesty model (`refuse` fails, `ack` requires
-acknowledgement, `not-evaluated` never counts as a pass), implemented natively: the laws layer
-is a `go/analysis` multichecker (`gotops-laws`). Its analyzer laws are tier 0 and always on; its delegated laws run in the law pass below, at tier 1 (§3.2).
+acknowledgement, `not-evaluated` never counts as a pass), implemented natively: the laws layer runs custom `go/analysis` passes in-process
+in `gotops` (decision D10 a), with an optional standalone `gotops-laws` multichecker for
+`go vet -vettool`. Its analyzer laws are tier 0 and always on; its delegated laws run in the law pass below, at tier 1 (§3.2).
 
 There is no Bend2 or Lean layer. A proof over a table of facts checks the table, not the code;
 the analyzers check the code. A formal layer is reconsidered only with evidence that it judges
 something the analyzers do not, and only through the protocol-change process (§13).
 
-- **Native.** Laws are implemented as `go/analysis` analyzers in one multichecker binary
-  (`gotops-laws`, run via `go vet -vettool` or directly). Many laws map onto existing analyzers
-  (vet, errcheck, bodyclose, noctx, contextcheck, gosec, depguard); the rest are custom.
+- **Native.** Custom laws are implemented as `go/analysis` analyzers. `gotops` runs them
+  **in-process** via `golang.org/x/tools/go/packages` and the analyzer driver, so the gate needs
+  no second binary for them. The kit may also ship an optional standalone multichecker,
+  `cmd/gotops-laws`, for direct use and for `go vet -vettool=…` in law development; adopters
+  pin it only when they want that workflow. Many laws map onto existing analyzers (vet, errcheck,
+  bodyclose, noctx, contextcheck, gosec, depguard); the rest are custom.
 - **Readers.** Each law declares how it is judged:
   - `analyzer`: a Go-TOPS analyzer produces a verdict;
   - `tool`: delegated to a named external tool, mapped into a verdict. A delegated linter runs
@@ -1147,6 +1166,16 @@ something the analyzers do not, and only through the protocol-change process (§
     `not-evaluated` until attested;
   - `tbd`: not yet implemented; reported `not-evaluated`.
 - **Honesty preserved.** A law with no fact reader (or missing tool) is reported `not-evaluated`, never as a pass.
+
+The embedded configuration is golangci-lint v2 YAML. It **must** uncap findings so no
+law goes quiet behind golangci-lint defaults:
+
+```yaml
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  uniq-by-line: false
+```
 
 **The law pass.** The laws layer runs its delegated laws as its own golangci-lint pass, apart
 from the adopter-style pass of gate 1 (§3.1). `gotops` embeds the law configuration in the
@@ -1353,7 +1382,7 @@ depth fails.
 
 <!-- go-tops:example path=config/go-tops.example.yaml schema=schema/go-tops.schema.json -->
 ```yaml
-protocol: "0.4.6"            # must match the schema's protocol constant
+protocol: "0.4.7"            # must match the schema's protocol constant
 version: "0.1.0"             # this config's version (non-empty)
 module: github.com/acme/myapp
 class: binary-cli            # one of the schema's classes
@@ -1501,7 +1530,7 @@ identical to the file and validates the file against the schema.
 
 <!-- go-tops:example path=config/go-tops.example.lock schema=schema/lock.schema.json -->
 ```yaml
-protocol: "0.4.6"               # must match the schema protocol constant
+protocol: "0.4.7"               # must match the schema protocol constant
 toolchain: go1.27.4             # go env GOVERSION must equal this
 
 trust:
@@ -1528,6 +1557,15 @@ binaries:
 ---
 
 ## 11. CI floor
+
+**Ruling C9 (drop-in gate judge).** Until M5 ships live readers for every law in the class's
+`laws.required` list, the gate exits `1` with only the laws layer failed and every required law
+`not-evaluated`: the drop-in workflow and the `go-tops-gate` skill treat that as a pass when every
+other tier 0–1 layer passes and the ratchet passes on the ledger leg. Once the run judges those
+laws (`laws.judged` equals the v0.1 count, 16 in the launch profiles), **C9 retires**: `gotops
+gate` exits `0` only when the laws layer is `pass`, `laws.required_not_evaluated` is `0`, and no
+law is `refuse`. The judge then refuses the pre-M5 carve-out. Vigil and other adopters refresh the
+ledger (`judged_laws: 16`) before the drop-in drops C9 (M5 G7).
 
 The drop-in workflow `.github/workflows/go-tops.yml` (placeholders `{GO_FLOOR}`, `{GO_CURRENT}`,
 `{PRIMARY_PKG}`) runs the same command a developer runs. It repeats no tool as a step, apart from the floor leg below: a job that
@@ -1603,7 +1641,9 @@ CI rules (carried from Rust-TOPS's lessons):
 | `check` | Validates `go-tops.yaml` against the **JSON Schema** (full validation, an improvement over Rust-TOPS's partial checks), plus semantic checks: protocol id, non-empty version, module name, language floor ≤ current, `gates.crap.cap` not above the class column of §5.2 and `gates.coverage.statements_floor` not below it (a class with no column takes the cap 8 and the floor 90% of §5.2), an `enabled: false` without a `reason`, a disabled `gates.crap` or `gates.mutation` without an `expires` that has not passed, an `enabled` key on `gates.hygiene`, `gates.tests` or `gates.coverage`, every `laws.required` ID in the catalog, applying to the class, with a reader and at tier 1 or below, every exemption well formed and unexpired (§6.8), every entry of `.go-tops/survivors.yaml` valid against `survivorEntry`, with an `expires` that is a real day after today (UTC), and every entry of `.go-tops/acks.yaml` valid against `ackEntry` in `schema/core.schema.json` (§6.4, §3.3), `go-tops.lock` valid against `schema/lock.schema.json` (§10), `enforce: advisory` carrying the `advisory` key (reason, owner, an `expires` that has not passed), and under `ratchet` the baseline file exists and is clean against `HEAD`. |
 | `baseline` | Writes `.go-tops/baseline.json` (§6.7), the only command that does. `--init` measures and writes the first ledger, with the build it ran under, when the tests are green and every feeding layer produced non-empty output (thresholds may be red); `--init --kind survivors` records the tier 2 survivor counts the same way, from M6; until then the kind is refused. A plain `baseline` only lowers entries and removes paid ones. `--accept-regression --reason <text> --owner <handle>` is the one way to raise an entry or lower `judged_laws` (the PR carries the `protocol-change` label). `--rename <old-key> <new-key>` moves one key. Refused under `advisory`, and `--init` is refused when a ledger exists. Every write after `--init` runs on the ledger leg, the run whose build equals the `build` the file records (§6.7); on any other leg it exits 1 and names the ledger build. `--init` is run on the build of the leg the repo names as its ledger leg. `--status [--base <ref>]` writes nothing and prints one JSON line whose `state` is `first-ledger-due` (exit 0: `enforce` is `ratchet` and neither the base ref's tree nor the working tree has a ledger), `present`, `deleted` or `not-ratchet` (exit 1; `deleted` is a ledger the diff base or `HEAD` has and the tree lacks, which `--init` refuses too; `not-ratchet` is `enforce: advisory` or `hard`, which keep no first ledger), or `error` (exit 2: it cannot tell, which a caller treats as a failure). |
 | `gate` | Runs every enabled layer at or below `--max-tier` (default 1), in order, each judged (§3.5), laws last. Options: `--max-tier N`, `--fail-fast`, `--dry-run` (refused in CI), `--base <ref>`, `--json`, `--only <layer>` (a range that leaves a required law out ends `partial` and is refused in CI). A mapped tool that is missing is `tool-missing` and exits 1. Under `ratchet` the judgment against the ledger is made on the ledger leg only and is `skip` elsewhere (§6.7). Exit codes: §12.2. |
-| `laws [list \| run \| explain G-NN]` | Lists the catalog with readers, runs the laws layer alone, explains a law. |
+| `laws list` | Prints every catalog row: id, title, severity, reader, status, whether it is v0.1, and whether a reader is live in this release. Writes nothing. Exit `0`; exit `2` on a malformed catalog. |
+| `laws explain G-NN` | Prints one law's metadata (`laws/G-NN.yaml`, §8.3): rationale, fix, `allow_paths`, reader, analyzer or tool name, and fixture path. Exit `0`; exit `1` when the id is absent from the catalog; exit `2` on bad arguments or malformed catalog. |
+| `laws run` | Runs the laws layer alone at the gate's `--max-tier` (default 1), honors `--only laws` semantics, and writes `.go-tops/report.json` when a layer runs. Exit `0` when every law in range is `allow`, `ack` (within the ratchet limit, §3.3) or `not-evaluated` and not required; exit `1` on `refuse`, a required `not-evaluated`, or an layer error; exit `2` on configuration errors; exit `3` on environment errors, as `gate` (§12.2). |
 | `report [--format text \| json \| junit \| sarif]` | Renders the last report. |
 | `lock [--verify \| --update]` | Verifies or updates tool pins (§10). `--verify` reads the lock, valid against `schema/lock.schema.json`, then reads each module tool's version with `go version -m`, compares each downloaded binary's SHA-256, and compares `go env GOVERSION` with the pinned toolchain. `--update` is a reviewed change, never run in CI. |
 | `doctor` | Diagnoses environment: Go version against the protocol floor and against the configured `toolchain.go_floor` when one is set (compared in Go's order, §2) and against the pinned toolchain, a C compiler (cgo is required for `-race`), tool presence, each resolved binary's SHA-256 against `go-tops.lock` for the host as the gate checks it (a binary the lock refuses is `fail`, never `ok`), `GOFLAGS`, `GOTOOLCHAIN`, cgo state. |
@@ -1640,7 +1680,7 @@ CI keeps the block identical to the file and validates the file against the sche
 <!-- go-tops:example path=config/gate-report.example.json schema=schema/gate-report.schema.json -->
 ```json
 {
-  "protocol": "0.4.6",
+  "protocol": "0.4.7",
   "tool_version": "0.0.0",
   "module": "github.com/acme/myapp",
   "class": "binary-cli",
@@ -1766,8 +1806,9 @@ Report rules:
   carries `db_last_modified`, `time_dependent: true`, `fail_on`, `reachable` (OSV IDs, with
   `fixed_version` where known) and `other`, and it can change verdict with no code change,
   because the database moves, §3.1), tests (`packages`, `tests`, `race`, `skipped`,
-  `shuffle_seed`), coverage (`statements_pct`, `floor`, `profile_bytes`), CRAP (`cap`,
-  `violations`, `exempt` for functions scored under an exemption, and `not_measured`, the number
+  `shuffle_seed`), coverage (`statements_pct`, `floor`, `profile_bytes`), CRAP (`cap`, `functions`,
+  `violations`, `functions`, every production function the run scored (`func`, `file`, `cc`, `cov_pct`,
+  `crap`, `cap`, `baseline`), newest for `go-tops-review` (F18); `exempt` for functions scored under an exemption, and `not_measured`, the number
   of production functions in files the run's build does not compile, §6.2; a row of `violations`
   or `exempt` for such a function has `null` for `cov_pct` and `crap`) and mutation (below). A
   layer of these five whose outcome is `fail` may carry `{ "error": "<text>" }`
@@ -1812,7 +1853,7 @@ separate policies file:
    carries a `protocol-change` label and a changelog entry, and is reviewed by a protocol owner.
 4. Fix schema first, then prose.
 5. Explain every accepted mutation survivor (reason, owner, expiry).
-6. No `//nolint` without a reason; no `//tops:ack` without a reason and an owner.
+6. No `//nolint` without the linter name and a reason; no `//tops:ack` without a reason of at least three words; no `.go-tops/acks.yaml` entry without a reason and an owner.
 7. Agent-authored code meets the same gate and the same CRAP cap as human code.
 8. Do not edit generated files; fix the generator.
 9. Prefer deleting code to adding configuration.
@@ -1939,6 +1980,7 @@ wrong; the config wins.
 36. **The ledger leg:** the baseline records its build, only the run with that build writes it or judges the ratchet, every entry of a first ledger is measured there, and the other legs report the ratchet judgment as `skip`, never `pass`. A function the ledger leg does not compile has no entry and takes a `crap` exemption. A repo under `ratchet` names exactly one CI leg as its ledger leg, and CI fails when that leg's ratchet outcome is `skip`. (§6.7, §11, §12.1, §12.3) *New in 0.4.3.*
 37. **The first adoption of a real repository (M3):** the kit lint pass reads `.go-tops/golangci.yml` and never the adopter's `.golangci.yml`, which `init` leaves byte for byte; `init` adds the kit's pins to an existing `tools/go.mod`, writes a marked `.gitignore` block and keeps the whole release of the `go` line as the floor; the first ledger is written by the ledger leg on the adoption pull request, asked by `baseline --status`; a repository whose tests walk the tree keeps the lint binary outside it. (§4.1, §6.7, §8.1, §10, §11, §12.1) *New in 0.4.4.*
 38. **Mutation, measured before it was built (M4):** `gotops` configures the engine by flags alone and ignores its files and variables; six mutators are on; the kit's own diff, from the diff base to the working tree, decides which mutants count; a survivor key has one text form and the report lists every survivor; mutants in files a build does not compile are counted apart; an expired survivor entry fails at tier 0; `survivors list`, `explain` and `expire` are defined; the engine's per-package meaning of `NOT COVERED` is stated; the tier 2 ledger kind is M6. (§6.4, §6.7, §9, §11, §12.1, §12.3) *New in 0.4.5.*
+40. **Laws v0.1 protocol (M5 G1e):** in-process custom analyzers (D10 a); law-pass `issues` uncap; `//tops:ack` and `acks.yaml` semantics with R laws never ackable; `gotops laws` subcommands; `law.schema.json`; CRAP `functions` in the report (F18); C9 retirement when required laws are judged. (§3.3, §8.1, §11, §12.1, §12.3, §18) *New in 0.4.7.*
 39. **The native mutation engine:** `overlay` is the only engine, and the external one and its pin are gone; `vet` is off in every mutant run, so only a test kills; a mutant that does not compile is `NOT VIABLE`; a `case` expression and code after a function literal take their statement's coverage, and a package-level declaration is always run; one package's test binaries run one at a time, and its unmutated binary must pass before and after them; a test's run-time reads see unmutated files. (§2, §4.1, §6.4, §9, §10) *New in 0.4.6.*
 
 ---
@@ -2020,10 +2062,11 @@ The schemas are files in `schema/`, JSON Schema 2020-12:
 
 | File | What it validates |
 |---|---|
-| `schema/go-tops.schema.json` | `go-tops.yaml` and the class profiles in `profiles/`: one shape for both. `additionalProperties: false` at every object, so an unknown key at any depth fails. Its `protocol` is the constant `0.4.6` |
+| `schema/go-tops.schema.json` | `go-tops.yaml` and the class profiles in `profiles/`: one shape for both. `additionalProperties: false` at every object, so an unknown key at any depth fails. Its `protocol` is the constant `0.4.7` |
 | `schema/gate-report.schema.json` | `.go-tops/report.json` (§12.3): every layer with its tier and outcome, every law with its verdict and reason code, the laws counts, the vulnerability database timestamp and the shuffle seed |
 | `schema/core.schema.json` | The definitions the configuration and report schemas share: layer outcomes, law verdicts, reason codes, run outcomes, enforcement modes, law IDs, the baseline ledger and the exemption record. Both `$ref` it and define none of these again. It is a local copy: the TOPS shared core will replace it by a checked sync |
-| `schema/lock.schema.json` | `go-tops.lock` (§10): the toolchain, the trust mode and the downloaded binaries, each with an exact version, a URL template and a SHA-256 for each of four platforms. `additionalProperties: false` at every object. Its `protocol` is the constant `0.4.6` |
+| `schema/law.schema.json` | Each `laws/G-NN.yaml` (§8.3): id, title, severity, status, classes, reader, analyzer or tool name, fixture, allow_paths, rationale, fix. `additionalProperties: false` |
+| `schema/lock.schema.json` | `go-tops.lock` (§10): the toolchain, the trust mode and the downloaded binaries, each with an exact version, a URL template and a SHA-256 for each of four platforms. `additionalProperties: false` at every object. Its `protocol` is the constant `0.4.7` |
 
 `schema/core.schema.json` also defines the entries of the two ledger files that `check`
 validates: `survivorEntry` for `.go-tops/survivors.yaml` (§6.4) and `ackEntry` for

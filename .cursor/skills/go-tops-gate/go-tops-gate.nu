@@ -1,8 +1,8 @@
 #!/usr/bin/env nu
 # Wraps `gotops gate`. Does not re-implement the gate.
 # It judges the run from .go-tops/report.json and the exit code under ruling C9:
-# until the required laws are judged (M5), the gate exits 1 on them alone and that
-# is a pass. Anything else that is not a pass is not ok, and not-evaluated is never
+# Before M5 judges the required laws, exit 1 on them alone is a pass (ruling C9);
+# once laws.judged is non-zero, the gate must pass with every required law judged. Anything else that is not a pass is not ok, and not-evaluated is never
 # a pass beyond those required laws. The judgment is the same as the drop-in
 # workflow's judge step; the kit tests hold the two to each other.
 
@@ -46,22 +46,33 @@ def argv-line [args: list<string>] {
   $args | each {|a| quote-arg $a } | str join " "
 }
 
-def laws-problems [laws: record, failed_laws: bool] {
-  if not $failed_laws { return [] }
+def laws-problems [laws: record, failed_laws: bool, layers: list] {
+  let judged = ($laws.judged? | default 0)
   let results = ($laws.results? | default [])
   let refused = ($results | where {|r| ($r.verdict? | default "") == "refuse" } | each {|r| $r.id? | default "?" })
   mut out = []
+  if ($refused | length) > 0 {
+    $out = ($out | append $"a law is refused: ($refused | str join ', ')")
+  }
+  if $judged > 0 {
+    if ($laws.required_not_evaluated? | default 0) != 0 {
+      $out = ($out | append "a required law is still not-evaluated after laws were judged")
+    }
+    let law_layer = ($layers | where {|l| ($l.id? | default "") == "laws" } | get 0?)
+    if $law_layer != null and ($law_layer.outcome? | default "") != "pass" {
+      $out = ($out | append $"the laws layer is ($law_layer.outcome? | default 'missing'), want pass once laws are judged")
+    }
+    return $out
+  }
+  if not $failed_laws { return $out }
   if ($laws.required? | default 0) <= 0 {
     $out = ($out | append "the gate failed on laws, but no law is required: that is not the C9 gap")
   }
   if ($laws.required? | default 0) != ($laws.required_not_evaluated? | default (-1)) {
-    $out = ($out | append "a required law was judged or is missing from the not-evaluated count")
+    $out = ($out | append "a required law was judged or is missing from the not-evaluated count (pre-M5 C9)")
   }
-  if ($laws.judged? | default 0) != 0 {
-    $out = ($out | append $"laws were judged \(($laws.judged)\): a failure there is a refusal, not the C9 gap")
-  }
-  if not ($refused | is-empty) {
-    $out = ($out | append $"a law is refused: ($refused | str join ', ')")
+  if $judged != 0 {
+    $out = ($out | append $"laws were judged ($judged): pre-M5 C9 no longer applies")
   }
   $out
 }
@@ -202,7 +213,7 @@ def judge [code: int, r: record] {
     | append (layer-problems $r)
     | append (run-problems $code $r)
     | append (ratchet-problems $r)
-    | append (laws-problems $r.laws $failed_laws)
+    | append (laws-problems $r.laws $failed_laws ($r.layers? | default []))
 }
 
 def read-report [file: string] {

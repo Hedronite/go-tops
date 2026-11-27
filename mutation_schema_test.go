@@ -11,7 +11,7 @@ import (
 	"github.com/Hedronite/go-tops/internal/report"
 )
 
-// What protocol 0.4.6 fixes about the mutation layer in the schemas: the details
+// What protocol 0.4.7 fixes about the mutation layer in the schemas: the details
 // and survivor rows of the report (GO_TOPS.md §12.3) and the one engine with an
 // adapter (§6.4). Each case changes the published example in one way.
 

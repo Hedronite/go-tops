@@ -1,5 +1,5 @@
 # Go-TOPS configuration (GO_TOPS.md §9), written by gotops init.
-protocol: "0.4.6"
+protocol: "0.4.7"
 version: "0.1.0"
 module: github.com/acme/demo
 class: library-core

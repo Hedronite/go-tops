@@ -1,5 +1,5 @@
 {
-  "protocol": "0.4.6",
+  "protocol": "0.4.7",
   "tool_version": "0.0.0",
   "module": "github.com/acme/myapp",
   "class": "binary-cli",
@@ -42,6 +42,10 @@
     {
       "id": "crap", "tier": 1, "outcome": "fail",
       "details": { "cap": 10, "not_measured": 3,
+        "functions": [ { "func": "ParseSpec", "file": "internal/spec/parse.go:41",
+                           "cc": 14, "cov_pct": 52.0, "crap": 35.7, "cap": 10, "baseline": null },
+                         { "func": "dial", "file": "internal/net/dial_windows.go:12",
+                           "cc": 12, "cov_pct": null, "crap": null, "cap": 10, "baseline": null } ],
         "violations": [ { "func": "ParseSpec", "file": "internal/spec/parse.go:41",
                           "cc": 14, "cov_pct": 52.0, "crap": 35.7, "baseline": null },
                         { "func": "dial", "file": "internal/net/dial_windows.go:12",

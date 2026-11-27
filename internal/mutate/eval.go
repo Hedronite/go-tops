@@ -59,7 +59,7 @@ type Evaluation struct {
 	ExemptionProblems   []exempt.Problem
 }
 
-// Details renders Evaluation into the protocol 0.4.6 mutationDetails JSON map.
+// Details renders Evaluation into the protocol 0.4.7 mutationDetails JSON map.
 func (e Evaluation) Details() map[string]any {
 	rows := make([]map[string]any, 0, len(e.Survivors))
 	for _, s := range e.Survivors {

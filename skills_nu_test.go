@@ -285,6 +285,7 @@ func addResult(id, verdict string) func(report) {
 
 var gateCases = []gateCase{
 	{"C9: the required laws alone, ratchet pass", nil, "1", nil, true, ""},
+	{"M5: laws judged and gate exits 0", both(setLaw("judged", 16), setLaw("required_not_evaluated", 0), setLayer("laws", "pass"), failedItems(), setExit(0)), "0", nil, true, ""},
 	{"exit 0 with nothing failed", both(failedItems(), setExit(0)), "0", nil, true, ""},
 	{"exit 0 while the report says exit 1", nil, "0", nil, false, "exit_code"},
 	{"exit 1 while the report says exit 0", setExit(0), "1", nil, false, "exit_code"},
