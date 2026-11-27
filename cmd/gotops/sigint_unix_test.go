@@ -17,6 +17,15 @@ import (
 )
 
 func TestGateSIGINTKillsChildProcessGroups(t *testing.T) {
+	runSubcommandSIGINTTest(t, "gate", "--only", "tests")
+}
+
+func TestBaselineInitSIGINTKillsChildProcessGroups(t *testing.T) {
+	runSubcommandSIGINTTest(t, "baseline", "--init")
+}
+
+func runSubcommandSIGINTTest(t *testing.T, subArgs ...string) {
+	t.Helper()
 	repoRoot, err := filepath.Abs(filepath.Join("..", ".."))
 	if err != nil {
 		t.Fatal(err)
@@ -120,7 +129,7 @@ func TestWaitForSIGINT(t *testing.T) {
 	}
 
 	var gateOut lockedBuf
-	gateCmd := exec.Command(bin, "gate", "--only", "tests")
+	gateCmd := exec.Command(bin, subArgs...)
 	gateCmd.Dir = dir
 	gateCmd.Env = env
 	gateCmd.Stdout = &gateOut

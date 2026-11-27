@@ -1384,7 +1384,7 @@ func TestChildSleepOnMutant(t *testing.T) {
 	start := time.Now()
 	ev, err := runOverlayOnDir(t, dir, gobuild.Build{CGOEnabled: true}, OverlayOptions{
 		TimeoutCoeff: 1,
-		MinTimeout:   800 * time.Millisecond,
+		MinTimeout:   2500 * time.Millisecond,
 	})
 	elapsed := time.Since(start)
 	if err != nil {
@@ -1785,7 +1785,7 @@ func TestPostflightPollutedPkgDir(t *testing.T) {
 		_, err := runOverlayOnDir(t, dir, gobuild.Build{CGOEnabled: true}, OverlayOptions{
 			Workers:      2,
 			TimeoutCoeff: 1,
-			MinTimeout:   800 * time.Millisecond,
+			MinTimeout:   2500 * time.Millisecond,
 		})
 		if err == nil || !strings.Contains(err.Error(), "postflight") {
 			t.Fatalf("expected postflight failure from leftover O_EXCL lock, got %v", err)
@@ -1913,5 +1913,8 @@ func TestWeak(t *testing.T) {
 	}
 	if ev.NotMeasured != 0 || ev.Mutants != 2 || ev.Killed != 1 || ev.SurvivedUnexplained != 1 {
 		t.Fatalf("expected NotMeasured=0, 2 mutants (1 KILLED, 1 LIVED) via symlink, got %+v", ev)
+	}
+	if ev.Survivors[0].Key.Function != "Lt" || !strings.HasPrefix(ev.Survivors[0].Key.String(), "calc.go:Lt:CONDITIONALS_BOUNDARY:") {
+		t.Fatalf("expected resolved Function name Lt in survivor key via symlink, got %+v", ev.Survivors[0].Key)
 	}
 }

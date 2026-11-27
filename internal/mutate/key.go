@@ -335,6 +335,7 @@ type ModuleIndex struct {
 
 // ScanModule parses all non-generated production Go files under dir for symbol resolution.
 func ScanModule(dir string) (*ModuleIndex, error) {
+	dir = resolvedPath(dir)
 	idx := &ModuleIndex{files: map[string][]declSpan{}}
 	err := filepath.WalkDir(dir, func(p string, d fs.DirEntry, walkErr error) error {
 		return idx.visitEntry(dir, p, d, walkErr)

@@ -220,10 +220,12 @@ func runBaseline(env cli.Env, args []string) int {
 		env.Stderr.Printf("gotops baseline: %v\n\n%s", err, baselineUsage)
 		return baselineCustody
 	}
+	ctx, stop := signalContext()
+	defer stop()
 	if a.status {
-		return runStatus(context.Background(), env, a)
+		return runStatus(ctx, env, a)
 	}
-	if err := baselineMain(context.Background(), env, a); err != nil {
+	if err := baselineMain(ctx, env, a); err != nil {
 		var be *baselineError
 		if !errors.As(err, &be) {
 			be = bfail(baselineEnv, "%v", err)
