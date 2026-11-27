@@ -2,81 +2,24 @@ package mutation
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 
 	"github.com/Hedronite/go-tops/internal/gate"
 	"github.com/Hedronite/go-tops/internal/report"
 )
 
-var (
-	buildOnce   sync.Once
-	gremlins    string
-	gremlinsDir string
-	buildErr    error
-)
-
-func TestMain(m *testing.M) {
-	buildOnce.Do(buildGremlinsOnce)
-	code := m.Run()
-	if gremlinsDir != "" {
-		if err := os.RemoveAll(gremlinsDir); err != nil {
-			code = 1
-		}
-	}
-	os.Exit(code)
-}
-
-func buildGremlinsOnce() {
-	repoRoot, err := filepath.Abs(filepath.Join("..", "..", ".."))
-	if err != nil {
-		buildErr = err
-		return
-	}
-	tmpDir, err := os.MkdirTemp("", "gotops-test-gremlins-*")
-	if err != nil {
-		buildErr = err
-		return
-	}
-	gremlinsDir = tmpDir
-	bin := filepath.Join(tmpDir, "gremlins")
-	cmd := exec.Command("go", "build", "-modfile="+filepath.Join(repoRoot, "tools", "go.mod"),
-		"-o", bin, "github.com/go-gremlins/gremlins/cmd/gremlins")
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		buildErr = errors.New(string(out) + ": " + err.Error())
-		return
-	}
-	gremlins = bin
-}
-
-func gremlinsBinary(t *testing.T) string {
-	t.Helper()
-	if buildErr != nil {
-		t.Fatalf("build gremlins binary: %v", buildErr)
-	}
-	return gremlins
-}
-
-type staticResolver struct {
-	bin string
-	err error
-}
+type staticResolver struct{ err error }
 
 func (r staticResolver) Resolve(_ context.Context, name string) ([]string, error) {
 	if r.err != nil {
 		return nil, r.err
 	}
-	if name == "gremlins" && r.bin != "" {
-		return []string{r.bin}, nil
-	}
-	return nil, gate.ErrToolMissing
+	return []string{name}, nil
 }
 
 func gitExec(t *testing.T, dir string, args ...string) string {
@@ -116,21 +59,7 @@ func writeFiles(t *testing.T, dir string, files map[string]string) {
 	}
 }
 
-func testEnv(t *testing.T, dir, bin string) *gate.Env {
-	t.Helper()
-	return &gate.Env{
-		Dir:   dir,
-		Base:  "main",
-		Exec:  gate.OS{},
-		Tools: staticResolver{bin: bin},
-		Config: gate.Config{
-			Base:     "main",
-			Mutation: gate.MutationConfig{Engine: "gremlins", UnexplainedMax: 0},
-		},
-	}
-}
-
-func TestLayerPreflightAndMissingTool(t *testing.T) {
+func TestLayerMetadataAndPreflightLockError(t *testing.T) {
 	l := Layer{}
 	if l.ID() != "mutation" || l.Tier() != 1 || len(l.Needs()) != 1 || l.Needs()[0] != "tests" {
 		t.Fatalf("unexpected layer metadata: %s %d %v", l.ID(), l.Tier(), l.Needs())
@@ -139,95 +68,10 @@ func TestLayerPreflightAndMissingTool(t *testing.T) {
 	if err := l.Preflight(context.Background(), &gate.Env{Tools: staticResolver{err: lockErr}}); !errors.Is(err, lockErr) {
 		t.Fatalf("Preflight error = %v, want LockError", err)
 	}
-
-	dir := setupGitModule(t, map[string]string{
-		"go.mod": "module example.com/m\n\ngo 1.26\n",
-		"m.go":   "package m\nfunc F(a int) bool { return a > 0 }\n",
-	})
-	writeFiles(t, dir, map[string]string{"m.go": "package m\nfunc F(a int) bool { return a < 1 }\n"})
-	env := testEnv(t, dir, "")
-	res := l.Run(context.Background(), env)
-	if res.Outcome != gate.ToolMissing {
-		t.Fatalf("Outcome = %s, want tool-missing (%s)", res.Outcome, res.Reason)
-	}
 }
 
-func TestLayerRealEngineWeakVsStrongAndEnvScrub(t *testing.T) {
-	bin := gremlinsBinary(t)
-	dir := setupGitModule(t, map[string]string{
-		"go.mod":       "module example.com/calc\n\ngo 1.26\n",
-		"calc.go":      "package calc\nfunc Ok(a int) bool { return a != 0 }\n",
-		"calc_test.go": "package calc\nimport \"testing\"\nfunc TestOk(t *testing.T) { if !Ok(1) { t.Fail() } }\n",
-	})
-	writeFiles(t, dir, map[string]string{
-		".gremlins.yaml": "mutants:\n  conditionals-boundary:\n    enabled: false\nunleash:\n  workers: 99\n",
-		"calc.go":        "package calc\nfunc Lt(a, b int) bool { return a < b }\n",
-		"calc_test.go":   "package calc\nimport \"testing\"\nfunc TestLt(t *testing.T) {\n\tif !Lt(1, 2) || Lt(3, 2) { t.Fatal(\"bad\") }\n}\n",
-	})
-	t.Setenv("GREMLINS_MUTANTS_CONDITIONALS_BOUNDARY_ENABLED", "false")
-	t.Setenv("GREMLINS_UNLEASH_EXCLUDE_FILES", ".*")
-
-	env := testEnv(t, dir, bin)
-	resFail := Layer{}.Run(context.Background(), env)
-	if resFail.Outcome != gate.Fail {
-		t.Fatalf("expected fail on weak boundary test, got %s: %s", resFail.Outcome, resFail.Reason)
-	}
-	raw, err := json.Marshal(resFail.Details)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var details map[string]any
-	if err := json.Unmarshal(raw, &details); err != nil {
-		t.Fatal(err)
-	}
-	surv, ok := details["survived_unexplained"].(float64)
-	if !ok || surv < 1 || details["base"] != "main" || details["base_sha"] == "" {
-		t.Fatalf("unexpected mutationDetails: %s", string(raw))
-	}
-	rows, ok := details["survivors"].([]any)
-	if !ok {
-		t.Fatalf("unexpected survivors type: %T", details["survivors"])
-	}
-	foundBoundary := false
-	for _, r := range rows {
-		m, ok := r.(map[string]any)
-		if !ok {
-			t.Fatalf("unexpected row type: %T", r)
-		}
-		if _, has := m["explained"]; !has || m["explained"] != nil {
-			t.Fatalf("expected explicit explained:null, got %+v", m)
-		}
-		if m["mutator"] == "CONDITIONALS_BOUNDARY" && m["function"] == "Lt" && m["status"] == "LIVED" {
-			foundBoundary = true
-		}
-	}
-	if !foundBoundary {
-		t.Fatalf("expected CONDITIONALS_BOUNDARY LIVED in Lt, got %s", string(raw))
-	}
-
-	// Expired exemption does not cover the survivor (P11).
-	envExpired := testEnv(t, dir, bin)
-	envExpired.Config.Exemptions = []report.Exemption{
-		{Path: "calc.go", Symbol: "Lt", Layer: "mutation", Reason: "old", Owner: "@a", Expires: "2020-01-01"},
-	}
-	if resExp := (Layer{}).Run(context.Background(), envExpired); resExp.Outcome != gate.Fail {
-		t.Fatalf("expected expired exemption not to excuse survivor, got %s", resExp.Outcome)
-	}
-
-	// Strengthen test -> pass.
-	writeFiles(t, dir, map[string]string{
-		"calc_test.go": "package calc\nimport \"testing\"\nfunc TestLt(t *testing.T) {\n\tif !Lt(1, 2) || Lt(2, 2) || Lt(3, 2) { t.Fatal(\"bad\") }\n}\n",
-	})
-	resPass := Layer{}.Run(context.Background(), env)
-	if resPass.Outcome != gate.Pass {
-		t.Fatalf("expected pass on strong test, got %s: %s", resPass.Outcome, resPass.Reason)
-	}
-}
-
-func TestLayerRealEnginePackageMainMultiEditSubdirAndOutOfBuild(t *testing.T) {
-	bin := gremlinsBinary(t)
-
-	// 1. package main (E18/Q1 -> NeedsIntegration=true) + E1 multi-edit hunk in one file.
+func TestLayerPackageMainMultiEditSubdirAndOutOfBuild(t *testing.T) {
+	// 1. package main (E18) + E1 multi-edit hunk in one file.
 	dirMain := setupGitModule(t, map[string]string{
 		"go.mod": "module example.com/cli\n\ngo 1.26\n",
 		"cmd/tool/main.go": `package main
@@ -272,7 +116,7 @@ func TestAll(t *testing.T) {
 }
 `,
 	})
-	resMainFail := Layer{}.Run(context.Background(), testEnv(t, dirMain, bin))
+	resMainFail := Layer{}.Run(context.Background(), overlayEnv(t, dirMain))
 	if resMainFail.Outcome != gate.Fail {
 		t.Fatalf("package main + multi-edit hunk expected fail on second LIVED, got %s: %s", resMainFail.Outcome, resMainFail.Reason)
 	}
@@ -286,7 +130,7 @@ func TestAll(t *testing.T) {
 }
 `,
 	})
-	resMainPass := Layer{}.Run(context.Background(), testEnv(t, dirMain, bin))
+	resMainPass := Layer{}.Run(context.Background(), overlayEnv(t, dirMain))
 	if resMainPass.Outcome != gate.Pass {
 		t.Fatalf("package main strong test expected pass, got %s: %s", resMainPass.Outcome, resMainPass.Reason)
 	}
@@ -303,12 +147,12 @@ func TestAll(t *testing.T) {
 		"sub/mod/calc_test.go":  "package mod\nimport \"testing\"\nfunc TestLt(t *testing.T) { if !Lt(1, 2) || Lt(2, 2) || Lt(3, 2) { t.Fatal(\"bad\") } }\n",
 		"sub/mod/plat_never.go": "//go:build never_this_os\n\npackage mod\n\nfunc Lin(a, b int) bool { return a < b }\n",
 	})
-	resSub := Layer{}.Run(context.Background(), testEnv(t, filepath.Join(dirSub, "sub", "mod"), bin))
+	resSub := Layer{}.Run(context.Background(), overlayEnv(t, filepath.Join(dirSub, "sub", "mod")))
 	if resSub.Outcome != gate.Pass {
 		t.Fatalf("subdir + out-of-build expected pass, got %s: %s", resSub.Outcome, resSub.Reason)
 	}
 	if got, ok := resSub.Details["not_measured"].(int); !ok || got != 2 {
-		t.Fatalf("not_measured = %d, want 2 (plat_linux.go)", got)
+		t.Fatalf("not_measured = %d, want 2 (plat_never.go)", got)
 	}
 }
 
@@ -322,14 +166,14 @@ func TestLayerVacuousCommentOnlyAndExemptionProblems(t *testing.T) {
 	writeFiles(t, dir, map[string]string{
 		"v_test.go": "package v\nimport \"testing\"\nfunc TestF(t *testing.T) { _ = F() }\n",
 	})
-	env := testEnv(t, dir, gremlinsBinary(t))
+	env := overlayEnv(t, dir)
 	resVac := Layer{}.Run(context.Background(), env)
 	if resVac.Outcome != gate.Vacuous || resVac.Details["mutants"] != 0 {
 		t.Fatalf("expected vacuous with mutationDetails, got %+v", resVac)
 	}
 
 	// Unmatched mutation exemption even on vacuous diff => fail.
-	envBadEx := testEnv(t, dir, "")
+	envBadEx := overlayEnv(t, dir)
 	envBadEx.Config.Exemptions = []report.Exemption{
 		{Path: "does_not_exist.go", Layer: "mutation", Reason: "stale", Owner: "@a", Expires: "2027-01-01"},
 	}
@@ -348,19 +192,18 @@ func TestLayerVacuousCommentOnlyAndExemptionProblems(t *testing.T) {
 	}
 }
 
-func TestLayerReportValidatesAgainstLive045Schema(t *testing.T) {
-	bin := gremlinsBinary(t)
+func TestLayerReportValidatesAgainstLiveSchema(t *testing.T) {
 	dir := setupGitModule(t, map[string]string{
 		"go.mod":       "module example.com/schemaok\n\ngo 1.26\n",
 		"calc.go":      "package calc\nfunc Ok(a int) bool { return a != 0 }\n",
 		"calc_test.go": "package calc\nimport \"testing\"\nfunc TestOk(t *testing.T) { if !Ok(1) { t.Fail() } }\n",
 	})
-	// Check Fail (LIVED) + Pass + Vacuous all validate via report.Write + report.Load against live 0.4.5 schema.
+	// Check Fail (LIVED) + Pass + Vacuous all validate via report.Write + report.Load against live schema.
 	writeFiles(t, dir, map[string]string{
 		"calc.go":      "package calc\nfunc Lt(a, b int) bool { return a < b }\n",
 		"calc_test.go": "package calc\nimport \"testing\"\nfunc TestLt(t *testing.T) { if !Lt(1, 2) || Lt(3, 2) { t.Fatal(\"bad\") } }\n",
 	})
-	resFail := Layer{}.Run(context.Background(), testEnv(t, dir, bin))
+	resFail := Layer{}.Run(context.Background(), overlayEnv(t, dir))
 	if resFail.Outcome != gate.Fail {
 		t.Fatalf("expected Fail, got %s: %s", resFail.Outcome, resFail.Reason)
 	}
@@ -368,7 +211,7 @@ func TestLayerReportValidatesAgainstLive045Schema(t *testing.T) {
 	writeFiles(t, dir, map[string]string{
 		"calc_test.go": "package calc\nimport \"testing\"\nfunc TestLt(t *testing.T) { if !Lt(1, 2) || Lt(2, 2) || Lt(3, 2) { t.Fatal(\"bad\") } }\n",
 	})
-	resPass := Layer{}.Run(context.Background(), testEnv(t, dir, bin))
+	resPass := Layer{}.Run(context.Background(), overlayEnv(t, dir))
 	if resPass.Outcome != gate.Pass {
 		t.Fatalf("expected Pass, got %s: %s", resPass.Outcome, resPass.Reason)
 	}
@@ -378,7 +221,7 @@ func TestLayerReportValidatesAgainstLive045Schema(t *testing.T) {
 		"v.go":   "package vac\nfunc F() int { return 1 }\n",
 	})
 	writeFiles(t, dirVac, map[string]string{"README.md": "docs\n"})
-	resVac := Layer{}.Run(context.Background(), testEnv(t, dirVac, bin))
+	resVac := Layer{}.Run(context.Background(), overlayEnv(t, dirVac))
 	if resVac.Outcome != gate.Vacuous {
 		t.Fatalf("expected Vacuous, got %s: %s", resVac.Outcome, resVac.Reason)
 	}
@@ -424,33 +267,7 @@ func TestLayerReportValidatesAgainstLive045Schema(t *testing.T) {
 	}
 }
 
-func TestLayerRealEngineFailsOnUnmutatedCopySymlinkAndSpaceDir(t *testing.T) {
-	bin := gremlinsBinary(t)
-
-	// B4: symlink dropped by CachedDealer causes unmutated copy failure (must fail, never false-pass).
-	outsideFile := filepath.Join(t.TempDir(), "secret.txt")
-	if err := os.WriteFile(outsideFile, []byte("ok"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	dirSym := setupGitModule(t, map[string]string{
-		"go.mod":       "module example.com/sym\n\ngo 1.26\n",
-		"calc.go":      "package sym\nfunc Ok(a int) bool { return a == 0 }\n",
-		"calc_test.go": "package sym\nimport (\n\t\"os\"\n\t\"testing\"\n)\nfunc TestOk(t *testing.T) {\n\tif _, err := os.ReadFile(\"data.txt\"); err != nil { t.Fatal(err) }\n\tif !Ok(0) { t.Fatal(\"bad\") }\n}\n",
-	})
-	if err := os.Symlink(outsideFile, filepath.Join(dirSym, "data.txt")); err != nil {
-		t.Fatal(err)
-	}
-	gitExec(t, dirSym, "add", "data.txt")
-	gitExec(t, dirSym, "commit", "-m", "add symlink fixture")
-	writeFiles(t, dirSym, map[string]string{
-		"calc.go":      "package sym\nfunc Lt(a, b int) bool { return a < b }\n",
-		"calc_test.go": "package sym\nimport (\n\t\"os\"\n\t\"testing\"\n)\nfunc TestLt(t *testing.T) {\n\tif _, err := os.ReadFile(\"data.txt\"); err != nil { t.Fatal(err) }\n\tif !Lt(1, 2) || Lt(3, 2) { t.Fatal(\"bad\") }\n}\n",
-	})
-	resSym := Layer{}.Run(context.Background(), testEnv(t, dirSym, bin))
-	if resSym.Outcome != gate.Fail || !strings.Contains(resSym.Reason, "unmutated copy") {
-		t.Fatalf("expected fail naming unmutated copy on symlinked fixture, got %s: %s", resSym.Outcome, resSym.Reason)
-	}
-
+func TestLayerFailsAWeakTestUnderASpacedPath(t *testing.T) {
 	// B5: module directory path containing a space still catches weak package main survivor.
 	dirSpace := filepath.Join(t.TempDir(), "with space")
 	if err := os.MkdirAll(dirSpace, 0o755); err != nil {
@@ -471,14 +288,13 @@ func TestLayerRealEngineFailsOnUnmutatedCopySymlinkAndSpaceDir(t *testing.T) {
 		"cmd/tool/main.go":      "package main\nfunc lt(a, b int) bool { return a < b }\n",
 		"cmd/tool/main_test.go": "package main\nimport \"testing\"\nfunc TestLt(t *testing.T) { if !lt(1, 2) || lt(3, 2) { t.Fatal(\"bad\") } }\n",
 	})
-	resSpace := Layer{}.Run(context.Background(), testEnv(t, dirSpace, bin))
+	resSpace := Layer{}.Run(context.Background(), overlayEnv(t, dirSpace))
 	if resSpace.Outcome != gate.Fail {
 		t.Fatalf("expected fail in directory with space, got %s: %s", resSpace.Outcome, resSpace.Reason)
 	}
 }
 
-func TestLayerRealEngineF1ColorConfigAndF3DiffOpts(t *testing.T) {
-	bin := gremlinsBinary(t)
+func TestLayerF1ColorConfigAndF3DiffOpts(t *testing.T) {
 	dir := setupGitModule(t, map[string]string{
 		"go.mod":     "module example.com/f13\n\ngo 1.26\n",
 		"fx.go":      "package fx\nfunc Add(a, b int) int { return a - b }\n",
@@ -489,22 +305,21 @@ func TestLayerRealEngineF1ColorConfigAndF3DiffOpts(t *testing.T) {
 		"fx_test.go": "package fx\nimport \"testing\"\nfunc TestAdd(t *testing.T) {\n\tif Add(2, 3) != 5 { t.Fatal(\"bad\") }\n\tif Label(\"hi\") != \"hi!\" { t.Fatal(\"label\") }\n}\n",
 	})
 
-	// F1: color.ui=always and color.diff=always must still pass with killed + NOT VIABLE string concat (zero false failures).
+	// F1: color.ui=always and color.diff=always must still pass with killed + NOT VIABLE string concat (no false failure).
 	gitExec(t, dir, "config", "color.ui", "always")
 	gitExec(t, dir, "config", "color.diff", "always")
 	// F3: GIT_DIFF_OPTS=-u5 must not inject context lines causing strong test to fail.
 	t.Setenv("GIT_DIFF_OPTS", "-u5")
-	res := Layer{}.Run(context.Background(), testEnv(t, dir, bin))
+	res := Layer{}.Run(context.Background(), overlayEnv(t, dir))
 	if res.Outcome != gate.Pass {
 		t.Fatalf("expected Pass under color.ui/color.diff/GIT_DIFF_OPTS + string concat, got %s: %s", res.Outcome, res.Reason)
 	}
-	if got, ok := res.Details["mutants"].(int); !ok || got != 2 {
-		t.Fatalf("expected 2 mutants (numeric + and string concat +), got %v", res.Details)
+	if res.Details["mutants"] != 1 || res.Details["dropped"] != 1 {
+		t.Fatalf("expected the numeric + judged and the string + dropped, got %v", res.Details)
 	}
 }
 
-func TestLayerRealEngineF2LineDirectivesFailClosed(t *testing.T) {
-	bin := gremlinsBinary(t)
+func TestLayerF2LineDirectivesFailClosed(t *testing.T) {
 	for _, tc := range []struct {
 		name      string
 		directive string
@@ -523,7 +338,7 @@ func TestLayerRealEngineF2LineDirectivesFailClosed(t *testing.T) {
 			writeFiles(t, dir, map[string]string{
 				"fx.go": "package fx\nfunc Zero() int { return 0 }\n" + tc.directive + "func Add(a, b int) int { return a + b }\n",
 			})
-			res := Layer{}.Run(context.Background(), testEnv(t, dir, bin))
+			res := Layer{}.Run(context.Background(), overlayEnv(t, dir))
 			if res.Outcome != gate.Fail {
 				t.Fatalf("%s: expected Fail closed on //line directive, got %s: %s", tc.name, res.Outcome, res.Reason)
 			}
@@ -539,7 +354,7 @@ func TestLayerRealEngineF2LineDirectivesFailClosed(t *testing.T) {
 		writeFiles(t, dir, map[string]string{
 			"fx.go": "package fx\nfunc Zero() int { return 0 }\nfunc Add(a, b int) int { return /*line fx.go:1:1*/ a + b }\n",
 		})
-		res := Layer{}.Run(context.Background(), testEnv(t, dir, bin))
+		res := Layer{}.Run(context.Background(), overlayEnv(t, dir))
 		if res.Outcome != gate.Fail {
 			t.Fatalf("expected Fail closed on inline /*line*/ directive, got %s: %s", res.Outcome, res.Reason)
 		}

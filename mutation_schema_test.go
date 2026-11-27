@@ -125,7 +125,7 @@ func TestOnlyAnEngineWithAnAdapterIsConfigurable(t *testing.T) {
 	if !strings.Contains(string(data), "engine: overlay ") {
 		t.Fatal("the example config names no engine")
 	}
-	for engine, ok := range map[string]bool{"overlay": true, "gremlins": false, "go-mutesting": false, "mutest": false} {
+	for engine, ok := range map[string]bool{"overlay": true, "go-mutesting": false, "mutest": false} {
 		_, issues, err := config.Load([]byte(strings.Replace(string(data), "engine: overlay ", "engine: "+engine+" ", 1)))
 		if err != nil {
 			t.Fatal(err)

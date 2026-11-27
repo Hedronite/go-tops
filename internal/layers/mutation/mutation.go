@@ -39,10 +39,7 @@ func (Layer) Preflight(ctx context.Context, env *gate.Env) error {
 	if env == nil {
 		return errors.New("mutation preflight: nil env")
 	}
-	if env.Config.Mutation.Engine == "overlay" {
-		return gate.PreflightTools(ctx, env, "go")
-	}
-	return gate.PreflightTools(ctx, env, "gremlins")
+	return gate.PreflightTools(ctx, env, "go")
 }
 
 // Run implements gate.Layer.
@@ -60,29 +57,15 @@ func (Layer) Run(ctx context.Context, env *gate.Env) gate.Result {
 
 func runWithDiff(ctx context.Context, env *gate.Env, diff mutate.DiffResult, build gobuild.Build) gate.Result {
 	if !diff.HasChangedProdLines() {
-		return evaluateAndJudge(env, diff, nil, true)
+		return evaluateAndJudge(env, diff, true)
 	}
 	if len(diff.InBuildFiles) == 0 {
-		return evaluateAndJudge(env, diff, nil, false)
+		return evaluateAndJudge(env, diff, false)
 	}
 	return executeAndJudge(ctx, env, diff, build)
 }
 
 func executeAndJudge(ctx context.Context, env *gate.Env, diff mutate.DiffResult, build gobuild.Build) gate.Result {
-	if env.Config.Mutation.Engine == "overlay" {
-		return executeOverlay(ctx, env, diff, build)
-	}
-	reports, err := mutate.RunGremlinsBatches(ctx, *env, diff, build)
-	if err != nil {
-		if errors.Is(err, gate.ErrToolMissing) {
-			return gate.MissingTool("gremlins", err)
-		}
-		return failure(err)
-	}
-	return evaluateAndJudge(env, diff, reports, false)
-}
-
-func executeOverlay(ctx context.Context, env *gate.Env, diff mutate.DiffResult, build gobuild.Build) gate.Result {
 	ev, err := mutate.RunOverlay(ctx, *env, diff, build, mutate.OverlayOptions{Today: time.Now()})
 	if err != nil {
 		if errors.Is(err, gate.ErrToolMissing) || errors.Is(err, gate.ErrNotFound) {
@@ -93,16 +76,9 @@ func executeOverlay(ctx context.Context, env *gate.Env, diff mutate.DiffResult, 
 	return judgeResult(env.Config.Mutation.UnexplainedMax, ev)
 }
 
-func evaluateAndJudge(env *gate.Env, diff mutate.DiffResult, reports [][]byte, vacuous bool) gate.Result {
-	var (
-		ev  mutate.Evaluation
-		err error
-	)
-	if env.Config.Mutation.Engine == "overlay" {
-		ev, err = mutate.EvaluateOverlayEmpty(env.Config.Mutation, env.Config.Exemptions, diff, env.Dir, time.Now())
-	} else {
-		ev, err = mutate.EvaluateBatches(env.Config.Mutation, env.Config.Exemptions, reports, diff, env.Dir, time.Now())
-	}
+// evaluateAndJudge judges a diff that gives the engine nothing to run.
+func evaluateAndJudge(env *gate.Env, diff mutate.DiffResult, vacuous bool) gate.Result {
+	ev, err := mutate.EvaluateOverlayEmpty(env.Config.Mutation, env.Config.Exemptions, diff, env.Dir, time.Now())
 	if err != nil {
 		return failure(err)
 	}

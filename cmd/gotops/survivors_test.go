@@ -11,6 +11,7 @@ import (
 
 	"github.com/Hedronite/go-tops/internal/cli"
 	"github.com/Hedronite/go-tops/internal/gate"
+	"github.com/Hedronite/go-tops/internal/gobuild"
 	"github.com/Hedronite/go-tops/internal/mutate"
 )
 
@@ -240,8 +241,9 @@ func TestSurvivorsExpireRemovesOnlyThePassedEntries(t *testing.T) {
 	}
 }
 
-// judged runs the adapter's accounting over one changed line whose two mutants
-// both lived, with the ledger this command wires in.
+// judged runs the engine over one changed line whose two mutants both survive,
+// with the ledger this command wires in. The module has no test, so nothing is
+// compiled and both are NOT COVERED.
 func judged(t *testing.T, ledger string, today time.Time) (mutate.Evaluation, error) {
 	t.Helper()
 	dir := t.TempDir()
@@ -250,11 +252,10 @@ func judged(t *testing.T, ledger string, today time.Time) (mutate.Evaluation, er
 	if ledger != "" {
 		put(t, dir, survivorsRel, ledger)
 	}
-	out := []byte(`{"go_module":"example.com/m","files":[{"file_name":"x.go","mutations":[` +
-		`{"type":"CONDITIONALS_BOUNDARY","status":"LIVED","line":3,"column":31},` +
-		`{"type":"CONDITIONALS_NEGATION","status":"LIVED","line":3,"column":31}]}]}`)
-	diff := mutate.DiffResult{InBuildFiles: map[string]map[int]bool{"x.go": {3: true}}}
-	return mutate.Evaluate(gate.MutationConfig{Ledger: survivorsRel}, nil, out, false, diff, dir, today)
+	lines := map[string]map[int]bool{"x.go": {3: true}}
+	diff := mutate.DiffResult{ProductionFiles: lines, InBuildFiles: lines}
+	env := gate.Env{Dir: dir, Config: gate.Config{Mutation: gate.MutationConfig{Ledger: survivorsRel}}}
+	return mutate.RunOverlay(t.Context(), env, diff, gobuild.Build{}, mutate.OverlayOptions{Today: today})
 }
 
 func TestTheGateExplainsASurvivorOnlyByALiveEntryOfItsExactKey(t *testing.T) {

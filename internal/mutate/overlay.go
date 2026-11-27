@@ -64,7 +64,7 @@ type fileMutantPlan struct {
 // RunOverlay runs diff-scoped mutation testing using go test -c -overlay without modifying env.Dir.
 func RunOverlay(ctx context.Context, env gate.Env, diff DiffResult, build gobuild.Build, opts OverlayOptions) (Evaluation, error) {
 	opts = normalizeOverlayOpts(opts)
-	ev, ec, err := prepareEvaluation(env.Config.Mutation, env.Config.Exemptions, diff, env.Dir, opts.Today, true)
+	ev, ec, err := prepareEvaluation(env.Config.Mutation, env.Config.Exemptions, diff, env.Dir, opts.Today)
 	if err != nil {
 		return Evaluation{}, err
 	}

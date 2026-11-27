@@ -33,7 +33,7 @@ func overlayEnv(t *testing.T, dir string) *gate.Env {
 	}
 }
 
-func TestOverlayLayerPreflightDoesNotRequireGremlins(t *testing.T) {
+func TestOverlayLayerPreflightNeedsOnlyGo(t *testing.T) {
 	goBin, err := exec.LookPath("go")
 	if err != nil {
 		t.Fatal(err)
@@ -277,8 +277,8 @@ func TestOverlayLayerPreflightNilAndEngineVariants(t *testing.T) {
 	if err := (Layer{}).Preflight(t.Context(), defaultEnv); err != nil {
 		t.Fatalf("default preflight: %v", err)
 	}
-	if !slices.Equal(spyDefault.names, []string{"gremlins"}) {
-		t.Fatalf("expected default preflight to resolve [gremlins], got %v", spyDefault.names)
+	if !slices.Equal(spyDefault.names, []string{"go"}) {
+		t.Fatalf("expected default preflight to resolve [go], got %v", spyDefault.names)
 	}
 }
 

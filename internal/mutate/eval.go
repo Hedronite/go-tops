@@ -15,7 +15,7 @@ import (
 	"github.com/Hedronite/go-tops/internal/report"
 )
 
-// ProtocolMutatorsOn lists the 6 mutators enabled under protocol 0.4.5 (M4-R10).
+// ProtocolMutatorsOn lists the six mutators of §6.4.
 var ProtocolMutatorsOn = []string{
 	"ARITHMETIC_BASE",
 	"CONDITIONALS_BOUNDARY",
@@ -23,15 +23,6 @@ var ProtocolMutatorsOn = []string{
 	"INCREMENT_DECREMENT",
 	"INVERT_LOGICAL",
 	"INVERT_NEGATIVES",
-}
-
-// ProtocolMutatorsOff lists the 5 mutators explicitly disabled under protocol 0.4.5.
-var ProtocolMutatorsOff = []string{
-	"INVERT_ASSIGNMENTS",
-	"INVERT_BITWISE",
-	"INVERT_BWASSIGN",
-	"INVERT_LOOPCTRL",
-	"REMOVE_SELF_ASSIGNMENTS",
 }
 
 // EnabledMutators returns a lookup set of the 6 protocol-enabled mutators.
@@ -68,7 +59,7 @@ type Evaluation struct {
 	ExemptionProblems   []exempt.Problem
 }
 
-// Details renders Evaluation into the protocol 0.4.5 mutationDetails JSON map.
+// Details renders Evaluation into the protocol 0.4.6 mutationDetails JSON map.
 func (e Evaluation) Details() map[string]any {
 	rows := make([]map[string]any, 0, len(e.Survivors))
 	for _, s := range e.Survivors {
@@ -121,8 +112,8 @@ type evalContext struct {
 	ledger Ledger
 }
 
-func prepareEvaluation(cfg gate.MutationConfig, exemptions []report.Exemption, diff DiffResult, dir string, today time.Time, allowOverlay bool) (Evaluation, evalContext, error) {
-	if err := validateEngine(cfg.Engine, allowOverlay); err != nil {
+func prepareEvaluation(cfg gate.MutationConfig, exemptions []report.Exemption, diff DiffResult, dir string, today time.Time) (Evaluation, evalContext, error) {
+	if err := validateEngine(cfg.Engine); err != nil {
 		return Evaluation{}, evalContext{}, err
 	}
 	notMeasured, err := countNotMeasured(dir, diff.OutOfBuildFiles)
@@ -145,23 +136,17 @@ func prepareEvaluation(cfg gate.MutationConfig, exemptions []report.Exemption, d
 	return ev, evalContext{idx: idx, exRes: exRes, ledger: ledger}, nil
 }
 
-func validateEngine(engine string, allowOverlay bool) error {
-	switch engine {
-	case "", "gremlins":
-		return nil
-	case "overlay":
-		if allowOverlay {
-			return nil
-		}
-		return fmt.Errorf("mutation engine %q is not supported in M4 (only gremlins)", engine)
-	default:
-		return fmt.Errorf("mutation engine %q is not supported (want gremlins or overlay)", engine)
+// validateEngine accepts the one engine, and an empty name for it.
+func validateEngine(engine string) error {
+	if engine != "" && engine != "overlay" {
+		return fmt.Errorf("mutation engine %q is not supported (want overlay)", engine)
 	}
+	return nil
 }
 
 // EvaluateOverlayEmpty evaluates a vacuous or out-of-build-only diff under the overlay engine.
 func EvaluateOverlayEmpty(cfg gate.MutationConfig, exemptions []report.Exemption, diff DiffResult, dir string, today time.Time) (Evaluation, error) {
-	ev, _, err := prepareEvaluation(cfg, exemptions, diff, dir, today, true)
+	ev, _, err := prepareEvaluation(cfg, exemptions, diff, dir, today)
 	return ev, err
 }
 
@@ -232,10 +217,6 @@ func checkNoLineDirectives(dir string, inBuild map[string]map[int]bool) error {
 
 func recordMutant(ev *Evaluation, rel string, m MutantOutcome, src []byte, idx *ModuleIndex, exRes exempt.MutationResult, ledger Ledger) error {
 	switch m.Status {
-	case "SKIPPED":
-		return fmt.Errorf("gremlins skipped mutant on changed line %s:%d:%d", rel, m.Line, m.Column)
-	case "RUNNABLE":
-		return fmt.Errorf("gremlins left mutant RUNNABLE at %s:%d:%d", rel, m.Line, m.Column)
 	case "NOT VIABLE":
 		ev.Dropped++
 		return nil

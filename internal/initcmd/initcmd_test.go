@@ -439,10 +439,6 @@ func TestToolsModPinsTheModuleTools(t *testing.T) {
 			t.Errorf("tools/go.mod lacks %q:\n%s", want, mod)
 		}
 	}
-	// The mutation engine is part of gotops (§6.4): nothing is pinned for it.
-	if strings.Contains(mod, "gremlins") {
-		t.Errorf("tools/go.mod pins an external mutation engine:\n%s", mod)
-	}
 }
 
 func TestDevelopmentBuildLeavesGotopsOutWithANote(t *testing.T) {
