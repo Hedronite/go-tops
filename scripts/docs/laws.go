@@ -98,8 +98,10 @@ func checkLaws(r *repo) checkResult {
 	}
 	sort.Strings(files)
 	if len(files) != len(specRows) {
-		res.Findings = append(res.Findings, finding{catalogFile, 0,
-			fmt.Sprintf("laws: %d files, §8.2 has %d rows", len(files), len(specRows))})
+		res.Findings = append(res.Findings, finding{
+			catalogFile, 0,
+			fmt.Sprintf("laws: %d files, §8.2 has %d rows", len(files), len(specRows)),
+		})
 	}
 	for id := range specRows {
 		want := id + ".yaml"

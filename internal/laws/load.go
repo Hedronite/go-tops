@@ -38,53 +38,59 @@ var (
 func ErrCatalog() error { return catalogErr }
 
 func loadCatalog() {
-	fsys := gotops.Files()
-	names, err := fs.Glob(fsys, "laws/G-*.yaml")
+	out, err := loadCatalogFrom(gotops.Files())
 	if err != nil {
-		catalogErr = fmt.Errorf("glob embedded laws: %w", err)
+		catalogErr = err
 		return
-	}
-	if len(names) == 0 {
-		catalogErr = fmt.Errorf("embedded laws: no G-NN.yaml files")
-		return
-	}
-	sort.Slice(names, func(i, j int) bool { return lawIDOrder(names[i]) < lawIDOrder(names[j]) })
-	var out []Law
-	seen := map[string]bool{}
-	for _, name := range names {
-		data, err := fs.ReadFile(fsys, name)
-		if err != nil {
-			catalogErr = fmt.Errorf("read %s: %w", name, err)
-			return
-		}
-		var doc lawYAML
-		if err := yaml.Unmarshal(data, &doc); err != nil {
-			catalogErr = fmt.Errorf("parse %s: %w", name, err)
-			return
-		}
-		if doc.ID == "" {
-			catalogErr = fmt.Errorf("%s: missing id", name)
-			return
-		}
-		base := filepath.Base(name)
-		want := doc.ID + ".yaml"
-		if base != want {
-			catalogErr = fmt.Errorf("%s: id %q does not match file name", name, doc.ID)
-			return
-		}
-		if seen[doc.ID] {
-			catalogErr = fmt.Errorf("duplicate law id %s", doc.ID)
-			return
-		}
-		seen[doc.ID] = true
-		l, err := lawFromYAML(doc)
-		if err != nil {
-			catalogErr = fmt.Errorf("%s: %w", name, err)
-			return
-		}
-		out = append(out, l)
 	}
 	catalog = out
+}
+
+// catalogFileCountOK reports whether the glob returned at least one law file.
+func catalogFileCountOK(n int) bool { return n > 0 }
+
+func loadCatalogFrom(fsys fs.FS) ([]Law, error) {
+	names, err := fs.Glob(fsys, "laws/G-*.yaml")
+	if err != nil {
+		return nil, fmt.Errorf("glob embedded laws: %w", err)
+	}
+	if !catalogFileCountOK(len(names)) {
+		return nil, fmt.Errorf("embedded laws: no G-NN.yaml files")
+	}
+	sort.Slice(names, func(i, j int) bool { return lawIDOrder(names[i]) < lawIDOrder(names[j]) })
+	seen := map[string]bool{}
+	var out []Law
+	for _, name := range names {
+		l, err := readLawFile(fsys, name)
+		if err != nil {
+			return nil, err
+		}
+		if seen[l.ID] {
+			return nil, fmt.Errorf("duplicate law id %s", l.ID)
+		}
+		seen[l.ID] = true
+		out = append(out, l)
+	}
+	return out, nil
+}
+
+func readLawFile(fsys fs.FS, name string) (Law, error) {
+	data, err := fs.ReadFile(fsys, name)
+	if err != nil {
+		return Law{}, fmt.Errorf("read %s: %w", name, err)
+	}
+	var doc lawYAML
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		return Law{}, fmt.Errorf("parse %s: %w", name, err)
+	}
+	if doc.ID == "" {
+		return Law{}, fmt.Errorf("%s: missing id", name)
+	}
+	base := filepath.Base(name)
+	if base != doc.ID+".yaml" {
+		return Law{}, fmt.Errorf("%s: id %q does not match file name", name, doc.ID)
+	}
+	return lawFromYAML(doc)
 }
 
 func lawIDOrder(name string) int {
