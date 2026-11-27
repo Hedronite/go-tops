@@ -1,6 +1,6 @@
 // Package mutation is gate 5 of GO_TOPS.md §3.1: the mutation layer. It runs
-// gremlins over the branch diff, maps statuses and survivor keys per §6.4, and
-// accounts exemptions and explained survivors under protocol 0.4.5.
+// the configured mutation engine over the branch diff, maps statuses and survivor
+// keys per §6.4, and accounts exemptions and explained survivors.
 package mutation
 
 import (
@@ -36,6 +36,12 @@ func (Layer) Needs() []string { return []string{tests.TestsID} }
 
 // Preflight implements gate.Preflighter.
 func (Layer) Preflight(ctx context.Context, env *gate.Env) error {
+	if env == nil {
+		return errors.New("mutation preflight: nil env")
+	}
+	if env.Config.Mutation.Engine == "overlay" {
+		return gate.PreflightTools(ctx, env, "go")
+	}
 	return gate.PreflightTools(ctx, env, "gremlins")
 }
 
@@ -63,6 +69,9 @@ func runWithDiff(ctx context.Context, env *gate.Env, diff mutate.DiffResult, bui
 }
 
 func executeAndJudge(ctx context.Context, env *gate.Env, diff mutate.DiffResult, build gobuild.Build) gate.Result {
+	if env.Config.Mutation.Engine == "overlay" {
+		return executeOverlay(ctx, env, diff, build)
+	}
 	reports, err := mutate.RunGremlinsBatches(ctx, *env, diff, build)
 	if err != nil {
 		if errors.Is(err, gate.ErrToolMissing) {
@@ -73,8 +82,27 @@ func executeAndJudge(ctx context.Context, env *gate.Env, diff mutate.DiffResult,
 	return evaluateAndJudge(env, diff, reports, false)
 }
 
+func executeOverlay(ctx context.Context, env *gate.Env, diff mutate.DiffResult, build gobuild.Build) gate.Result {
+	ev, err := mutate.RunOverlay(ctx, *env, diff, build, mutate.OverlayOptions{Today: time.Now()})
+	if err != nil {
+		if errors.Is(err, gate.ErrToolMissing) || errors.Is(err, gate.ErrNotFound) {
+			return gate.MissingTool("go", err)
+		}
+		return failure(err)
+	}
+	return judgeResult(env.Config.Mutation.UnexplainedMax, ev)
+}
+
 func evaluateAndJudge(env *gate.Env, diff mutate.DiffResult, reports [][]byte, vacuous bool) gate.Result {
-	ev, err := mutate.EvaluateBatches(env.Config.Mutation, env.Config.Exemptions, reports, diff, env.Dir, time.Now())
+	var (
+		ev  mutate.Evaluation
+		err error
+	)
+	if env.Config.Mutation.Engine == "overlay" {
+		ev, err = mutate.EvaluateOverlayEmpty(env.Config.Mutation, env.Config.Exemptions, diff, env.Dir, time.Now())
+	} else {
+		ev, err = mutate.EvaluateBatches(env.Config.Mutation, env.Config.Exemptions, reports, diff, env.Dir, time.Now())
+	}
 	if err != nil {
 		return failure(err)
 	}

@@ -4,10 +4,17 @@
 package main
 
 import (
+	"context"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/Hedronite/go-tops/internal/cli"
 )
+
+func signalContext() (context.Context, context.CancelFunc) {
+	return signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+}
 
 func main() {
 	os.Exit(cli.Main(os.Args[1:], os.Stdout, os.Stderr))
