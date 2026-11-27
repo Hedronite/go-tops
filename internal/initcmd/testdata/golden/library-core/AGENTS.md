@@ -4,7 +4,7 @@
 This file is the contract between this repository and any AI coding agents (or human reviewers) working on it.
 
 **Class:** `library-core`
-**Protocol:** Go-TOPS 0.4.6
+**Protocol:** Go-TOPS 0.4.7
 **Module:** `github.com/acme/demo`
 **Enforce:** `ratchet`
 
@@ -43,7 +43,7 @@ go tool -modfile=tools/go.mod gotops survivors explain <key> --reason "<why, thr
 2. Never split a function only to lower its CRAP score (scar-guard).
 3. Never weaken a law, linter config, or threshold to make a change pass.
 4. Explain every accepted mutation survivor (reason, owner, expiry). Kill it with a test first; accept it only when no test can tell it from the original, or one is owed.
-5. No `//nolint` without the linter name and a reason; no `//tops:ack` without a reason and an owner.
+5. No `//nolint` without the linter name and a reason; no `//tops:ack` without a reason of at least three words; no `.go-tops/acks.yaml` entry without a reason and an owner.
 6. Agent-authored code meets the same gate and the same CRAP cap as human code.
 7. Do not edit generated files; fix the generator.
 8. Prefer deleting code to adding configuration.

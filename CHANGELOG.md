@@ -122,6 +122,16 @@ All notable changes to this project are listed here. The protocol version and th
 
 ### Changed
 
+- **Protocol 0.4.7** (`GO_TOPS.md`, `schema/`, `profiles/`, `config/`, `init`, skills drop-in). Laws v0.1 protocol locks (M5 G1e), text only until G1–G3 implement readers.
+  - D10 (a): custom `go/analysis` laws run in-process in `gotops`; optional `cmd/gotops-laws` multichecker for `go vet -vettool` (§8.1).
+  - Law lint pass: embedded `laws.golangci.yml` must set `issues.max-issues-per-linter: 0`, `max-same-issues: 0`, `uniq-by-line: false` (§8.1).
+  - Acknowledgements: inline `//tops:ack G-NN <reason>` (≥3 words); `.go-tops/acks.yaml` entries carry reason and owner; R-severity laws are never ackable (§3.3).
+  - CLI: `gotops laws list | explain G-NN | run` with exit codes in §12.1.
+  - `schema/law.schema.json` for `laws/G-NN.yaml`; CRAP report `details.functions` lists every scored function with `cc`, `cov_pct`, `crap`, `cap`, `baseline` (F18).
+  - Ruling C9: the drop-in judge reads `.laws` (`judged`, `required`, `required_not_evaluated`, `results[].verdict`) and `summary.failed`, not a `laws` layer in `layers[]` (§11). C9 retires when `laws.judged` equals `laws.required` and `laws.required_not_evaluated` is `0`; implementation in G4.
+  - Version 0.4.7 in the header, the §2 row, the schema constants, the profiles, the examples, the kit config and lock, the README, `AGENTS.md`, the 12 init goldens, and the docs checker fixtures.
+  - **Repos on 0.4.6:** set `protocol: "0.4.7"` in `go-tops.yaml` and `go-tops.lock` and re-run `gotops init --force` when the drop-in workflow changes.
+
 - **Protocol 0.4.6** (`GO_TOPS.md`, `schema/`, `profiles/`, `config/`, `init`). Mutation runs inside `gotops`.
   - The engine (§2, §6.4, §9, §10, §16 item 39): `overlay`, a runner over `go test -overlay`, is the only engine and the default; `gates.mutation.engine` accepts nothing else. gremlins, its pin in `tools/go.mod` and every rule about its config files and variables are gone, and so are the two statuses only it reported (`SKIPPED`, `RUNNABLE`). No module copy is made. In the work tree the engine writes only `.go-tops/mutation.diff` and the report; a mutant's tests run in the package's own directory.
   - A mutant's test binary is built with `go test -c` and run the way `go test` runs it, and the unmutated binary must pass the same way, before a package's mutants and again after them. At most four mutants are in progress at once: they compile in parallel, and one package's test binaries run one at a time. A test run is stopped after five times the package's baseline time (never under 10 seconds) and a compile after five times (never under 60).

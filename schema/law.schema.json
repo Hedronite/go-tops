@@ -1,0 +1,143 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Go-TOPS law metadata (laws/G-NN.yaml)",
+  "$comment": "One file per catalog row (GO_TOPS.md section 8.3). Applicability is the classes list alone.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "title",
+    "severity",
+    "status",
+    "classes",
+    "reader",
+    "rationale",
+    "fix"
+  ],
+  "properties": {
+    "id": {
+      "$ref": "core.schema.json#/$defs/lawId"
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "severity": {
+      "description": "Catalog severity: refuse (R) or ack (A).",
+      "enum": [
+        "refuse",
+        "ack"
+      ]
+    },
+    "status": {
+      "enum": [
+        "active",
+        "retired",
+        "planned"
+      ]
+    },
+    "classes": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "go-tops.schema.json#/$defs/class"
+      }
+    },
+    "reader": {
+      "enum": [
+        "analyzer",
+        "tool",
+        "attested",
+        "tbd"
+      ]
+    },
+    "analyzer": {
+      "description": "Import path of the go/analysis pass when reader is analyzer.",
+      "type": "string",
+      "minLength": 1
+    },
+    "tool": {
+      "description": "Delegated tool or linter name when reader is tool.",
+      "type": "string",
+      "minLength": 1
+    },
+    "fixture": {
+      "description": "Required when status is active: analysistest tree or testdata/lints module.",
+      "type": "string",
+      "minLength": 1
+    },
+    "allow_paths": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "rationale": {
+      "type": "string",
+      "minLength": 1
+    },
+    "fix": {
+      "type": "string",
+      "minLength": 1
+    },
+    "v01": {
+      "description": "When true, the law is in the v0.1 mechanical set (section 8.2).",
+      "type": "boolean"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "active"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "required": [
+          "fixture"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "reader": {
+            "const": "analyzer"
+          }
+        },
+        "required": [
+          "reader"
+        ]
+      },
+      "then": {
+        "required": [
+          "analyzer"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "reader": {
+            "const": "tool"
+          }
+        },
+        "required": [
+          "reader"
+        ]
+      },
+      "then": {
+        "required": [
+          "tool"
+        ]
+      }
+    }
+  ]
+}

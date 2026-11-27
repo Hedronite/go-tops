@@ -10,7 +10,7 @@
   ],
   "properties": {
     "protocol": {
-      "const": "0.4.6"
+      "const": "0.4.7"
     },
     "version": {
       "type": "string",

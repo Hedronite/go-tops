@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Go-TOPS gate report",
-  "description": "The file .go-tops/report.json, written by every gate run that gets as far as running a layer (§6.6, §12.3).",
+  "description": "The file .go-tops/report.json, written by every gate run that gets as far as running a layer (\u00a76.6, \u00a712.3).",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -22,7 +22,7 @@
   ],
   "properties": {
     "protocol": {
-      "const": "0.4.6"
+      "const": "0.4.7"
     },
     "tool_version": {
       "type": "string",
@@ -82,7 +82,7 @@
       "format": "date-time"
     },
     "ratchet": {
-      "description": "The ratchet judgment of a run under enforce: ratchet (§6.7). pass or fail on the ledger leg, where run_build equals ledger_build; skip on any other leg, never pass. Absent under hard and advisory.",
+      "description": "The ratchet judgment of a run under enforce: ratchet (\u00a76.7). pass or fail on the ledger leg, where run_build equals ledger_build; skip on any other leg, never pass. Absent under hard and advisory.",
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -147,7 +147,7 @@
       ],
       "properties": {
         "catalog": {
-          "description": "Rows in the law catalog (§8.2).",
+          "description": "Rows in the law catalog (\u00a78.2).",
           "type": "integer",
           "minimum": 0
         },
@@ -162,7 +162,7 @@
           "minimum": 0
         },
         "applicable": {
-          "description": "Laws that apply to the class: active, with the class in their classes list (§8.3).",
+          "description": "Laws that apply to the class: active, with the class in their classes list (\u00a78.3).",
           "type": "integer",
           "minimum": 0
         },
@@ -248,7 +248,7 @@
           }
         },
         "enforced": {
-          "description": "false exactly when enforce is advisory: the run exits 0 whatever it found, and outcome is what it would have been under hard (§6.7). When true, exit_code is 1 for a fail outcome and 0 for pass and partial.",
+          "description": "false exactly when enforce is advisory: the run exits 0 whatever it found, and outcome is what it would have been under hard (\u00a76.7). When true, exit_code is 1 for a fail outcome and 0 for pass and partial.",
           "type": "boolean"
         },
         "advisory_expires": {
@@ -313,7 +313,7 @@
       ]
     },
     "exemptions": {
-      "description": "Every exemption in force on the day of the run (§6.8).",
+      "description": "Every exemption in force on the day of the run (\u00a76.8).",
       "type": "array",
       "items": {
         "$ref": "core.schema.json#/$defs/exemption"
@@ -403,7 +403,7 @@
           "type": "object"
         },
         "expires": {
-          "description": "For a crap or mutation gate switched off: the date the exemption lapses (§3.3).",
+          "description": "For a crap or mutation gate switched off: the date the exemption lapses (\u00a73.3).",
           "$ref": "core.schema.json#/$defs/date"
         }
       },
@@ -893,12 +893,19 @@
           }
         },
         "not_measured": {
-          "description": "Production functions in files the run's build does not compile (GOOS, GOARCH, tags, CGO_ENABLED). They are counted and never passed: one whose complexity is above the cap is a violation with null cov_pct and crap (§6.2).",
+          "description": "Production functions in files the run's build does not compile (GOOS, GOARCH, tags, CGO_ENABLED). They are counted and never passed: one whose complexity is above the cap is a violation with null cov_pct and crap (\u00a76.2).",
           "type": "integer",
           "minimum": 0
         },
         "exempt": {
           "description": "Functions scored and printed but not judged, under a crap exemption.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/crapFunction"
+          }
+        },
+        "functions": {
+          "description": "Every production function the run scored: cc, cov_pct, crap, cap and baseline (F18).",
           "type": "array",
           "items": {
             "$ref": "#/$defs/crapFunction"
@@ -931,7 +938,7 @@
           "minimum": 1
         },
         "cov_pct": {
-          "description": "Statement coverage of the function, guard-neutral (§6.2). null, together with crap, for a function the run does not measure.",
+          "description": "Statement coverage of the function, guard-neutral (\u00a76.2). null, together with crap, for a function the run does not measure.",
           "type": [
             "number",
             "null"
@@ -940,7 +947,7 @@
           "maximum": 100
         },
         "crap": {
-          "description": "The unrounded score (§6.2). null, together with cov_pct, for a function the run does not measure: its complexity is above the cap, which fails at every coverage.",
+          "description": "The unrounded score (\u00a76.2). null, together with cov_pct, for a function the run does not measure: its complexity is above the cap, which fails at every coverage.",
           "type": [
             "number",
             "null"
@@ -948,11 +955,16 @@
           "minimum": 0
         },
         "baseline": {
-          "description": "null: no ledger entry, so the function is held to the cap. Otherwise its ledger score (§6.7).",
+          "description": "null: no ledger entry, so the function is held to the cap. Otherwise its ledger score (\u00a76.7).",
           "type": [
             "number",
             "null"
           ]
+        },
+        "cap": {
+          "description": "The class CRAP cap for this run (section 6.2).",
+          "type": "number",
+          "minimum": 1
         }
       },
       "oneOf": [
