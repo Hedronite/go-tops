@@ -51,7 +51,7 @@ func loadCatalogFrom(fsys fs.FS) ([]Law, error) {
 	if err != nil {
 		return nil, fmt.Errorf("glob embedded laws: %w", err)
 	}
-	sort.Slice(names, func(i, j int) bool { return lawIDOrder(names[i]) < lawIDOrder(names[j]) })
+	sort.Strings(names)
 	var out []Law
 	for _, name := range names {
 		l, err := readLawFile(fsys, name)
