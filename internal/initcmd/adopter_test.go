@@ -82,7 +82,6 @@ func TestInitMergesIntoAnExistingToolsMod(t *testing.T) {
 	}
 	for _, want := range []string{
 		"\tgotest.tools/gotestsum\n", "gotest.tools/gotestsum v1.13.0",
-		"\tgithub.com/go-gremlins/gremlins/cmd/gremlins\n", "github.com/go-gremlins/gremlins v0.6.0",
 		"\tgolang.org/x/vuln/cmd/govulncheck\n", "golang.org/x/vuln v1.9.0",
 		"\tgithub.com/google/go-licenses/v2\n", "github.com/google/go-licenses/v2 v2.0.1",
 	} {

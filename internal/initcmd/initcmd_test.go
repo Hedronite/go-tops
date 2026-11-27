@@ -431,7 +431,6 @@ func TestToolsModPinsTheModuleTools(t *testing.T) {
 	for _, want := range []string{
 		"module github.com/acme/demo/tools", "go 1.26.4\n",
 		"\tgotest.tools/gotestsum\n", "gotest.tools/gotestsum v1.13.0",
-		"\tgithub.com/go-gremlins/gremlins/cmd/gremlins\n", "github.com/go-gremlins/gremlins v0.6.0",
 		"\tgolang.org/x/vuln/cmd/govulncheck\n", "golang.org/x/vuln v1.9.0",
 		"\tgithub.com/google/go-licenses/v2\n", "github.com/google/go-licenses/v2 v2.0.1",
 		"\tgithub.com/Hedronite/go-tops/cmd/gotops\n", "github.com/Hedronite/go-tops v0.1.0",
@@ -489,7 +488,7 @@ func TestAdoptionRecordFillsItems2To4And6(t *testing.T) {
 	for _, want := range []string{
 		"https://github.com/Hedronite/go-tops",
 		"2. **Protocol version.** " + mustProtocol(t),
-		"`gotops` v0.1.0", "toolchain go1.27.4", "golangci-lint 2.15.0", "govulncheck v1.9.0", "gotestsum v1.13.0", "go-licenses v2.0.1", "gremlins v0.6.0",
+		"`gotops` v0.1.0", "toolchain go1.27.4", "golangci-lint 2.15.0", "govulncheck v1.9.0", "gotestsum v1.13.0", "go-licenses v2.0.1",
 		"`library-core`: statement coverage floor 85%, CRAP cap 8",
 		".go-tops/baseline.json", ".go-tops/survivors.yaml",
 		"8. **Known deviations.** None.",

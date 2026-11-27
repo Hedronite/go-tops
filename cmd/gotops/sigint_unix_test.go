@@ -54,7 +54,7 @@ func runSubcommandSIGINTTest(t *testing.T, subArgs ...string) {
 	}
 	files := map[string]string{
 		"go.mod": "module example.com/ctrlcgate\n\ngo 1.26\n",
-		"go-tops.yaml": `protocol: "0.4.5"
+		"go-tops.yaml": `protocol: "0.4.6"
 version: "0.1.0"
 module: example.com/ctrlcgate
 class: library-core

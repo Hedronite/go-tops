@@ -385,28 +385,3 @@ func TestVerifyBuildFailureKinds(t *testing.T) {
 		})
 	}
 }
-
-func TestVerifyGremlinsModuleToolPinViaGoVersionM(t *testing.T) {
-	dir := writeLock(t, "go1.27.4", "tool", sha(t, "x"), false)
-	place(t, dir, "tool", "x")
-	toolsMod := "module example.com/tools\n\ngo 1.26\n\ntool github.com/go-gremlins/gremlins/cmd/gremlins\n\nrequire github.com/go-gremlins/gremlins v0.6.0 // indirect\n"
-	if err := os.MkdirAll(filepath.Join(dir, "tools"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "tools", "go.mod"), []byte(toolsMod), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	reports := map[string]string{
-		"gremlins": buildInfo("github.com/go-gremlins/gremlins", "v0.6.0"),
-	}
-	fs := Verify(VerifyOptions{Dir: dir, Platform: platform, Run: moduleRun("go1.27.4", reports), LookPath: noPath})
-	if code := ExitCode(fs); code != 0 {
-		t.Fatalf("exit %d: %+v", code, fs)
-	}
-	reports["gremlins"] = buildInfo("github.com/go-gremlins/gremlins", "v0.5.0")
-	fs = Verify(VerifyOptions{Dir: dir, Platform: platform, Run: moduleRun("go1.27.4", reports), LookPath: noPath})
-	f, ok := find(fs, "gremlins")
-	if !ok || f.Status != StatusMismatch || ExitCode(fs) != 2 || !strings.Contains(f.Detail, "v0.5.0") || !strings.Contains(f.Detail, "v0.6.0") {
-		t.Fatalf("exit %d, finding %+v", ExitCode(fs), f)
-	}
-}

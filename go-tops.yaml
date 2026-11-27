@@ -4,11 +4,12 @@
 # 16 required laws stay `not-evaluated`, and a required law that is not
 # evaluated fails the gate (§3.3), so a `hard` run would be red by construction.
 # The kit's CI holds the gates that exist to the bar anyway: it fails unless
-# hygiene, tests, coverage and CRAP are `pass`, mutation is `pass` or `vacuous`, and every required law is `not-evaluated` for `no_reader`
+# hygiene, tests, coverage and CRAP are `pass`, mutation is `pass` or
+# `vacuous`, and every required law is `not-evaluated` for `no_reader`
 # (.github/workflows/ci.yml, "assert the report"). CRAP has been on since M2: every
 # function meets the cap, but the two exemptions at the end of this file. At M5
 # this file switches to `enforce: hard` and the `advisory` key goes.
-protocol: "0.4.5"
+protocol: "0.4.6"
 version: "0.1.0"
 module: github.com/Hedronite/go-tops
 class: binary-cli

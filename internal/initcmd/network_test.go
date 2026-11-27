@@ -29,7 +29,7 @@ func TestNetworkToolsModResolvesAndRuns(t *testing.T) {
 	if got := read(t, dir, "tools/go.sum"); got == "" {
 		t.Fatal("tools/go.sum is empty")
 	}
-	for _, tool := range [][]string{{"gotestsum", "--version"}, {"govulncheck", "-version"}, {"go-licenses", "--help"}, {"gremlins", "--version"}} {
+	for _, tool := range [][]string{{"gotestsum", "--version"}, {"govulncheck", "-version"}, {"go-licenses", "--help"}} {
 		cmd := exec.Command("go", append([]string{"tool", "-modfile=tools/go.mod"}, tool...)...)
 		cmd.Dir = dir
 		if out, err := cmd.CombinedOutput(); err != nil {

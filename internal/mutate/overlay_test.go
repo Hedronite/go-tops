@@ -673,20 +673,15 @@ func TestAdd(t *testing.T) {
 }
 
 func TestValidateEngineSupport(t *testing.T) {
-	if err := validateEngine("", false); err != nil {
-		t.Errorf("empty engine: %v", err)
+	for _, engine := range []string{"", "overlay"} {
+		if err := validateEngine(engine); err != nil {
+			t.Errorf("%q: %v", engine, err)
+		}
 	}
-	if err := validateEngine("gremlins", false); err != nil {
-		t.Errorf("gremlins: %v", err)
-	}
-	if err := validateEngine("overlay", false); err == nil {
-		t.Error("expected error when allowOverlay=false")
-	}
-	if err := validateEngine("overlay", true); err != nil {
-		t.Errorf("overlay when allowed: %v", err)
-	}
-	if err := validateEngine("mutest", true); err == nil {
-		t.Error("expected error on unknown engine")
+	for _, engine := range []string{"mutest", "overlays"} {
+		if err := validateEngine(engine); err == nil {
+			t.Errorf("%q: expected an error", engine)
+		}
 	}
 }
 

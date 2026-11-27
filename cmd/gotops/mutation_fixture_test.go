@@ -64,7 +64,7 @@ func prepareMutationFixture(t *testing.T, repoRoot, caseName string) string {
 	} {
 		copyFileFixture(t, pair[0], pair[1])
 	}
-	cfgYAML := `protocol: "0.4.5"
+	cfgYAML := `protocol: "0.4.6"
 version: "0.1.0"
 module: example.com/mutationfixture
 class: library-core

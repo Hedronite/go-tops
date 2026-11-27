@@ -277,18 +277,18 @@ func (l *toolLayer) Run(ctx context.Context, env *Env) Result {
 }
 
 func TestOSExecStripEnvRemovesMatchingPrefixes(t *testing.T) {
-	t.Setenv("GREMLINS_TEST_STRIP", "bad")
+	t.Setenv("STRIPPED_TEST_VAR", "bad")
 	t.Setenv("KEEP_TEST_VAR", "ok")
 	out, err := (OS{}).Run(context.Background(), Cmd{
 		Argv:     []string{"env"},
-		StripEnv: []string{"GREMLINS_"},
+		StripEnv: []string{"STRIPPED_"},
 		Env:      []string{"EXTRA_TEST_VAR=added"},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	s := string(out.Stdout)
-	if strings.Contains(s, "GREMLINS_TEST_STRIP=") {
+	if strings.Contains(s, "STRIPPED_TEST_VAR=") {
 		t.Errorf("stripped prefix remained in env:\n%s", s)
 	}
 	if !strings.Contains(s, "KEEP_TEST_VAR=ok") || !strings.Contains(s, "EXTRA_TEST_VAR=added") {

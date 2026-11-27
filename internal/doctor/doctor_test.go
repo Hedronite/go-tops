@@ -221,26 +221,3 @@ func TestExitCodePriority(t *testing.T) {
 		t.Error("3 outranks 1, a warning is 0, no checks is 0")
 	}
 }
-
-func TestDoctorChecksGremlinsModuleTool(t *testing.T) {
-	dir := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(dir, "tools"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	toolsMod := "module example.com/tools\n\ngo 1.26\n\ntool github.com/go-gremlins/gremlins/cmd/gremlins\n\nrequire github.com/go-gremlins/gremlins v0.6.0 // indirect\n"
-	if err := os.WriteFile(filepath.Join(dir, "tools", "go.mod"), []byte(toolsMod), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	e := env(dir, nil, "go1.27.4")
-	base := e.Run
-	e.Run = func(d string, argv ...string) (string, error) {
-		if strings.Join(argv, " ") == "go tool -modfile=tools/go.mod -n gremlins" {
-			return "/tmp/gremlins\n", nil
-		}
-		return base(d, argv...)
-	}
-	c := get(Run(e), "gremlins")
-	if c.Status != OK || !strings.Contains(c.Detail, "v0.6.0") {
-		t.Fatalf("gremlins check = %+v, want OK v0.6.0", c)
-	}
-}

@@ -16,7 +16,8 @@ import (
 	"github.com/Hedronite/go-tops/internal/exempt"
 )
 
-// TokenReplacements mirrors the exact token replacement table used by gremlins v0.6.0.
+// TokenReplacements maps a mutator to the token it writes for each token it replaces.
+// Only the mutators of ProtocolMutatorsOn are run.
 var TokenReplacements = map[string]map[token.Token]token.Token{
 	"ARITHMETIC_BASE": {
 		token.ADD: token.SUB,
@@ -269,7 +270,7 @@ func collectNodeMutants(fset *token.FileSet, n ast.Node, lines map[int]bool, ena
 	}
 }
 
-// CountMutantsByLine counts expected gremlins AST mutants per physical line for selected lines.
+// CountMutantsByLine counts the expected AST mutants per physical line for selected lines.
 func CountMutantsByLine(src []byte, lines map[int]bool, enabled map[string]bool) (map[int]int, error) {
 	locs, err := ExpectedMutantKeys(src, lines, enabled)
 	if err != nil {
@@ -282,7 +283,7 @@ func CountMutantsByLine(src []byte, lines map[int]bool, enabled map[string]bool)
 	return out, nil
 }
 
-// CountMutantsOnLines counts mutants matching gremlins AST rules on selected lines.
+// CountMutantsOnLines counts the mutants of the enabled mutators on selected lines.
 func CountMutantsOnLines(src []byte, lines map[int]bool, enabled map[string]bool) (int, error) {
 	byLine, err := CountMutantsByLine(src, lines, enabled)
 	if err != nil {

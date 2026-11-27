@@ -1,4 +1,4 @@
-// Package mutate implements Go-TOPS branch-diff mutation testing via gremlins.
+// Package mutate implements Go-TOPS branch-diff mutation testing over `go test -overlay`.
 package mutate
 
 import (
