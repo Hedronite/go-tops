@@ -82,3 +82,18 @@ func TestReadLawFileRejectsMismatchedName(t *testing.T) {
 		t.Fatal("want error")
 	}
 }
+
+func TestLoadCatalogFromSortsByLawID(t *testing.T) {
+	y9 := "id: G-09\ntitle: a\nseverity: ack\nstatus: active\nclasses: [binary-cli]\nreader: analyzer\nanalyzer: x\nfixture: testdata/x\n"
+	y10 := "id: G-10\ntitle: b\nseverity: ack\nstatus: active\nclasses: [tui-app]\nreader: analyzer\nanalyzer: x\nfixture: testdata/x\n"
+	out, err := loadCatalogFrom(fstest.MapFS{
+		"laws/G-10.yaml": &fstest.MapFile{Data: []byte(y10)},
+		"laws/G-09.yaml": &fstest.MapFile{Data: []byte(y9)},
+	})
+	if err != nil || len(out) != 2 {
+		t.Fatalf("out=%v err=%v", out, err)
+	}
+	if out[0].ID != "G-09" || out[1].ID != "G-10" {
+		t.Fatalf("order %v %v, want G-09 then G-10", out[0].ID, out[1].ID)
+	}
+}

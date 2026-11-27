@@ -51,9 +51,6 @@ func loadCatalogFrom(fsys fs.FS) ([]Law, error) {
 	if err != nil {
 		return nil, fmt.Errorf("glob embedded laws: %w", err)
 	}
-	if len(names) < 1 {
-		return nil, fmt.Errorf("embedded laws: no G-NN.yaml files")
-	}
 	sort.Slice(names, func(i, j int) bool { return lawIDOrder(names[i]) < lawIDOrder(names[j]) })
 	var out []Law
 	for _, name := range names {
@@ -62,6 +59,9 @@ func loadCatalogFrom(fsys fs.FS) ([]Law, error) {
 			return nil, err
 		}
 		out = append(out, l)
+	}
+	if len(out) < 1 {
+		return nil, fmt.Errorf("embedded laws: no G-NN.yaml files")
 	}
 	return out, nil
 }
