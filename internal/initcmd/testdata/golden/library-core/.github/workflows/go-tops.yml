@@ -1,9 +1,8 @@
 name: go-tops
 
 # The Go-TOPS drop-in (GO_TOPS.md §11): one job. On a push or a pull request each
-# leg runs the gate and judges it (ruling C9: before M5 judges the required laws,
-# exit 1 on them alone is a pass; once laws.judged is non-zero, the gate must pass).
-# When the workflow is
+# leg runs the gate and judges it (ruling C9: until the required laws are judged,
+# the gate exits 1 on them alone, and that is a pass). When the workflow is
 # dispatched by hand, only the ubuntu leg acts: it is the ledger leg, and it writes
 # or refreshes the ledger instead of running the gate (GO_TOPS.md §6.7). Every
 # action is pinned by commit SHA (the comment names the release), and the job only
@@ -239,24 +238,16 @@ jobs:
             and .summary.outcome != "partial"
             and (.layer_counts.ran | type) == "number"
             and .layer_counts.ran == .layer_counts.enabled_in_range
+            and ((.summary.failed - ["laws"]) | length) == 0
             and .summary.exit_code == $code
-            and (if ((.laws.judged // 0) | tonumber) == 0 then
-                   ((.summary.failed - ["laws"]) | length) == 0
-                   and ($code == 0 or (.summary.failed | length) > 0)
-                   and (if (.summary.failed | any(. == "laws")) then
-                          .laws.required > 0
-                          and .laws.required == .laws.required_not_evaluated
-                          and .laws.judged == 0
-                          and ([.laws.results[] | select(.verdict == "refuse")] | length) == 0
-                        else true end)
-                 else
-                   ((.summary.failed | length) == 0)
-                   and ($code == 0)
-                   and (.laws.required_not_evaluated // 0) == 0
+            and ($code == 0 or (.summary.failed | length) > 0)
+            and (if (.summary.failed | any(. == "laws")) then
+                   .laws.required > 0
+                   and .laws.required == .laws.required_not_evaluated
+                   and .laws.judged == 0
                    and ([.laws.results[] | select(.verdict == "refuse")] | length) == 0
-                   and ([.layers[] | select(.id == "laws") | .outcome] | .[0]) == "pass"
-                 end)
-          ' "$report" > /dev/null || fail "the gate report is not a pass under ruling C9: the gate exited $GATE_EXIT and its report says another exit code, a layer failed or did not run, the run was partial, a required law is not judged when laws.judged is non-zero, or something besides the allowed pre-M5 laws gap failed"
+                 else true end)
+          ' "$report" > /dev/null || fail "the gate report is not a pass under ruling C9: the gate exited $GATE_EXIT and its report says another exit code, a layer failed or did not run, the run was partial, or something besides the required laws (all reported not evaluated, none judged, none refused) failed"
       # The floor leg builds and tests on the floor toolchain. The gate itself
       # runs on the other legs: a narrowed gate run leaves laws out of range.
       - name: build and test on the floor

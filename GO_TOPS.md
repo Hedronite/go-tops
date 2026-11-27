@@ -9,8 +9,8 @@
 > `uniq-by-line: false`); `//tops:ack G-NN <reason>` and `.go-tops/acks.yaml` semantics
 > (R-severity laws are never ackable); `gotops laws list | explain G-NN | run` CLI contract;
 > `schema/law.schema.json` for `laws/G-NN.yaml`; the CRAP layer report carries a full
-> `functions` score list (F18); ruling **C9** retires once the run judges the class's required
-> laws (`gotops gate` exits `0` when every required law is judged and none refuses). Protocol
+> `functions` score list (F18); ruling **C9** retires when `laws.judged` equals `laws.required`
+> and `laws.required_not_evaluated` is `0` (the judge reads `.laws`, not `layers[]`). Protocol
 > version bumped.
 >
 **Modeled on:** [Rust-TOPS](https://github.com/Hedronite/rust-tops) (protocol 1.2.0 on `main`; the latest release tag, `cargo-tops` v0.3.0, carries protocol 1.1.0, and `main` holds package 0.4.0, untagged; read 2026-11-17)
@@ -1558,14 +1558,24 @@ binaries:
 
 ## 11. CI floor
 
-**Ruling C9 (drop-in gate judge).** Until M5 ships live readers for every law in the class's
-`laws.required` list, the gate exits `1` with only the laws layer failed and every required law
-`not-evaluated`: the drop-in workflow and the `go-tops-gate` skill treat that as a pass when every
-other tier 0–1 layer passes and the ratchet passes on the ledger leg. Once the run judges those
-laws (`laws.judged` equals the v0.1 count, 16 in the launch profiles), **C9 retires**: `gotops
-gate` exits `0` only when the laws layer is `pass`, `laws.required_not_evaluated` is `0`, and no
-law is `refuse`. The judge then refuses the pre-M5 carve-out. Vigil and other adopters refresh the
-ledger (`judged_laws: 16`) before the drop-in drops C9 (M5 G7).
+**Ruling C9 (drop-in gate judge).** The report has no `laws` entry in `layers[]` (its ids are
+the tier 0–1 layers only, e.g. hygiene, tests, coverage, crap, mutation). The drop-in judge and
+`go-tops-gate` skill read the laws verdict from `.laws` (`judged`, `required`,
+`required_not_evaluated`, `results[].verdict`) and from `summary.failed`, alongside the
+`layers[]` outcomes.
+
+While `laws.judged` is below `laws.required` (M5 readers not yet live), the gate may exit `1` with
+`laws` alone in `summary.failed` and every required law `not-evaluated` (`laws.judged == 0`,
+`laws.required_not_evaluated == laws.required`, no `refuse` in `laws.results`): that is a pass when
+every listed tier 0–1 layer in `layers[]` passes or skips as today and the ratchet passes on the
+ledger leg.
+
+**C9 retires** when `laws.judged` equals `laws.required` and `laws.required_not_evaluated` is `0`.
+After that, `gotops gate` exits `0` only when `summary.outcome` is `pass`, every tier 0–1 layer in
+`layers[]` passes or skips, the ratchet passes on the ledger leg, `laws.required_not_evaluated` is
+`0`, and no law in `laws.results` has verdict `refuse`. The pre-M5 carve-out no longer applies.
+Implementation and tests live in **G4** (`internal/initcmd/`, skills); vigil refreshes the ledger at
+`judged_laws: 16` in **G7**.
 
 The drop-in workflow `.github/workflows/go-tops.yml` (placeholders `{GO_FLOOR}`, `{GO_CURRENT}`,
 `{PRIMARY_PKG}`) runs the same command a developer runs. It repeats no tool as a step, apart from the floor leg below: a job that
@@ -1940,7 +1950,7 @@ wrong; the config wins.
 
 ---
 
-## 16. Decisions (resolved for v0.4.6; remaining calibration items noted)
+## 16. Decisions (resolved for v0.4.7; remaining calibration items noted)
 
 1. **Complexity rule (`err_guard_discount`):** **true** in every class, for guards that only return the error (wrapped or not). errcheck `check-blank` and `check-type-assertions` are required, so discarding the error is not cheaper than handling it. Explicit in every profile. (§6.3) *Changed in 0.3.0; 0.2.0 turned it off for `library-core` and `concurrency-runtime`.*
 2. **Authorship marking:** None. One CRAP cap per class for every author. (§5.2, §6.2) *Changed in 0.3.0; 0.2.0 used an `Authored-By: agent` trailer that raised the cap.*
@@ -1980,7 +1990,7 @@ wrong; the config wins.
 36. **The ledger leg:** the baseline records its build, only the run with that build writes it or judges the ratchet, every entry of a first ledger is measured there, and the other legs report the ratchet judgment as `skip`, never `pass`. A function the ledger leg does not compile has no entry and takes a `crap` exemption. A repo under `ratchet` names exactly one CI leg as its ledger leg, and CI fails when that leg's ratchet outcome is `skip`. (§6.7, §11, §12.1, §12.3) *New in 0.4.3.*
 37. **The first adoption of a real repository (M3):** the kit lint pass reads `.go-tops/golangci.yml` and never the adopter's `.golangci.yml`, which `init` leaves byte for byte; `init` adds the kit's pins to an existing `tools/go.mod`, writes a marked `.gitignore` block and keeps the whole release of the `go` line as the floor; the first ledger is written by the ledger leg on the adoption pull request, asked by `baseline --status`; a repository whose tests walk the tree keeps the lint binary outside it. (§4.1, §6.7, §8.1, §10, §11, §12.1) *New in 0.4.4.*
 38. **Mutation, measured before it was built (M4):** `gotops` configures the engine by flags alone and ignores its files and variables; six mutators are on; the kit's own diff, from the diff base to the working tree, decides which mutants count; a survivor key has one text form and the report lists every survivor; mutants in files a build does not compile are counted apart; an expired survivor entry fails at tier 0; `survivors list`, `explain` and `expire` are defined; the engine's per-package meaning of `NOT COVERED` is stated; the tier 2 ledger kind is M6. (§6.4, §6.7, §9, §11, §12.1, §12.3) *New in 0.4.5.*
-40. **Laws v0.1 protocol (M5 G1e):** in-process custom analyzers (D10 a); law-pass `issues` uncap; `//tops:ack` and `acks.yaml` semantics with R laws never ackable; `gotops laws` subcommands; `law.schema.json`; CRAP `functions` in the report (F18); C9 retirement when required laws are judged. (§3.3, §8.1, §11, §12.1, §12.3, §18) *New in 0.4.7.*
+40. **Laws v0.1 protocol (M5 G1e):** in-process custom analyzers (D10 a); law-pass `issues` uncap; `//tops:ack` and `acks.yaml` semantics with R laws never ackable; `gotops laws` subcommands; `law.schema.json`; CRAP `functions` in the report (F18); C9 retires when `laws.judged` equals `laws.required` and `laws.required_not_evaluated` is `0`, with the verdict read from `.laws` and `summary.failed`. (§3.3, §8.1, §11, §12.1, §12.3, §18) *New in 0.4.7.*
 39. **The native mutation engine:** `overlay` is the only engine, and the external one and its pin are gone; `vet` is off in every mutant run, so only a test kills; a mutant that does not compile is `NOT VIABLE`; a `case` expression and code after a function literal take their statement's coverage, and a package-level declaration is always run; one package's test binaries run one at a time, and its unmutated binary must pass before and after them; a test's run-time reads see unmutated files. (§2, §4.1, §6.4, §9, §10) *New in 0.4.6.*
 
 ---

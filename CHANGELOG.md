@@ -128,7 +128,7 @@ All notable changes to this project are listed here. The protocol version and th
   - Acknowledgements: inline `//tops:ack G-NN <reason>` (≥3 words); `.go-tops/acks.yaml` entries carry reason and owner; R-severity laws are never ackable (§3.3).
   - CLI: `gotops laws list | explain G-NN | run` with exit codes in §12.1.
   - `schema/law.schema.json` for `laws/G-NN.yaml`; CRAP report `details.functions` lists every scored function with `cc`, `cov_pct`, `crap`, `cap`, `baseline` (F18).
-  - Ruling C9: drop-in judge keeps the pre-M5 carve-out only while `laws.judged == 0`; once required laws are judged, `gotops gate` exits `0` only when the laws layer passes (§11).
+  - Ruling C9: the drop-in judge reads `.laws` (`judged`, `required`, `required_not_evaluated`, `results[].verdict`) and `summary.failed`, not a `laws` layer in `layers[]` (§11). C9 retires when `laws.judged` equals `laws.required` and `laws.required_not_evaluated` is `0`; implementation in G4.
   - Version 0.4.7 in the header, the §2 row, the schema constants, the profiles, the examples, the kit config and lock, the README, `AGENTS.md`, the 12 init goldens, and the docs checker fixtures.
   - **Repos on 0.4.6:** set `protocol: "0.4.7"` in `go-tops.yaml` and `go-tops.lock` and re-run `gotops init --force` when the drop-in workflow changes.
 
