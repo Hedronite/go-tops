@@ -257,7 +257,7 @@ func TestApplicableExtraLawsByClass(t *testing.T) {
 		"library-core":        {count: 22, has: []string{"G-21", "G-22", "G-23", "G-24"}, not: []string{"G-41", "G-20"}},
 		"tui-app":             {count: 19, has: []string{"G-10"}, not: []string{"G-41"}},
 		"concurrency-runtime": {count: 23, has: []string{"G-01", "G-09", "G-42"}, not: []string{"G-03"}},
-		"parser-codec":        {count: 18, has: []string{"G-42", "G-43"}, not: []string{"G-10", "G-41"}},
+		"parser-codec":        {count: 19, has: []string{"G-29", "G-42", "G-43"}, not: []string{"G-10", "G-41"}},
 	}
 	for class, c := range cases {
 		got := Applicable(class)
