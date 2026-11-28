@@ -41,7 +41,9 @@ func runDoctor(env cli.Env, args []string) int {
 		env.Stderr.Printf("gotops doctor: %v\n", err)
 		return cli.ExitEnvironment
 	}
-	checks := doctor.Run(context.Background(), doctor.Env{Dir: dir})
+	ctx, stop := signalContext()
+	defer stop()
+	checks := doctor.Run(ctx, doctor.Env{Dir: dir})
 	for _, c := range checks {
 		env.Stdout.Printf("%-5s %-14s %s\n", c.Status, c.Name, c.Detail)
 	}

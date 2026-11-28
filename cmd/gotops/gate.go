@@ -43,8 +43,8 @@ func scanAcks(dir, path string) (laws.FileCounts, error) {
 // runs on the effective configuration, so no cap or floor is ever absent.
 // Issues from check are a configuration failure (exit 2); a repository or file
 // that cannot be read is an environment failure (exit 3).
-func loadGateConfig(dir string) (gate.Config, error) {
-	res, err := config.Check(context.Background(), dir, config.Options{})
+func loadGateConfig(ctx context.Context, dir string) (gate.Config, error) {
+	res, err := config.Check(ctx, dir, config.Options{})
 	if err != nil {
 		return gate.Config{}, &gate.EnvError{Err: err}
 	}
