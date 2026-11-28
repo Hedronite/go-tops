@@ -20,8 +20,28 @@ func assemble(cfg Config, opts Options, git report.Git, started, ended time.Time
 	if vulnDB != "" {
 		rep.VulnDBTimestamp = &vulnDB
 	}
+	failed := layerFailures(layers)
+	refused, partial := attachLawResults(&rep, results)
+	if refused || rep.Laws.RequiredNotEvaluated > 0 {
+		failed = append(failed, LawsLayer)
+	}
+	failed = rv.mark(&rep, failed)
+	applySummary(&rep, cfg, failed, partial)
+	return rep
+}
+
+func layerFailures(layers []report.Layer) []string {
 	var failed []string
 	for _, l := range layers {
+		if Outcome(l.Outcome).fails() {
+			failed = append(failed, l.ID)
+		}
+	}
+	return failed
+}
+
+func applySummary(rep *report.Report, cfg Config, failed []string, partial bool) {
+	for _, l := range rep.Layers {
 		o := Outcome(l.Outcome)
 		if o != Skip {
 			rep.LayerCounts.EnabledInRange++
@@ -29,20 +49,10 @@ func assemble(cfg Config, opts Options, git report.Git, started, ended time.Time
 		if o.ran() {
 			rep.LayerCounts.Ran++
 		}
-		if o.fails() {
-			failed = append(failed, l.ID)
-		}
 	}
-
-	refused, partial := attachLawResults(&rep, results)
-	if refused || rep.Laws.RequiredNotEvaluated > 0 {
-		failed = append(failed, LawsLayer)
-	}
-	failed = rv.mark(&rep, failed)
 	if rep.LayerCounts.Ran != rep.LayerCounts.EnabledInRange && len(failed) == 0 {
 		failed = append(failed, "layer_counts")
 	}
-
 	s := &rep.Summary
 	s.Failed = failed
 	switch {
@@ -57,7 +67,6 @@ func assemble(cfg Config, opts Options, git report.Git, started, ended time.Time
 	if cfg.Enforce == "advisory" {
 		s.Enforced, s.ExitCode, s.AdvisoryExpires = false, ExitOK, cfg.AdvisoryExpires
 	}
-	return rep
 }
 
 func applicableJudged(results []laws.Result) int {
