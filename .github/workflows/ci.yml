@@ -192,11 +192,12 @@ jobs:
                 | select( ($r.id | test("^G-(02|07|08|11|12|16|17|18|19|25|26|33|34|37|38|40)$"))
                   and ($r.reason // "") == "no_reader" )
                 | "law \($r.id): still no_reader, want a tier-1 judgment (G3)" ),
-              ( layer("laws") as $l
-                | select($l == null or $l.outcome != "pass")
-                | "laws: outcome \($l.outcome // "absent"), want pass (G5)" ),
+              ( (.laws.results // [])[] as $r
+                | select( ($r.id | test("^G-(02|07|08|11|12|16|17|18|19|25|26|33|34|37|38|40)$"))
+                  and ($r.verdict == "refuse") )
+                | "law \($r.id): verdict refuse (G5, §11)" ),
               ( select((.summary.failed // []) | index("laws"))
-                | "summary.failed includes laws, want laws layer pass (G5)" ),
+                | "summary.failed includes laws (G5, §11: read .laws not layers[])" ),
               ( select(.summary.enforced != false)
                 | "summary.enforced is \(.summary.enforced), want false under advisory" ),
               ( select(.enforce != "advisory")
