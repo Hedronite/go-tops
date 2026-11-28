@@ -275,7 +275,8 @@ func TestCollectNamesTheLayerItRefuses(t *testing.T) {
 	f := newFeeds(t)
 	f.setLayer("tests", report.Layer{ID: "tests", Outcome: "fail", Reason: "TestX failed"})
 	_, err := baseline.Collect(f.in)
-	if err == nil || !strings.Contains(err.Error(), "tests") || !strings.Contains(err.Error(), "TestX failed") {
+	var ref *baseline.RefusalError
+	if !errors.As(err, &ref) || !strings.Contains(ref.Msg, "tests") || !strings.Contains(ref.Msg, "TestX failed") {
 		t.Errorf("err %v should name the layer and its reason", err)
 	}
 }

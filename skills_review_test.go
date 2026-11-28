@@ -3,6 +3,7 @@
 package gotops
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"os/exec"
@@ -120,7 +121,7 @@ func newRepo(t *testing.T) *repo {
 
 func (r *repo) git(args ...string) string {
 	r.t.Helper()
-	cmd := exec.Command("git", append([]string{"-c", "user.name=t", "-c", "user.email=t@example.com", "-c", "commit.gpgsign=false"}, args...)...)
+	cmd := exec.CommandContext(context.Background(), "git", append([]string{"-c", "user.name=t", "-c", "user.email=t@example.com", "-c", "commit.gpgsign=false"}, args...)...)
 	cmd.Dir = r.dir
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -469,7 +470,7 @@ func TestReviewAnswersFailsOnAMissingFile(t *testing.T) {
 
 func TestReviewWithNoCommandNamesTheThree(t *testing.T) {
 	needNu(t)
-	out, err := exec.Command("nu", skillScript(t, "go-tops-review")).Output()
+	out, err := exec.CommandContext(context.Background(), "nu", skillScript(t, "go-tops-review")).Output()
 	if err != nil {
 		t.Fatal(err)
 	}

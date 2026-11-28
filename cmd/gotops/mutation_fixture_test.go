@@ -3,6 +3,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"os/exec"
@@ -19,7 +20,7 @@ import (
 
 func runGitFixture(t *testing.T, dir string, args ...string) {
 	t.Helper()
-	cmd := exec.Command("git", args...)
+	cmd := exec.CommandContext(context.Background(), "git", args...)
 	cmd.Dir = dir
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("git %v: %v\n%s", args, err, string(out))
@@ -29,7 +30,7 @@ func runGitFixture(t *testing.T, dir string, args ...string) {
 func buildGotopsFixtureBin(t *testing.T, repoRoot string) string {
 	t.Helper()
 	bin := filepath.Join(t.TempDir(), "gotops")
-	cmd := exec.Command("go", "build", "-o", bin, "./cmd/gotops")
+	cmd := exec.CommandContext(context.Background(), "go", "build", "-o", bin, "./cmd/gotops")
 	cmd.Dir = repoRoot
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("build gotops: %v\n%s", err, string(out))
@@ -110,7 +111,7 @@ func fixtureEnv() []string {
 
 func runFixtureGate(t *testing.T, bin, dir string) (string, report.Layer, string, error) {
 	t.Helper()
-	cmd := exec.Command(bin, "gate", "--only", "mutation", "--base", "main")
+	cmd := exec.CommandContext(context.Background(), bin, "gate", "--only", "mutation", "--base", "main")
 	cmd.Dir = dir
 	cmd.Env = fixtureEnv()
 	out, err := cmd.CombinedOutput()

@@ -1,6 +1,7 @@
 package laws
 
 import (
+	"errors"
 	"fmt"
 	"io/fs"
 	"path/filepath"
@@ -13,6 +14,9 @@ import (
 
 	gotops "github.com/Hedronite/go-tops"
 )
+
+// ErrNoLawYAML means the embedded law catalog has no law definition files.
+var ErrNoLawYAML = errors.New("embedded laws: no G-NN.yaml files")
 
 // lawYAML is the on-disk shape of laws/G-NN.yaml (§8.3).
 type lawYAML struct {
@@ -61,7 +65,7 @@ func loadCatalogFrom(fsys fs.FS) ([]Law, error) {
 		out = append(out, l)
 	}
 	if len(out) < 1 {
-		return nil, fmt.Errorf("embedded laws: no G-NN.yaml files")
+		return nil, ErrNoLawYAML
 	}
 	return out, nil
 }

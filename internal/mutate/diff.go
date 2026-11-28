@@ -4,6 +4,7 @@ package mutate
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"go/ast"
 	"go/parser"
@@ -19,6 +20,9 @@ import (
 	"github.com/Hedronite/go-tops/internal/gate"
 	"github.com/Hedronite/go-tops/internal/gobuild"
 )
+
+// ErrNeedFetchDepthZero means git history is too shallow for merge-base or base-ref resolution.
+var ErrNeedFetchDepthZero = errors.New("set fetch-depth: 0")
 
 // DiffResult describes the branch-diff scope computed against the target base ref.
 type DiffResult struct {
@@ -119,7 +123,7 @@ func resolveMergeBase(ctx context.Context, ex gate.Executor, dir, base string) (
 func requireFullHistory(ctx context.Context, ex gate.Executor, dir, base string) error {
 	sh, err := ex.Run(ctx, gate.Cmd{Dir: dir, Argv: []string{"git", "rev-parse", "--is-shallow-repository"}})
 	if err == nil && sh.ExitCode == 0 && strings.TrimSpace(string(sh.Stdout)) == "true" {
-		return fmt.Errorf("shallow clone cannot reliably compute merge-base against %s (set fetch-depth: 0)", base)
+		return fmt.Errorf("shallow clone cannot reliably compute merge-base against %s (%w)", base, ErrNeedFetchDepthZero)
 	}
 	return nil
 }
@@ -127,7 +131,7 @@ func requireFullHistory(ctx context.Context, ex gate.Executor, dir, base string)
 func verifyBaseCommit(ctx context.Context, ex gate.Executor, dir, base string) error {
 	res, err := ex.Run(ctx, gate.Cmd{Dir: dir, Argv: []string{"git", "rev-parse", "--verify", base + "^{commit}"}})
 	if err != nil || res.ExitCode != 0 || strings.TrimSpace(string(res.Stdout)) == "" {
-		return fmt.Errorf("base ref %q not found in git history (in CI ensure fetch-depth: 0): %s", base, strings.TrimSpace(string(res.Stderr)))
+		return fmt.Errorf("base ref %q not found in git history (%w): %s", base, ErrNeedFetchDepthZero, strings.TrimSpace(string(res.Stderr)))
 	}
 	return nil
 }

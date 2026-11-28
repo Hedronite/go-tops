@@ -15,6 +15,12 @@ import (
 	"github.com/Hedronite/go-tops/internal/report"
 )
 
+// ErrNoLedgerReader means a configured survivor ledger exists but nothing can load it.
+var ErrNoLedgerReader = errors.New("no ledger reader is registered")
+
+// ErrLineDirective means production source under mutation contains a //line directive.
+var ErrLineDirective = errors.New("line directive not allowed")
+
 // ProtocolMutatorsOn lists the six mutators of §6.4.
 var ProtocolMutatorsOn = []string{
 	"ARITHMETIC_BASE",
@@ -185,7 +191,7 @@ func loadConfiguredLedger(dir, ledgerPath string, today time.Time) (Ledger, erro
 		}
 		return nil, err
 	}
-	return nil, fmt.Errorf("mutation ledger %q exists, but no ledger reader is registered", slash)
+	return nil, fmt.Errorf("mutation ledger %q exists, but %w", slash, ErrNoLedgerReader)
 }
 
 func newEvaluation(diff DiffResult, notMeasured int, problems []exempt.Problem) Evaluation {
@@ -209,7 +215,7 @@ func checkNoLineDirectives(dir string, inBuild map[string]map[int]bool) error {
 		if ln, text, ok, err := FindLineDirective(src); err != nil {
 			return err
 		} else if ok {
-			return fmt.Errorf("line directive not allowed in %s:%d (%s)", rel, ln, text)
+			return fmt.Errorf("%w in %s:%d (%s)", ErrLineDirective, rel, ln, text)
 		}
 	}
 	return nil

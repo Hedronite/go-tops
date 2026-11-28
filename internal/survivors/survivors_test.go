@@ -156,7 +156,13 @@ func TestABadEntryFailsTheLoadNamingIt(t *testing.T) {
 		if len(l.Entries) != 0 {
 			t.Errorf("%s: a bad ledger still explains: %v", name, l.Entries)
 		}
-		if !strings.Contains(err.Error(), rel) || !strings.Contains(err.Error(), c.names) {
+		okRel, okName := false, false
+		for _, issue := range invalid.Issues {
+			text := issue.String()
+			okRel = okRel || strings.Contains(text, rel)
+			okName = okName || strings.Contains(text, c.names)
+		}
+		if !okRel || !okName {
 			t.Errorf("%s: the error does not name %s and %q: %v", name, rel, c.names, err)
 		}
 	}

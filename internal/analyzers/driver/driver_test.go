@@ -9,6 +9,20 @@ import (
 	"golang.org/x/tools/go/packages"
 )
 
+func TestKitDelegatedLawDebt(t *testing.T) {
+	root, err := filepath.Abs("../..")
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := Run(context.Background(), root)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if res.ByLaw["G-11"] != 0 {
+		t.Fatalf("kit G-11 = %d, want 0; byFile=%v", res.ByLaw["G-11"], res.ByLawFile["G-11"])
+	}
+}
+
 func TestRunOnTempModule(t *testing.T) {
 	dir := t.TempDir()
 	mod := filepath.Join(dir, "go.mod")

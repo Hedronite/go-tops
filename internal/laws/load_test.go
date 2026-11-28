@@ -1,6 +1,7 @@
 package laws
 
 import (
+	"errors"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -62,8 +63,8 @@ func TestCatalogLoadsFortyThreeLaws(t *testing.T) {
 
 func TestLoadCatalogFromEmptyFS(t *testing.T) {
 	_, err := loadCatalogFrom(fstest.MapFS{})
-	if err == nil || !strings.Contains(err.Error(), "no G-NN.yaml") {
-		t.Fatalf("err = %v", err)
+	if !errors.Is(err, ErrNoLawYAML) {
+		t.Fatalf("err = %v, want ErrNoLawYAML", err)
 	}
 }
 

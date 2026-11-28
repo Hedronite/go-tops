@@ -6,6 +6,7 @@
 package gobuild
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -98,7 +99,7 @@ func Resolve(dir string, b Build) (Build, error) {
 	if b.GOOS != "" && b.GOARCH != "" {
 		return b, nil
 	}
-	cmd := exec.Command("go", "env", "GOOS", "GOARCH")
+	cmd := exec.CommandContext(context.Background(), "go", "env", "GOOS", "GOARCH")
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), b.Env()...)
 	out, err := cmd.Output()

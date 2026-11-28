@@ -52,13 +52,14 @@ func TestVerifyBinary(t *testing.T) {
 		t.Fatalf("a matching file failed: %v", err)
 	}
 	err := lockFor(strings.Repeat("0", 64), "").VerifyBinary("tool", p, "linux/amd64")
-	if err == nil || !strings.Contains(err.Error(), abcSHA) || !strings.Contains(err.Error(), strings.Repeat("0", 64)) {
+	var mismatch *SHA256MismatchError
+	if !errors.As(err, &mismatch) || mismatch.Got != abcSHA || mismatch.Want != strings.Repeat("0", 64) {
 		t.Fatalf("a mismatch must name both hashes: %v", err)
 	}
-	if err := l.VerifyBinary("other", p, "linux/amd64"); err == nil || !strings.Contains(err.Error(), "not pinned") {
+	if err := l.VerifyBinary("other", p, "linux/amd64"); !errors.Is(err, ErrBinaryNotPinned) {
 		t.Errorf("an unpinned binary: %v", err)
 	}
-	if err := l.VerifyBinary("tool", p, "linux/arm64"); err == nil || !strings.Contains(err.Error(), "linux/arm64") {
+	if err := l.VerifyBinary("tool", p, "linux/arm64"); !errors.Is(err, ErrPlatformHashMissing) {
 		t.Errorf("a platform with no hash: %v", err)
 	}
 	if err := l.VerifyBinary("tool", filepath.Join(t.TempDir(), "absent"), "linux/amd64"); err == nil {
@@ -75,7 +76,8 @@ func TestVerifyBinaryWithExtractUsesTheExecutableHash(t *testing.T) {
 		t.Fatalf("the executable matches executable_sha256: %v", err)
 	}
 	err := l.VerifyBinary("tool", write(t, t.TempDir(), "tool", "abd"), "linux/amd64")
-	if err == nil || !strings.Contains(err.Error(), "executable_sha256") {
+	var bad *SHA256MismatchError
+	if !errors.As(err, &bad) || bad.Field != "executable_sha256" {
 		t.Fatalf("a different executable must fail, naming the field: %v", err)
 	}
 	// the archive hash is not the one compared

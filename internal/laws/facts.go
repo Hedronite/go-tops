@@ -2,6 +2,7 @@ package laws
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"go/parser"
 	"go/token"
@@ -162,7 +163,7 @@ func checkG33(dir string, goEnv func() (string, error), out map[string]int) erro
 }
 
 func defaultGoEnv() (string, error) {
-	out, err := exec.Command("go", "env", "GOVERSION").Output()
+	out, err := exec.CommandContext(context.Background(), "go", "env", "GOVERSION").Output()
 	if err != nil {
 		return "", err
 	}

@@ -2,6 +2,7 @@ package lock
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -63,7 +64,7 @@ func (o VerifyOptions) withDefaults() VerifyOptions {
 }
 
 func execRunner(dir string, argv ...string) (string, error) {
-	cmd := exec.Command(argv[0], argv[1:]...)
+	cmd := exec.CommandContext(context.Background(), argv[0], argv[1:]...)
 	cmd.Dir = dir
 	var out, errb bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &errb

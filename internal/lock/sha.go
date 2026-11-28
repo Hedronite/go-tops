@@ -17,6 +17,21 @@ import (
 // reach this.
 var ErrNotVerifiable = errors.New("the lock holds the hash of the archive, not of the installed executable")
 
+// ErrBinaryNotPinned means the lock has no entry for the requested binary name.
+var ErrBinaryNotPinned = errors.New("not pinned in lock file")
+
+// ErrPlatformHashMissing means the lock has no hash for the requested platform.
+var ErrPlatformHashMissing = errors.New("platform hash missing in lock file")
+
+// SHA256MismatchError is returned when an installed file's hash differs from the lock.
+type SHA256MismatchError struct {
+	Name, Path, Got, Want, Field, Platform string
+}
+
+func (e *SHA256MismatchError) Error() string {
+	return fmt.Sprintf("%s at %s has SHA-256 %s, the lock's %s says %s for %s", e.Name, e.Path, e.Got, e.Field, e.Want, e.Platform)
+}
+
 // HostPlatform is the lock's platform key for this host, such as "darwin/arm64".
 func HostPlatform() string { return runtime.GOOS + "/" + runtime.GOARCH }
 
@@ -58,7 +73,7 @@ func (l *Lock) Binary(name string) (*Binary, bool) {
 func (l *Lock) VerifyBinary(name, path, platform string) error {
 	b, ok := l.Binary(name)
 	if !ok {
-		return fmt.Errorf("%s is not pinned in %s", name, FileName)
+		return fmt.Errorf("%s %w (%s)", name, ErrBinaryNotPinned, FileName)
 	}
 	field, hashes := "sha256", b.SHA256
 	if b.Extract != "" {
@@ -66,7 +81,7 @@ func (l *Lock) VerifyBinary(name, path, platform string) error {
 	}
 	want, ok := hashes[platform]
 	if !ok {
-		err := fmt.Errorf("%s has no %s for %s in %s", name, field, platform, FileName)
+		err := fmt.Errorf("%s %w (%s has no %s for %s)", name, ErrPlatformHashMissing, name, field, platform)
 		if b.Extract != "" {
 			err = fmt.Errorf("%w: %w", err, ErrNotVerifiable)
 		}
@@ -77,7 +92,7 @@ func (l *Lock) VerifyBinary(name, path, platform string) error {
 		return fmt.Errorf("%s: %w", name, err)
 	}
 	if got != want {
-		return fmt.Errorf("%s at %s has SHA-256 %s, the lock's %s says %s for %s", name, path, got, field, want, platform)
+		return &SHA256MismatchError{Name: name, Path: path, Got: got, Field: field, Want: want, Platform: platform}
 	}
 	return nil
 }

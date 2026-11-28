@@ -354,7 +354,7 @@ func ledgerProblem(dir, rel string) string {
 
 // gitExit runs git in dir and returns its exit code, or -1 when it did not run.
 func gitExit(dir string, args ...string) int {
-	err := exec.Command("git", append([]string{"-C", dir}, args...)...).Run()
+	err := exec.CommandContext(context.Background(), "git", append([]string{"-C", dir}, args...)...).Run()
 	var exit *exec.ExitError
 	switch {
 	case err == nil:
@@ -587,7 +587,7 @@ func loadBaselineConfig(dir string) (gate.Config, string, string, error) {
 // the working tree is still the repo's ledger, so --init does not stand in for
 // it. A directory git cannot read has none.
 func trackedAtHead(dir, rel string) bool {
-	return exec.Command("git", "-C", dir, "cat-file", "-e", "HEAD:./"+rel).Run() == nil
+	return exec.CommandContext(context.Background(), "git", "-C", dir, "cat-file", "-e", "HEAD:./"+rel).Run() == nil
 }
 
 // readLedger reads the ledger. A file that is there but is not a ledger is a

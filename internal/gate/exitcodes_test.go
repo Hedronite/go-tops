@@ -190,7 +190,8 @@ func TestExit2ConfigErrorWrapped(t *testing.T) {
 // --only with a layer that does not exist is a usage error: exit 2.
 func TestExit2UnknownOnlyLayer(t *testing.T) {
 	err := refusal(t, cfg(), Options{MaxTier: 1, Only: "nope"}, deps(gateLayers(nil, nil)), 2)
-	if !strings.Contains(err.Error(), "nope") {
+	var exitErr *ExitError
+	if !errors.As(err, &exitErr) || !strings.Contains(exitErr.Err.Error(), "nope") {
 		t.Errorf("message does not name the layer: %v", err)
 	}
 }

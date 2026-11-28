@@ -1,6 +1,7 @@
 package initcmd
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -147,7 +148,7 @@ func TestStatusStepActsOnACodeAndAStateThatAgree(t *testing.T) {
 			t.Fatal(err)
 		}
 		out := filepath.Join(work, "output")
-		cmd := exec.Command("bash", "-e", "-c", s.Run)
+		cmd := exec.CommandContext(context.Background(), "bash", "-e", "-c", s.Run)
 		cmd.Dir = work
 		cmd.Env = append(os.Environ(), "PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"), "GITHUB_OUTPUT="+out)
 		if b, err := cmd.CombinedOutput(); err != nil {
@@ -178,7 +179,7 @@ func TestFirstLedgerStepsFailTheRunUntilTheLedgerIsCommitted(t *testing.T) {
 		{"cannot tell", "could not tell", "STATUS_CODE=2", "exited '2'"},
 	} {
 		s := stepNamed(t, steps, c.text)
-		cmd := exec.Command("bash", "-e", "-c", s.Run)
+		cmd := exec.CommandContext(context.Background(), "bash", "-e", "-c", s.Run)
 		cmd.Dir = t.TempDir()
 		cmd.Env = append(os.Environ(), c.env)
 		out, err := cmd.CombinedOutput()

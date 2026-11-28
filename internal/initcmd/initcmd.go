@@ -4,6 +4,7 @@
 package initcmd
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -96,7 +97,7 @@ func goModTidy(dir string) error {
 	// Inside tools/, so the tools module is tidied on its own. From the module root,
 	// -modfile=tools/go.mod would read the adopter's packages as packages of the
 	// tools module and fail as soon as one imports another.
-	cmd := exec.Command("go", "-C", "tools", "mod", "tidy")
+	cmd := exec.CommandContext(context.Background(), "go", "-C", "tools", "mod", "tidy")
 	cmd.Dir = dir
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("%w\n%s", err, out)

@@ -3,6 +3,7 @@
 package initcmd
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"io"
@@ -30,7 +31,7 @@ func TestNetworkToolsModResolvesAndRuns(t *testing.T) {
 		t.Fatal("tools/go.sum is empty")
 	}
 	for _, tool := range [][]string{{"gotestsum", "--version"}, {"govulncheck", "-version"}, {"go-licenses", "--help"}} {
-		cmd := exec.Command("go", append([]string{"tool", "-modfile=tools/go.mod"}, tool...)...)
+		cmd := exec.CommandContext(context.Background(), "go", append([]string{"tool", "-modfile=tools/go.mod"}, tool...)...)
 		cmd.Dir = dir
 		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Errorf("go tool %s: %v\n%s", tool[0], err, out)

@@ -4,6 +4,7 @@ package initcmd
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -169,7 +170,7 @@ func (w *workflowRun) script(s step, name string) {
 	for k, v := range s.Env {
 		env = append(env, k+"="+w.resolve(v))
 	}
-	cmd := exec.Command("bash", "-e", "-c", s.Run)
+	cmd := exec.CommandContext(context.Background(), "bash", "-e", "-c", s.Run)
 	cmd.Dir, cmd.Env = w.dir, env
 	var buf bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &buf, &buf
@@ -232,7 +233,7 @@ func pullRequestRun(t *testing.T, dir, shim, temp string, skip map[string]bool) 
 // sh runs a command in dir and fails the test unless it succeeds.
 func sh(t *testing.T, dir string, env []string, name string, args ...string) string {
 	t.Helper()
-	cmd := exec.Command(name, args...)
+	cmd := exec.CommandContext(context.Background(), name, args...)
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), env...)
 	out, err := cmd.CombinedOutput()

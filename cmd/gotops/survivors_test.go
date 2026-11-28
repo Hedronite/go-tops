@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -13,6 +14,7 @@ import (
 	"github.com/Hedronite/go-tops/internal/gate"
 	"github.com/Hedronite/go-tops/internal/gobuild"
 	"github.com/Hedronite/go-tops/internal/mutate"
+	"github.com/Hedronite/go-tops/internal/survivors"
 )
 
 // The cases come from GO_TOPS.md §12.1 and §6.4: list reads only; explain writes
@@ -296,9 +298,16 @@ func TestTheGateExplainsASurvivorOnlyByALiveEntryOfItsExactKey(t *testing.T) {
 
 func TestTheGateFailsOnALedgerItCannotRead(t *testing.T) {
 	_, err := judged(t, "survivors:\n  - {file: x.go}\n", time.Now())
-	if err == nil || !strings.Contains(err.Error(), survivorsRel) {
-		t.Fatalf("err = %v, want one naming %s", err, survivorsRel)
+	var invalid *survivors.InvalidError
+	if !errors.As(err, &invalid) {
+		t.Fatalf("err = %v, want InvalidError naming %s", err, survivorsRel)
 	}
+	for _, issue := range invalid.Issues {
+		if strings.Contains(issue.String(), survivorsRel) {
+			return
+		}
+	}
+	t.Fatalf("err = %v, want one naming %s", err, survivorsRel)
 }
 
 // The command as the binary runs it, in the module directory: its exit code and

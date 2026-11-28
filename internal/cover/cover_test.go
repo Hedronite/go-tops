@@ -54,7 +54,8 @@ func TestParseRefusesWhatIsNotAProfile(t *testing.T) {
 		}
 	}
 	_, err := Parse(strings.NewReader("mode: set\nexample.com/m/a/a.go:1.1,2.2 1 x\n"))
-	if err == nil || !strings.Contains(err.Error(), "line 2") {
+	var lineErr *LineError
+	if !errors.As(err, &lineErr) || lineErr.Line != 2 {
 		t.Errorf("the error must name the line: %v", err)
 	}
 }

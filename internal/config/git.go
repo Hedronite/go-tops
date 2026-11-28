@@ -2,6 +2,7 @@ package config
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -50,7 +51,7 @@ func baselineProblem(root, rel string) (string, error) {
 // gitRun runs git in root and returns its exit code and combined output. The
 // error is non-nil when git did not run at all.
 func gitRun(root string, args ...string) (int, string, error) {
-	cmd := exec.Command("git", append([]string{"-C", root}, args...)...)
+	cmd := exec.CommandContext(context.Background(), "git", append([]string{"-C", root}, args...)...)
 	cmd.Env = append(os.Environ(), "GIT_OPTIONAL_LOCKS=0")
 	var out bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &out

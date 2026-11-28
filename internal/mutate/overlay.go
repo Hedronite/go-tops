@@ -22,6 +22,12 @@ import (
 	"github.com/Hedronite/go-tops/internal/gobuild"
 )
 
+// ErrBaselineCoverage means a per-package baseline coverage or compile step failed.
+var ErrBaselineCoverage = errors.New("baseline coverage run failed")
+
+// ErrCompileTimedOut means a compile step hit its deadline.
+var ErrCompileTimedOut = errors.New("compile timed out")
+
 // OverlayOptions configures native go test -overlay mutation testing.
 type OverlayOptions struct {
 	Workers           int           // <= 0 defaults to boundWorkers(runtime.GOMAXPROCS(0))
@@ -243,11 +249,11 @@ func runOverlayPkgCoverage(ctx context.Context, ex gate.Executor, dir, tmpDir, m
 		res, err := ex.Run(ctx, gate.Cmd{Dir: dir, Argv: argv, Env: build.Env()})
 		pkgDurs[pkg] = time.Since(t0)
 		if err != nil {
-			return nil, nil, fmt.Errorf("baseline coverage run failed for %s: %w", pkg, err)
+			return nil, nil, fmt.Errorf("%w for %s: %v", ErrBaselineCoverage, pkg, err)
 		}
 		if res.ExitCode != 0 {
 			msg := strings.TrimSpace(string(res.Stdout) + "\n" + string(res.Stderr))
-			return nil, nil, fmt.Errorf("baseline coverage run failed for %s (exit %d): %s", pkg, res.ExitCode, msg)
+			return nil, nil, fmt.Errorf("%w for %s (exit %d): %s", ErrBaselineCoverage, pkg, res.ExitCode, msg)
 		}
 		if _, statErr := os.Stat(covPath); errors.Is(statErr, os.ErrNotExist) {
 			continue
@@ -348,7 +354,7 @@ func checkCompileOutcome(parentCtx, cctx context.Context, label string, res gate
 		return parentCtx.Err()
 	}
 	if errors.Is(cctx.Err(), context.DeadlineExceeded) {
-		return fmt.Errorf("compile %s timed out", label)
+		return fmt.Errorf("compile %s: %w", label, ErrCompileTimedOut)
 	}
 	if err != nil {
 		return fmt.Errorf("compile %s: %w", label, err)

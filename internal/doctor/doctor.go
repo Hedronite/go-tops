@@ -3,6 +3,7 @@
 package doctor
 
 import (
+	"context"
 	"fmt"
 	"go/version"
 	"os"
@@ -51,7 +52,7 @@ func (e Env) withDefaults() Env {
 	}
 	if e.Run == nil {
 		e.Run = func(dir string, argv ...string) (string, error) {
-			cmd := exec.Command(argv[0], argv[1:]...)
+			cmd := exec.CommandContext(context.Background(), argv[0], argv[1:]...)
 			cmd.Dir = dir
 			out, err := cmd.Output()
 			return string(out), err

@@ -2,6 +2,7 @@ package ratchet
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -124,7 +125,7 @@ func ledgerAt(dir, rev, rel string) Base {
 // git runs git in dir and returns its output and exit code. The error is non-nil
 // only when git did not run.
 func git(dir string, args ...string) (string, int, error) {
-	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+	cmd := exec.CommandContext(context.Background(), "git", append([]string{"-C", dir}, args...)...)
 	cmd.Env = append(os.Environ(), "GIT_OPTIONAL_LOCKS=0")
 	var out bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &out
