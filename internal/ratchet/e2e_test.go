@@ -127,7 +127,7 @@ func (p *ratchetProject) writeLedgerFor(t *testing.T, functions map[string]float
 	doc := map[string]any{
 		"build":       map[string]any{"goos": build.GOOS, "goarch": build.GOARCH, "tags": append([]string{}, build.Tags...), "cgo_enabled": build.CGOEnabled},
 		"ledger":      ledger,
-		"judged_laws": 9,
+		"judged_laws": 16,
 	}
 	raw, err := json.Marshal(doc)
 	if err != nil {
