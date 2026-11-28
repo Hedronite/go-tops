@@ -77,6 +77,10 @@ func checkLaws(r *repo) checkResult {
 			res.Findings = append(res.Findings, finding{rel, 0, err.Error()})
 			continue
 		}
+		wantID := strings.TrimSuffix(e.Name(), ".yaml")
+		if row.ID != wantID {
+			res.Findings = append(res.Findings, finding{rel, 0, fmt.Sprintf("laws/%s: id %q does not match file name", e.Name(), row.ID)})
+		}
 		if diffs := diffLawRow(specRows, row); len(diffs) > 0 {
 			for _, d := range diffs {
 				res.Findings = append(res.Findings, finding{rel, 0, d})
@@ -146,6 +150,8 @@ func schemaAt(r *repo, rel string, cache map[string]*jsonschema.Schema) (*jsonsc
 	return s, nil
 }
 
+var launchProfileClasses = []string{"library-core", "binary-service", "binary-cli"}
+
 type lawRow struct {
 	ID       string
 	Severity string
@@ -155,6 +161,10 @@ type lawRow struct {
 	Retired  bool
 	Status   string
 	Fixture  string
+	Classes  []string
+
+	ExactClasses []string // class-tagged rows in §8.2; exact match required
+	NeedLaunch   bool     // v0.1 active rows must include launchProfileClasses
 }
 
 func lawRowFromYAML(inst any) (lawRow, error) {
@@ -173,10 +183,25 @@ func lawRowFromYAML(inst any) (lawRow, error) {
 	if id == "G-22" || id == "G-35" {
 		tier = 3
 	}
+	classes := stringSliceField(m, "classes")
 	return lawRow{
 		ID: id, Severity: sevR, Reader: reader, Tier: tier, V01: v01,
-		Retired: status == "retired", Status: status, Fixture: fixture,
+		Retired: status == "retired", Status: status, Fixture: fixture, Classes: classes,
 	}, nil
+}
+
+func stringSliceField(m map[string]any, key string) []string {
+	raw, ok := m[key].([]any)
+	if !ok {
+		return nil
+	}
+	var out []string
+	for _, v := range raw {
+		if s, ok := v.(string); ok {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 func diffLawRow(spec map[string]lawRow, got lawRow) []string {
@@ -200,7 +225,44 @@ func diffLawRow(spec map[string]lawRow, got lawRow) []string {
 	if want.Retired != got.Retired {
 		out = append(out, "retired differs from §8.2")
 	}
+	if want.ExactClasses != nil {
+		if !sameStringSet(want.ExactClasses, got.Classes) {
+			out = append(out, fmt.Sprintf("classes differ from §8.2 (want %v, got %v)", want.ExactClasses, got.Classes))
+		}
+	}
+	if want.NeedLaunch {
+		for _, c := range launchProfileClasses {
+			if !containsString(got.Classes, c) {
+				out = append(out, fmt.Sprintf("v0.1 law missing launch class %q", c))
+			}
+		}
+	}
 	return out
+}
+
+func sameStringSet(a, b []string) bool {
+	a = append([]string(nil), a...)
+	b = append([]string(nil), b...)
+	sort.Strings(a)
+	sort.Strings(b)
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func containsString(ss []string, want string) bool {
+	for _, s := range ss {
+		if s == want {
+			return true
+		}
+	}
+	return false
 }
 
 var specLawRow = regexp.MustCompile(`^\| (G-\d\d) \|`)
@@ -244,12 +306,34 @@ func parseLawSpec(r *repo) (map[string]lawRow, []finding) {
 		if id == "G-22" || id == "G-35" {
 			tier = 3
 		}
-		out[id] = lawRow{
+		v01 := cells[4] == "✓"
+		retired := strings.HasPrefix(cells[1], "Retired")
+		row := lawRow{
 			ID: id, Severity: cells[2], Reader: rk, Tier: tier,
-			V01: cells[4] == "✓", Retired: strings.HasPrefix(cells[1], "Retired"),
+			V01: v01, Retired: retired,
 		}
+		row.ExactClasses = classTaggedExactClasses(id)
+		if v01 && !retired {
+			row.NeedLaunch = true
+		}
+		out[id] = row
 	}
 	return out, findings
+}
+
+func classTaggedExactClasses(id string) []string {
+	switch id {
+	case "G-10":
+		return []string{"tui-app"}
+	case "G-24":
+		return []string{"library-core"}
+	case "G-29":
+		return []string{"parser-codec"}
+	case "G-41":
+		return []string{"binary-cli"}
+	default:
+		return nil
+	}
 }
 
 func pathInside(root, rel string) bool {

@@ -2,7 +2,8 @@ id: G-29
 title: Every exported decoder/parser in `parser-codec` has a fuzz target and a committed seed corpus
 severity: refuse
 status: active
-classes: []
+classes:
+- parser-codec
 reader: analyzer
 rationale: >
   This law is in the §8.2 catalog but is not in the v0.1 mechanical set; the gate reports it not-evaluated until a later milestone provides a reader.
