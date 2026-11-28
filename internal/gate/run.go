@@ -37,6 +37,8 @@ type Deps struct {
 	Laws func(laws.Input) []laws.Result
 	// LawPass runs the delegated law lint pass; default lawpass.Run.
 	LawPass func(context.Context, *Env) (lawpass.LintResult, error)
+	// LawsRun runs fact laws and analyzers; default laws.Run.
+	LawsRun func(context.Context, string, string) (laws.RunnerResult, error)
 	// Ratchet judges the run against the debt ledger under enforce: ratchet
 	// (§6.7); default DefaultRatchet. See ratchet.go.
 	Ratchet RatchetJudge
@@ -140,6 +142,20 @@ func Execute(ctx context.Context, cfg Config, opts Options, d Deps) (*Run, error
 	layers, stopped, vulnDB := runLayers(ctx, env, plan, opts)
 
 	ev := laws.Evidence{Hygiene: laws.HygieneFromLayers(layers)}
+	if lawsIn && !stopped && opts.MaxTier >= 0 {
+		lawsRun := d.LawsRun
+		if lawsRun == nil {
+			lawsRun = func(ctx context.Context, dir, class string) (laws.RunnerResult, error) {
+				return laws.Run(ctx, dir, class, nil)
+			}
+		}
+		rr, err := lawsRun(ctx, env.Dir, cfg.Class)
+		if err != nil {
+			return nil, exitf(ExitFail, "law analyzers: %v", err)
+		}
+		ev.AnalyzersOK = rr.OK
+		ev.Analyzers = rr.ByLaw
+	}
 	if lawsIn && !stopped && opts.MaxTier >= 1 {
 		runLaw := d.LawPass
 		if runLaw == nil {

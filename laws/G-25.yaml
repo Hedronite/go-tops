@@ -22,4 +22,4 @@ fix: >
   Move unsafe code behind a small API; add a // SAFETY: line per use explaining why it is sound.
 v01: true
 analyzer: gotops/unsafeuse
-fixture: testdata/laws/pending/G-25
+fixture: internal/analyzers/unsafeuse/testdata/src

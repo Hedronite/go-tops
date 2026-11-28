@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/Hedronite/go-tops/internal/lawpass"
+	"github.com/Hedronite/go-tops/internal/laws"
 	"github.com/Hedronite/go-tops/internal/report"
 )
 
@@ -26,6 +27,7 @@ type CommandDeps struct {
 	Now         func() time.Time
 	ToolVersion string
 	LawPass     func(context.Context, *Env) (lawpass.LintResult, error)
+	LawsRun     func(context.Context, string, string) (laws.RunnerResult, error)
 }
 
 // Usage is the text of `gotops gate --help`.
@@ -65,7 +67,7 @@ func Main(ctx context.Context, args []string, d CommandDeps, stdout, stderr Prin
 		return code
 	}
 	res, err := Execute(ctx, cfg, o, Deps{
-		Dir: d.Dir, Layers: d.Layers, Exec: d.Exec, Tools: d.Tools, CI: d.CI, Now: d.Now, ToolVersion: d.ToolVersion, LawPass: d.LawPass,
+		Dir: d.Dir, Layers: d.Layers, Exec: d.Exec, Tools: d.Tools, CI: d.CI, Now: d.Now, ToolVersion: d.ToolVersion, LawPass: d.LawPass, LawsRun: d.LawsRun,
 	})
 	if err != nil {
 		stderr.Printf("gotops gate: %v\n", err)

@@ -12,6 +12,10 @@ type Evidence struct {
 	Lint       lawpass.LintResult
 	// Hygiene is set when the hygiene layer ran in this gate run.
 	Hygiene HygieneEvidence
+	// AnalyzersOK is true when facts and in-process analyzers completed.
+	AnalyzersOK bool
+	// Analyzers holds per-law counts from facts and custom analyzers.
+	Analyzers map[string]int
 }
 
 // HygieneEvidence holds gate-1 outcomes for G-34 and G-40.

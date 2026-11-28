@@ -16,7 +16,7 @@ func cmdDeps(t *testing.T, ls []Layer, c Config) CommandDeps {
 	d := deps(ls)
 	return CommandDeps{
 		Dir: t.TempDir(), Layers: ls, Exec: d.Exec, Tools: d.Tools, Now: d.Now, ToolVersion: "0.0.0-dev",
-		LoadConfig: func(string) (Config, error) { return c, nil }, LawPass: StubLawPass,
+		LoadConfig: func(string) (Config, error) { return c, nil }, LawPass: StubLawPass, LawsRun: StubLawsRun,
 	}
 }
 

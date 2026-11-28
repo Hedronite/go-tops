@@ -99,6 +99,9 @@ linters:
             - github.com/santhosh-tekuri/jsonschema/v6
             - go.yaml.in/yaml/v3
             - golang.org/x/tools/go/packages
+            - golang.org/x/tools/go/analysis
+            - golang.org/x/tools/go/analysis/analysistest
+            - golang.org/x/mod/modfile
     errorlint:
       errorf: true
       asserts: true

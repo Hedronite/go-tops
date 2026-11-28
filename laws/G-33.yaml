@@ -22,4 +22,4 @@ fix: >
   Set go to at least the protocol floor; align the CI and release toolchain with go-tops.lock and go env GOVERSION.
 v01: true
 analyzer: gotops/goversion
-fixture: testdata/laws/pending/G-33
+fixture: internal/laws/testdata/facts/G-33

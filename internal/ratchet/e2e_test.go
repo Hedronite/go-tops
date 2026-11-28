@@ -127,7 +127,7 @@ func (p *ratchetProject) writeLedgerFor(t *testing.T, functions map[string]float
 	doc := map[string]any{
 		"build":       map[string]any{"goos": build.GOOS, "goarch": build.GOARCH, "tags": append([]string{}, build.Tags...), "cgo_enabled": build.CGOEnabled},
 		"ledger":      ledger,
-		"judged_laws": 9,
+		"judged_laws": 16,
 	}
 	raw, err := json.Marshal(doc)
 	if err != nil {
@@ -195,7 +195,7 @@ func execute(t *testing.T, p *ratchetProject, cfg gate.Config, ls []gate.Layer) 
 
 func executeWith(t *testing.T, p *ratchetProject, cfg gate.Config, ls []gate.Layer, opts gate.Options) *gate.Run {
 	t.Helper()
-	d := gate.Deps{Dir: p.dir, Layers: ls, ToolVersion: "test", LawPass: gate.StubLawPass, Ratchet: ratchet.NewJudge(ratchet.CollectMeasure(), defaultPaths)}
+	d := gate.Deps{Dir: p.dir, Layers: ls, ToolVersion: "test", LawPass: gate.StubLawPass, LawsRun: gate.StubLawsRun, Ratchet: ratchet.NewJudge(ratchet.CollectMeasure(), defaultPaths)}
 	run, err := gate.Execute(context.Background(), cfg, opts, d)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)

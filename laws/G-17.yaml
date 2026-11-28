@@ -22,7 +22,7 @@ fix: >
   Take ctx from the caller, or from wire/main setup; use Background or TODO only in main, wiring, and tests.
 v01: true
 analyzer: gotops/ctxroot
-fixture: testdata/laws/pending/G-17
+fixture: internal/analyzers/ctxroot/testdata/src
 allow_paths:
 - cmd/**/main.go
 - internal/app/wire*.go

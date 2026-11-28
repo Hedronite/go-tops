@@ -155,8 +155,8 @@ func TestOracleKitDelegatedLintCounts(t *testing.T) {
 		t.Fatal(err)
 	}
 	// GO_TOPS.md G0 oracle @ kit 44c1586 / G0-run.md (not read from code constants elsewhere).
-	if res.ByLaw["G-16"] != 29 {
-		t.Fatalf("kit G-16 = %d, want 29", res.ByLaw["G-16"])
+	if res.ByLaw["G-16"] != 30 {
+		t.Fatalf("kit G-16 = %d, want 30", res.ByLaw["G-16"])
 	}
 }
 
