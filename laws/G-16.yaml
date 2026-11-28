@@ -22,4 +22,4 @@ fix: >
   Thread context.Context into outbound HTTP, RPC, and database calls as the first argument.
 v01: true
 tool: noctx
-fixture: testdata/laws/pending/G-16
+fixture: testdata/lints

@@ -100,6 +100,10 @@ func checkLaws(r *repo) checkResult {
 				pending++
 				if row.V01 && row.Status == "active" {
 					v01Pending = append(v01Pending, row.ID)
+					res.Findings = append(res.Findings, finding{
+						rel, 0,
+						fmt.Sprintf("v0.1 active law %s still points at placeholder fixture %s (L15)", row.ID, row.Fixture),
+					})
 				}
 			}
 		}

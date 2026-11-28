@@ -167,8 +167,14 @@ def state-of [run: any, entry: any] {
   if $run > ($entry + $NOISE) { "raised" } else if $run < ($entry - $NOISE) { "lowered" } else { "held" }
 }
 
-def function-row [f: record, violations: list, ledger: record] {
-  let row = ($violations | where {|v| key-matches ($v.func? | default "") $f.key } | get 0?)
+def crap-row [key: string, violations: list, functions: list] {
+  let from_all = ($functions | where {|v| key-matches ($v.func? | default "") $key } | get 0?)
+  if $from_all != null { return $from_all }
+  ($violations | where {|v| key-matches ($v.func? | default "") $key } | get 0?)
+}
+
+def function-row [f: record, violations: list, functions: list, ledger: record, cap: any] {
+  let row = (crap-row $f.key $violations $functions)
   let entry_key = ($ledger | columns | where {|k| key-matches $k $f.key } | get 0?)
   let entry = if $entry_key == null { null } else { $ledger | get $entry_key }
   let run = if $row == null { null } else { $row.crap? | default null }
@@ -176,6 +182,7 @@ def function-row [f: record, violations: list, ledger: record] {
     file: $f.file
     function: (if $f.recv == "" { $f.name } else { $"($f.recv).($f.name)" })
     lines: [$f.first $f.last]
+    cap: $cap
     crap: $run
     complexity: ($row.cc? | default null)
     coverage_pct: ($row.cov_pct? | default null)
@@ -288,9 +295,12 @@ def "main diff" [
   let sources = ($hunks.ranges | where {|h| is-go-source $h.path })
   let fns = (touched-functions $path ($rep.module? | default "") $sources $added $committed_only)
   let ledger = (base-ledger $path $fp.sha)
-  let violations = ($rep.layers | where id == "crap" | first | get details?.violations? | default [])
+  let crap_layer = ($rep.layers | where id == "crap" | first)
+  let violations = ($crap_layer | get details?.violations? | default [])
+  let functions = ($crap_layer | get details?.functions? | default [])
+  let cap = ($crap_layer | get details?.cap? | default null)
   let mutation = (mutation-of $rep)
-  let rows = ($fns | each {|f| with-survivors (function-row $f $violations $ledger.functions) $mutation.survivors })
+  let rows = ($fns | each {|f| with-survivors (function-row $f $violations $functions $ledger.functions $cap) $mutation.survivors })
   emit true $cmd "" {
     base: $base
     fork_point: $fp.sha
@@ -308,7 +318,7 @@ def "main diff" [
     attention: ($rows | where {|r| needs-reviewer $r })
     mutation: {outcome: $mutation.outcome, error: $mutation.error}
     survivors_elsewhere: (outside $mutation.survivors $rows)
-    note: "CRAP, complexity and coverage are listed only for functions over the cap: the report names no others. under-cap means the function is not in the report."
+    note: "Every touched function lists CC, coverage_pct, CRAP and cap (F18). Rows use violations when the report has no functions list; under-cap means no score row was found."
     judgment: $JUDGMENT
   }
 }

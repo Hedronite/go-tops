@@ -269,7 +269,7 @@ func judgeCases() []judgeCase {
 		{"C9 on the ledger leg", "ubuntu", "1", c9(), false},
 		{"C9 on another leg, ratchet pass", "macos", "1", c9(), false},
 
-		{"C9 retired all required judged", "ubuntu", "0", gateDoc{enforce: "advisory", failed: []string{"laws"}, required: 16, notEval: 0, judged: 16}, false},
+		{"C9 retired all required judged", "ubuntu", "0", gateDoc{enforce: "advisory", failed: []string{"laws"}, required: 16, notEval: 0, judged: 16}, true},
 		{"interim: judged law refuse", "ubuntu", "1", c9().with(func(g *gateDoc) { g.refused = []string{"G-02"} }), true},
 		{"C9 on another leg, ratchet skip", "macos", "1", c9().with(func(g *gateDoc) { g.ratchet = "skip" }), false},
 		{"C9 on the ledger leg, ratchet skip", "ubuntu", "1", c9().with(func(g *gateDoc) { g.ratchet = "skip" }), true},

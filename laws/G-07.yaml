@@ -22,4 +22,4 @@ fix: >
   Pass pointers to sync primitives, or use a single owning struct; never copy a mutex, WaitGroup, or channel value after first use.
 v01: true
 tool: govet
-fixture: testdata/laws/pending/G-07
+fixture: testdata/lints

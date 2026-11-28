@@ -129,7 +129,7 @@ func TestC9InterimParityCases(t *testing.T) {
 		{"interim bad no_reader", "ubuntu", "1", c9().with(func(g *gateDoc) {
 			g.lawRows = []map[string]string{{"id": "G-02", "verdict": "allow"}, {"id": "G-20", "verdict": "not-evaluated", "reason": "input_missing"}}
 		}), true},
-		{"C9 retired counts", "ubuntu", "0", gateDoc{enforce: "advisory", required: 16, notEval: 0, judged: 16, failed: []string{"laws"}}, false},
+		{"C9 retired counts", "ubuntu", "0", gateDoc{enforce: "advisory", required: 16, notEval: 0, judged: 16, failed: []string{"laws"}}, true},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			dir := t.TempDir()

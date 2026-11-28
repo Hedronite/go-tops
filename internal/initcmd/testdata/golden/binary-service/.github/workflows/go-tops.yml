@@ -176,7 +176,8 @@ jobs:
       # every layer in range ran and is pass or skip (the mutation layer may also be
       # vacuous, when the diff changes no production line), the run is not partial, and the
       # only failed item, if any, is the required laws, all reported not evaluated,
-      # with no law judged and none refused (the laws are judged from M5). An exit 0
+      # with no law judged and none refused until M5 readers land; once every required
+      # law is judged, ruling C9 retires and a laws-only failure is not a pass. An exit 0
       # with a failed layer (an advisory run) or from a partial run is not a pass. Any
       # other exit code is a failure. The ratchet is judged on the ledger leg only
       # (GO_TOPS.md section 6.7); this repository's ledger leg is the ubuntu leg, so
@@ -242,20 +243,21 @@ jobs:
             and .summary.exit_code == $code
             and ($code == 0 or (.summary.failed | length) > 0)
             and (if (.summary.failed | any(. == "laws")) then
-                   def c9_laws_ok:
+                     def c9_laws_ok:
                      (.laws.required // 0) as $req
                      | (.laws.judged // 0) as $judged
                      | (.laws.required_not_evaluated // 0) as $ne
                      | ([.laws.results[] | select(.verdict == "refuse")] | length) == 0
+                     and ($req > 0)
+                     and ($judged < $req)
                      and (
-                       ($judged == 0 and $req > 0 and $req == $ne)
-                       or ($judged > 0 and $judged < $req
+                       ($judged == 0 and $req == $ne)
+                       or ($judged > 0
                          and $ne == ($req - $judged)
                          and ([(.laws.results // [])[] as $r
                            | select(($r.verdict != "not-evaluated") and (($r.verdict | IN("allow","ack")) | not))] | length) == 0
                          and ([(.laws.results // [])[] as $r
-                           | select(($r.verdict == "not-evaluated") and (($r.reason // "") != "no_reader"))] | length) == 0)
-                       or ($judged == $req and $ne == 0));
+                           | select(($r.verdict == "not-evaluated") and (($r.reason // "") != "no_reader"))] | length) == 0));
                    c9_laws_ok
                  else true end)
           ' "$report" > /dev/null || fail "the gate report is not a pass under ruling C9: the gate exited $GATE_EXIT and its report says another exit code, a layer failed or did not run, the run was partial, or something besides the required laws (ruling C9 (M4, interim, or retired)) failed"

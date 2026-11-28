@@ -22,4 +22,4 @@ fix: >
   defer resp.Body.Close(), close rows after iteration with rows.Err() checked, and close files and stop timers you start.
 v01: true
 tool: bodyclose
-fixture: testdata/laws/pending/G-18
+fixture: testdata/lints

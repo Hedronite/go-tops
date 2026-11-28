@@ -55,7 +55,7 @@ def c9-laws-ok [laws: record] {
   if not ($refused | is-empty) { return false }
   if $req <= 0 { return false }
   if $judged == 0 { return ($req == $ne) }
-  if $judged == $req { return ($ne == 0) }
+  if $judged >= $req { return false }
   if $judged > 0 and $judged < $req {
     let bad_j = ($results | where {|r|
       let v = ($r.verdict? | default "")
@@ -73,7 +73,11 @@ def c9-laws-ok [laws: record] {
 def laws-problems [laws: record, failed_laws: bool] {
   if not $failed_laws { return [] }
   mut out = []
-  if not (c9-laws-ok $laws) {
+  let judged = ($laws.judged? | default 0)
+  let req = ($laws.required? | default 0)
+  if $req > 0 and $judged >= $req {
+    $out = ($out | append $"the required laws failed and ruling C9 has retired ($judged of ($laws.catalog? | default 43) laws judged)")
+  } else if not (c9-laws-ok $laws) {
     $out = ($out | append "the laws block does not satisfy ruling C9 for this judged count")
   }
   $out
@@ -245,11 +249,13 @@ def data-of [code: int, r: record, problems: list, file: string] {
     mutation: (mutation-data $r)
     ratchet: (if $rat == null { null } else { {outcome: ($rat.outcome? | default ""), same_build: (same-build $rat.ledger_build? $rat.run_build?), judged: (($rat.outcome? | default "") in ["pass" "fail"])} })
     laws: {
-      catalog: ($r.laws?.catalog? | default null)
-      judged: ($r.laws?.judged? | default null)
+      catalog: ($r.laws?.catalog? | default 43)
+      judged: ($r.laws?.judged? | default 0)
+      judged_label: (if ($r.laws?.judged? | default null) == null { null } else { $"($r.laws.judged) of ($r.laws?.catalog? | default 43) laws judged" })
       applicable: ($r.laws?.applicable? | default null)
       required: ($r.laws?.required? | default null)
       required_not_evaluated: ($r.laws?.required_not_evaluated? | default null)
+      refused: (($r.laws?.results? | default []) | where {|x| ($x.verdict? | default "") == "refuse" } | each {|x| $x.id? | default ""})
       gaps: (law-gaps $r)
     }
     problems: $problems

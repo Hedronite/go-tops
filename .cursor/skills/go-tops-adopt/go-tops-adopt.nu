@@ -71,6 +71,23 @@ def ledger-info [path: string] {
   {path: $file, written: true, build: $build, on_ledger_leg_build: $same}
 }
 
+def laws-summary [path: string] {
+  let file = ($path | path join ".go-tops" "report.json")
+  if not ($file | path exists) { return null }
+  let r = (try { open $file } catch { return null })
+  let laws = ($r.laws? | default null)
+  if $laws == null { return null }
+  let catalog = ($laws.catalog? | default 43)
+  let judged = ($laws.judged? | default 0)
+  let refused = (($laws.results? | default []) | where {|x| ($x.verdict? | default "") == "refuse" } | each {|x| $x.id? | default ""})
+  {
+    catalog: $catalog
+    judged: $judged
+    judged_label: $"($judged) of ($catalog) laws judged"
+    refused: $refused
+  }
+}
+
 def ledger-problem [ledger: record, allow_host: bool] {
   if $allow_host or ($ledger.on_ledger_leg_build? | default false) { return "" }
   let b = ($ledger.build? | default null)
@@ -133,7 +150,8 @@ def "main adopt" [
   if $early != "" { return (emit false $command $early {steps: $steps, ledger: $ledger, commit_ledger: false}) }
   let checked = (run-step $path $argv ["check"])
   let verdict = (check-verdict $checked)
-  let data = {steps: ($steps | append $checked), ledger: $ledger, commit_ledger: ($ledger.on_ledger_leg_build? | default false), commit_required: $verdict.commit_required}
+  let laws = (laws-summary $path)
+  let data = {steps: ($steps | append $checked), ledger: $ledger, commit_ledger: ($ledger.on_ledger_leg_build? | default false), commit_required: $verdict.commit_required, laws: $laws}
   emit ($verdict.failed == "") $command $verdict.failed (if $verdict.commit_required { $data | insert next $NEXT } else { $data })
 }
 

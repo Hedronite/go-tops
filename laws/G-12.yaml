@@ -22,4 +22,4 @@ fix: >
   Handle or return the error. A deliberate discard is only where the allowlist or an A law with //tops:ack applies; R laws are never ackable, so never use //tops:ack G-12.
 v01: true
 tool: errcheck
-fixture: testdata/laws/pending/G-12
+fixture: testdata/lints

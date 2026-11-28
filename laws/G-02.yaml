@@ -22,4 +22,4 @@ fix: >
   Call wg.Add before the go statement that uses the WaitGroup, with a comment naming the owning goroutine and how it exits.
 v01: true
 tool: govet
-fixture: testdata/laws/pending/G-02
+fixture: testdata/lints
