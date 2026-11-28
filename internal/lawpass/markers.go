@@ -69,10 +69,12 @@ func markerOrderKey(m Marker) string {
 	return fmt.Sprintf("%s\x00%010d\x00%s", m.File, m.Line, m.ID)
 }
 
+func markerLess(out []Marker, i, j int) bool {
+	return markerOrderKey(out[i]) < markerOrderKey(out[j])
+}
+
 func sortMarkers(out []Marker) {
-	sort.Slice(out, func(i, j int) bool {
-		return markerOrderKey(out[i]) < markerOrderKey(out[j])
-	})
+	sort.Slice(out, func(i, j int) bool { return markerLess(out, i, j) })
 }
 
 type fileMarker struct {
@@ -186,10 +188,12 @@ func fixtureDiffOrderKey(d FixtureDiff) string {
 	return fmt.Sprintf("%s\x00%s\x00%010d", d.Law, d.File, d.Line)
 }
 
+func fixtureDiffLess(out []FixtureDiff, i, j int) bool {
+	return fixtureDiffOrderKey(out[i]) < fixtureDiffOrderKey(out[j])
+}
+
 func sortFixtureDiffs(out []FixtureDiff) {
-	sort.Slice(out, func(i, j int) bool {
-		return fixtureDiffOrderKey(out[i]) < fixtureDiffOrderKey(out[j])
-	})
+	sort.Slice(out, func(i, j int) bool { return fixtureDiffLess(out, i, j) })
 }
 
 func readLine(root, rel string, line int) string {

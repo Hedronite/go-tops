@@ -163,6 +163,22 @@ func TestMarkerOrderKeyStrictLess(t *testing.T) {
 	}
 }
 
+func TestMarkerLessReflexive(t *testing.T) {
+	t.Parallel()
+	out := []Marker{{File: "a.go", Line: 1, ID: "G-02"}}
+	if markerLess(out, 0, 0) {
+		t.Fatal("markerLess(i,i) must be false")
+	}
+}
+
+func TestFixtureDiffLessReflexive(t *testing.T) {
+	t.Parallel()
+	out := []FixtureDiff{{Law: "G-12", File: "a.go", Line: 1}}
+	if fixtureDiffLess(out, 0, 0) {
+		t.Fatal("fixtureDiffLess(i,i) must be false")
+	}
+}
+
 func TestSortMarkersNumericLineOrder(t *testing.T) {
 	out := []Marker{
 		{File: "a.go", Line: 10, ID: "G-02"},
