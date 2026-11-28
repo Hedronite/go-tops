@@ -5,6 +5,8 @@ import (
 	"go/parser"
 	"go/token"
 	"testing"
+
+	"golang.org/x/tools/go/analysis"
 )
 
 func TestIsErrorStringBranches(t *testing.T) {
@@ -53,4 +55,95 @@ func f(err error) bool {
 	if !found {
 		t.Fatal("want strings.Contains err.Error")
 	}
+}
+
+func TestRunSkipsTestGoFiles(t *testing.T) {
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, "x_test.go", `package p
+func TestX(t *testing.T) {
+	var err error
+	_ = err.Error() == "x"
+}`, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pass := &analysis.Pass{Analyzer: Analyzer, Fset: fset, Files: []*ast.File{f}}
+	if _, err := run(pass); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestRunReportsSwitchOnError(t *testing.T) {
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, "x.go", `package p
+func f(err error) {
+	switch err.Error() {}
+}`, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var reports int
+	pass := &analysis.Pass{
+		Analyzer: Analyzer, Fset: fset, Files: []*ast.File{f},
+		Report: func(analysis.Diagnostic) { reports++ },
+	}
+	if _, err := run(pass); err != nil {
+		t.Fatal(err)
+	}
+	if reports != 1 {
+		t.Fatalf("reports=%d want 1", reports)
+	}
+}
+
+func TestRunReportsNotEqual(t *testing.T) {
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, "x.go", `package p
+func f(err error) {
+	_ = err.Error() != "x"
+}`, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var reports int
+	pass := &analysis.Pass{
+		Analyzer: Analyzer, Fset: fset, Files: []*ast.File{f},
+		Report: func(analysis.Diagnostic) { reports++ },
+	}
+	if _, err := run(pass); err != nil {
+		t.Fatal(err)
+	}
+	if reports != 1 {
+		t.Fatalf("reports=%d want 1", reports)
+	}
+}
+
+func TestIsContainsRejectsShortArgList(t *testing.T) {
+	call := &ast.CallExpr{
+		Fun: &ast.SelectorExpr{
+			X:   &ast.Ident{Name: "strings"},
+			Sel: &ast.Ident{Name: "Contains"},
+		},
+		Args: []ast.Expr{&ast.Ident{Name: "only"}},
+	}
+	if isContainsErrorString(call) {
+		t.Fatal("want false for len(args)<2")
+	}
+}
+
+func TestIsContainsRejectsNonStringsPkg(t *testing.T) {
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, "x.go", `package p
+import "bytes"
+func f(err error) {
+	_ = bytes.Contains([]byte("x"), []byte("y"))
+}`, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ast.Inspect(f, func(n ast.Node) bool {
+		if call, ok := n.(*ast.CallExpr); ok && isContainsErrorString(call) {
+			t.Fatal("bytes.Contains should not match")
+		}
+		return true
+	})
 }

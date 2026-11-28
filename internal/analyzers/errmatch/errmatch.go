@@ -19,30 +19,50 @@ var Analyzer = &analysis.Analyzer{
 
 func run(pass *analysis.Pass) (any, error) {
 	for _, f := range pass.Files {
-		if strings.HasSuffix(pass.Fset.File(f.Pos()).Name(), "_test.go") {
+		if isTestGoFile(pass, f) {
 			continue
 		}
 		ast.Inspect(f, func(n ast.Node) bool {
-			switch n := n.(type) {
-			case *ast.BinaryExpr:
-				if n.Op.String() == "==" || n.Op.String() == "!=" {
-					if isErrorString(n.X) || isErrorString(n.Y) {
-						pass.Reportf(n.Pos(), diag)
-					}
-				}
-			case *ast.CallExpr:
-				if isContainsErrorString(n) {
-					pass.Reportf(n.Pos(), diag)
-				}
-			case *ast.SwitchStmt:
-				if tag, ok := n.Tag.(*ast.CallExpr); ok && isErrorString(tag) {
-					pass.Reportf(n.Pos(), diag)
-				}
-			}
+			reportErrmatchNode(pass, n)
 			return true
 		})
 	}
 	return nil, nil
+}
+
+func isTestGoFile(pass *analysis.Pass, f *ast.File) bool {
+	return strings.HasSuffix(pass.Fset.File(f.Pos()).Name(), "_test.go")
+}
+
+func reportErrmatchNode(pass *analysis.Pass, n ast.Node) {
+	switch n := n.(type) {
+	case *ast.BinaryExpr:
+		reportBinaryErrmatch(pass, n)
+	case *ast.CallExpr:
+		if isContainsErrorString(n) {
+			pass.Reportf(n.Pos(), diag)
+		}
+	case *ast.SwitchStmt:
+		reportSwitchErrmatch(pass, n)
+	}
+}
+
+func reportBinaryErrmatch(pass *analysis.Pass, n *ast.BinaryExpr) {
+	op := n.Op.String()
+	if op != "==" && op != "!=" {
+		return
+	}
+	if isErrorString(n.X) || isErrorString(n.Y) {
+		pass.Reportf(n.Pos(), diag)
+	}
+}
+
+func reportSwitchErrmatch(pass *analysis.Pass, n *ast.SwitchStmt) {
+	tag, ok := n.Tag.(*ast.CallExpr)
+	if !ok || !isErrorString(tag) {
+		return
+	}
+	pass.Reportf(n.Pos(), diag)
 }
 
 func isErrorString(e ast.Expr) bool {

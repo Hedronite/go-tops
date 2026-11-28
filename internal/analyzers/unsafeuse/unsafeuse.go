@@ -25,45 +25,75 @@ func run(pass *analysis.Pass) (any, error) {
 	declared := packageDeclaredUnsafe(pass)
 	for _, f := range pass.Files {
 		ast.Inspect(f, func(n ast.Node) bool {
-			sel, ok := n.(*ast.SelectorExpr)
-			if !ok {
-				return true
-			}
-			id, ok := sel.X.(*ast.Ident)
-			if !ok || id.Name != "unsafe" {
-				return true
-			}
-			if !declared {
-				pass.Reportf(n.Pos(), diagPkg)
-				return true
-			}
-			if !hasSafetyComment(pass, n.Pos()) {
-				pass.Reportf(n.Pos(), diagSafety)
-			}
+			reportUnsafeNode(pass, n, declared)
 			return true
 		})
 	}
 	return nil, nil
 }
 
+func reportUnsafeNode(pass *analysis.Pass, n ast.Node, declared bool) {
+	sel, ok := n.(*ast.SelectorExpr)
+	if !ok {
+		return
+	}
+	id, ok := sel.X.(*ast.Ident)
+	if !ok || id.Name != "unsafe" {
+		return
+	}
+	if !declared {
+		pass.Reportf(n.Pos(), diagPkg)
+		return
+	}
+	if !hasSafetyComment(pass, n.Pos()) {
+		pass.Reportf(n.Pos(), diagSafety)
+	}
+}
+
 func packageDeclaredUnsafe(pass *analysis.Pass) bool {
 	for _, f := range pass.Files {
-		if f.Doc != nil {
-			for _, c := range f.Doc.List {
-				if strings.Contains(c.Text, "tops:unsafe") {
-					return true
-				}
-			}
+		if fileDeclaresUnsafe(f) {
+			return true
 		}
-		for _, cg := range f.Comments {
-			if cg.Pos() >= f.Package {
-				continue
-			}
-			for _, c := range cg.List {
-				if strings.Contains(c.Text, "tops:unsafe") {
-					return true
-				}
-			}
+	}
+	return false
+}
+
+func fileDeclaresUnsafe(f *ast.File) bool {
+	if docDeclaresUnsafe(f.Doc) {
+		return true
+	}
+	for _, cg := range f.Comments {
+		if !isPrePackageCommentGroup(cg, f.Package) {
+			continue
+		}
+		if commentGroupDeclaresUnsafe(cg) {
+			return true
+		}
+	}
+	return false
+}
+
+func docDeclaresUnsafe(doc *ast.CommentGroup) bool {
+	if doc == nil {
+		return false
+	}
+	for _, c := range doc.List {
+		if strings.Contains(c.Text, "tops:unsafe") {
+			return true
+		}
+	}
+	return false
+}
+
+func isPrePackageCommentGroup(cg *ast.CommentGroup, pkgPos token.Pos) bool {
+	return cg.End() < pkgPos
+}
+
+func commentGroupDeclaresUnsafe(cg *ast.CommentGroup) bool {
+	for _, c := range cg.List {
+		if strings.Contains(c.Text, "tops:unsafe") {
+			return true
 		}
 	}
 	return false

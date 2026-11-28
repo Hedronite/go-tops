@@ -21,3 +21,36 @@ func TestMatch(t *testing.T) {
 		}
 	}
 }
+
+func TestMatchDoubleStarEdges(t *testing.T) {
+	if !matchDoubleStar("cmd/**", "cmd/foo/bar.go") {
+		t.Fatal("cmd/**")
+	}
+	if matchDoubleStar("cmd/**", "other/foo.go") {
+		t.Fatal("wrong prefix")
+	}
+	if !matchDoubleStar("**/main.go", "deep/nested/main.go") {
+		t.Fatal("**/main.go suffix")
+	}
+	if !matchDoubleStar("a/**/b", "a/x/y/b") {
+		t.Fatal("middle **")
+	}
+	if matchDoubleStar("bad*", "nomatch.go") {
+		t.Fatal("single-star pattern len!=2")
+	}
+}
+
+func TestWildcardPathSlashes(t *testing.T) {
+	if !wildcardPath("*.go", "file.go") {
+		t.Fatal("base match")
+	}
+	if !wildcardPath("subdir/*.go", "pkg/subdir/file.go") {
+		t.Fatal("slash pattern")
+	}
+}
+
+func TestMatchBackslash(t *testing.T) {
+	if !Match([]string{"cmd/foo.go"}, "cmd\\foo.go") {
+		t.Fatal("backslash normalize")
+	}
+}

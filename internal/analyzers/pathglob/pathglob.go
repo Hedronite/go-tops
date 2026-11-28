@@ -34,21 +34,43 @@ func matchDoubleStar(pattern, rel string) bool {
 	if len(parts) != 2 {
 		return strings.Contains(pattern, "*") && wildcardPath(pattern, rel)
 	}
-	pre, suf := parts[0], parts[1]
-	pre = strings.TrimSuffix(pre, "/")
-	suf = strings.TrimPrefix(suf, "/")
+	pre, suf := trimDoubleStarAnchors(parts[0], parts[1])
 	if pre != "" && !strings.HasPrefix(rel, pre) {
 		return false
 	}
-	rest := strings.TrimPrefix(rel, pre)
-	rest = strings.TrimPrefix(rest, "/")
+	rest := restAfterDoubleStarPrefix(rel, pre)
 	if suf == "" {
 		return true
 	}
+	return matchDoubleStarSuffix(suf, rest)
+}
+
+func trimDoubleStarAnchors(pre, suf string) (string, string) {
+	pre = strings.TrimSuffix(pre, "/")
+	suf = strings.TrimPrefix(suf, "/")
+	return pre, suf
+}
+
+func restAfterDoubleStarPrefix(rel, pre string) string {
+	rest := strings.TrimPrefix(rel, pre)
+	return strings.TrimPrefix(rest, "/")
+}
+
+func matchDoubleStarSuffix(suf, rest string) bool {
 	if strings.Contains(suf, "*") {
 		return wildcardPath(suf, rest) || wildcardPath(suf, path.Base(rest))
 	}
-	return strings.HasSuffix(rest, suf) || rest == suf || strings.Contains(rest, "/"+suf)
+	return plainSuffixMatch(suf, rest)
+}
+
+func plainSuffixMatch(suf, rest string) bool {
+	if rest == suf {
+		return true
+	}
+	if strings.HasSuffix(rest, suf) {
+		return true
+	}
+	return strings.Contains(rest, "/"+suf)
 }
 
 func wildcardPath(pattern, name string) bool {

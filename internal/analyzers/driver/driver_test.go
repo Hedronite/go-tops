@@ -2,23 +2,34 @@ package driver
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"testing"
 
 	"golang.org/x/tools/go/packages"
 )
 
-func TestRunOnKitModule(t *testing.T) {
-	root, err := filepath.Abs(filepath.Join("..", "..", ".."))
-	if err != nil {
+func TestRunOnTempModule(t *testing.T) {
+	dir := t.TempDir()
+	mod := filepath.Join(dir, "go.mod")
+	const modBody = "module example.com/driverprobe\n\ngo 1.26\n"
+	if err := os.WriteFile(mod, []byte(modBody), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	res, err := Run(context.Background(), root)
+	src := filepath.Join(dir, "main.go")
+	const srcBody = "package main\n\nimport \"context\"\n\nfunc main() { _ = context.Background() }\n"
+	if err := os.WriteFile(src, []byte(srcBody), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	res, err := Run(context.Background(), dir)
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
 	if res.ByLaw == nil {
 		t.Fatal("ByLaw nil")
+	}
+	if res.ByLaw["G-17"] < 1 {
+		t.Fatalf("G-17=%d want at least one ctx diagnostic", res.ByLaw["G-17"])
 	}
 }
 

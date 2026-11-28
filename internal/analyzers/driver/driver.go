@@ -44,7 +44,7 @@ func Run(_ context.Context, dir string) (Result, error) {
 	for _, a := range analyzers.All() {
 		law := analyzers.LawID[a.Name]
 		for _, pkg := range pkgs {
-			if pkg.IllTyped || len(pkg.Syntax) == 0 || pkg.Types == nil {
+			if skipPackage(pkg) {
 				continue
 			}
 			if shouldSkipPkg(pkg) {
@@ -74,6 +74,10 @@ func Run(_ context.Context, dir string) (Result, error) {
 		}
 	}
 	return Result{ByLaw: out}, nil
+}
+
+func skipPackage(pkg *packages.Package) bool {
+	return pkg.IllTyped || len(pkg.Syntax) == 0 || pkg.Types == nil
 }
 
 func shouldSkipPkg(pkg *packages.Package) bool {

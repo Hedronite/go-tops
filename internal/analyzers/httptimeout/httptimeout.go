@@ -27,28 +27,36 @@ func run(pass *analysis.Pass) (any, error) {
 			continue
 		}
 		ast.Inspect(f, func(n ast.Node) bool {
-			switch n := n.(type) {
-			case *ast.SelectorExpr:
-				if id, ok := n.X.(*ast.Ident); ok && id.Name == "http" && n.Sel.Name == "DefaultClient" {
-					pass.Reportf(n.Pos(), diagDefault)
-				}
-			case *ast.CompositeLit:
-				typ := typeName(n.Type)
-				switch typ {
-				case "http.Client", "Client":
-					if !hasField(n, "Timeout") {
-						pass.Reportf(n.Pos(), diagClient)
-					}
-				case "http.Server", "Server":
-					if !hasAnyField(n, "ReadHeaderTimeout", "ReadTimeout", "WriteTimeout") {
-						pass.Reportf(n.Pos(), diagServer)
-					}
-				}
-			}
+			reportHTTPNode(pass, n)
 			return true
 		})
 	}
 	return nil, nil
+}
+
+func reportHTTPNode(pass *analysis.Pass, n ast.Node) {
+	switch n := n.(type) {
+	case *ast.SelectorExpr:
+		if id, ok := n.X.(*ast.Ident); ok && id.Name == "http" && n.Sel.Name == "DefaultClient" {
+			pass.Reportf(n.Pos(), diagDefault)
+		}
+	case *ast.CompositeLit:
+		reportCompositeHTTP(pass, n)
+	}
+}
+
+func reportCompositeHTTP(pass *analysis.Pass, n *ast.CompositeLit) {
+	typ := typeName(n.Type)
+	switch typ {
+	case "http.Client", "Client":
+		if !hasField(n, "Timeout") {
+			pass.Reportf(n.Pos(), diagClient)
+		}
+	case "http.Server", "Server":
+		if !hasAnyField(n, "ReadHeaderTimeout", "ReadTimeout", "WriteTimeout") {
+			pass.Reportf(n.Pos(), diagServer)
+		}
+	}
 }
 
 func typeName(e ast.Expr) string {

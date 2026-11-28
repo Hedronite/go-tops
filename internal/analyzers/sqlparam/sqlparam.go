@@ -23,21 +23,25 @@ var sqlMethods = map[string]bool{
 func run(pass *analysis.Pass) (any, error) {
 	for _, f := range pass.Files {
 		ast.Inspect(f, func(n ast.Node) bool {
-			call, ok := n.(*ast.CallExpr)
-			if !ok || len(call.Args) == 0 {
-				return true
-			}
-			sel, ok := call.Fun.(*ast.SelectorExpr)
-			if !ok || !sqlMethods[sel.Sel.Name] {
-				return true
-			}
-			if dynamicSQL(call.Args[0]) {
-				pass.Reportf(call.Pos(), diag)
-			}
+			reportSQLNode(pass, n)
 			return true
 		})
 	}
 	return nil, nil
+}
+
+func reportSQLNode(pass *analysis.Pass, n ast.Node) {
+	call, ok := n.(*ast.CallExpr)
+	if !ok || len(call.Args) == 0 {
+		return
+	}
+	sel, ok := call.Fun.(*ast.SelectorExpr)
+	if !ok || !sqlMethods[sel.Sel.Name] {
+		return
+	}
+	if dynamicSQL(call.Args[0]) {
+		pass.Reportf(call.Pos(), diag)
+	}
 }
 
 func dynamicSQL(e ast.Expr) bool {
@@ -57,15 +61,17 @@ func dynamicSQL(e ast.Expr) bool {
 }
 
 func fmtCall(c *ast.CallExpr) bool {
-	switch fun := c.Fun.(type) {
+	return isFmtSprintf(c.Fun)
+}
+
+func isFmtSprintf(fun ast.Expr) bool {
+	switch fun := fun.(type) {
 	case *ast.SelectorExpr:
-		if id, ok := fun.X.(*ast.Ident); ok && id.Name == "fmt" && fun.Sel.Name == "Sprintf" {
-			return true
-		}
+		id, ok := fun.X.(*ast.Ident)
+		return ok && id.Name == "fmt" && fun.Sel.Name == "Sprintf"
 	case *ast.Ident:
-		if fun.Name == "Sprintf" {
-			return true
-		}
+		return fun.Name == "Sprintf"
+	default:
+		return false
 	}
-	return false
 }

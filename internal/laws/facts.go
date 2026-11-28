@@ -31,25 +31,36 @@ func CheckFacts(dir, class string, goEnv func() (string, error)) (map[string]int
 }
 
 func checkG26(dir, class string, out map[string]int) error {
+	cgoInProd, err := prodTreeHasCImport(dir, class, out)
+	if err != nil {
+		return err
+	}
+	if !needsGoModCGOCheck(cgoInProd, class) {
+		return nil
+	}
+	if err := checkGoModCGO(dir); err != nil {
+		out["G-26"]++
+	}
+	return nil
+}
+
+func needsGoModCGOCheck(cgoInProd bool, class string) bool {
+	return cgoInProd || class == "cgo-bridge"
+}
+
+func prodTreeHasCImport(dir, class string, out map[string]int) (bool, error) {
 	var cgoInProd bool
 	err := filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
 		if d.IsDir() {
-			base := d.Name()
-			if base == "vendor" || base == ".git" {
+			if skipG26WalkDir(d.Name()) {
 				return filepath.SkipDir
 			}
 			return nil
 		}
-		if !strings.HasSuffix(path, ".go") {
-			return nil
-		}
-		if strings.HasSuffix(path, "_test.go") {
-			return nil
-		}
-		if strings.Contains(path, string(filepath.Separator)+"testdata"+string(filepath.Separator)) {
+		if !isG26ProdGo(path) {
 			return nil
 		}
 		has, err := fileImportsC(path)
@@ -58,21 +69,31 @@ func checkG26(dir, class string, out map[string]int) error {
 		}
 		if has {
 			cgoInProd = true
-			if class != "cgo-bridge" {
-				out["G-26"]++
-			}
+			recordProdCgoViolation(class, out)
 		}
 		return nil
 	})
-	if err != nil {
-		return err
+	return cgoInProd, err
+}
+
+func skipG26WalkDir(name string) bool {
+	return name == "vendor" || name == ".git"
+}
+
+func isG26ProdGo(path string) bool {
+	if !strings.HasSuffix(path, ".go") {
+		return false
 	}
-	if cgoInProd || class == "cgo-bridge" {
-		if err := checkGoModCGO(dir); err != nil {
-			out["G-26"]++
-		}
+	if strings.HasSuffix(path, "_test.go") {
+		return false
 	}
-	return nil
+	return !strings.Contains(path, string(filepath.Separator)+"testdata"+string(filepath.Separator))
+}
+
+func recordProdCgoViolation(class string, out map[string]int) {
+	if class != "cgo-bridge" {
+		out["G-26"]++
+	}
 }
 
 func fileImportsC(path string) (bool, error) {
