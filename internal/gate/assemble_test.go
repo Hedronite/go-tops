@@ -26,6 +26,29 @@ func TestAssembleAdvisoryExitZeroDespiteFailures(t *testing.T) {
 	}
 }
 
+func TestApplySummaryFlagsLayerCountMismatch(t *testing.T) {
+	rep := report.Report{
+		Layers: []report.Layer{
+			{ID: "hygiene", Outcome: string(Pass), Tier: 1},
+			{ID: "tests", Outcome: string(NotRun), Tier: 1},
+		},
+	}
+	cfg := Config{Enforce: "hard"}
+	applySummary(&rep, cfg, nil, false)
+	if rep.Summary.ExitCode != ExitFail {
+		t.Fatalf("summary %+v", rep.Summary)
+	}
+	found := false
+	for _, id := range rep.Summary.Failed {
+		if id == "layer_counts" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("failed %+v", rep.Summary.Failed)
+	}
+}
+
 func TestAttachLawResultsCountsNoReader(t *testing.T) {
 	rep := report.Report{}
 	refused, partial := attachLawResults(&rep, []laws.Result{{
@@ -35,6 +58,16 @@ func TestAttachLawResultsCountsNoReader(t *testing.T) {
 		t.Fatalf("refused=%v partial=%v", refused, partial)
 	}
 	if rep.Laws.NotEvaluatedByReason.NoReader != 1 {
+		t.Fatalf("counts %+v", rep.Laws.NotEvaluatedByReason)
+	}
+}
+
+func TestAttachLawResultsCountsInputMissing(t *testing.T) {
+	rep := report.Report{}
+	_, _ = attachLawResults(&rep, []laws.Result{{
+		ID: "G-41", Verdict: laws.NotEvaluated, Reason: laws.InputMissing, Required: true,
+	}})
+	if rep.Laws.NotEvaluatedByReason.InputMissing != 1 {
 		t.Fatalf("counts %+v", rep.Laws.NotEvaluatedByReason)
 	}
 }

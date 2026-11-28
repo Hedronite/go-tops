@@ -74,6 +74,16 @@ func TestVerdictForAllowAtZeroInstances(t *testing.T) {
 	}
 }
 
+func TestVerdictForAckWhenLedgerCovers(t *testing.T) {
+	ev := Evidence{
+		Refusals: map[string]map[string]int{"G-30": {"a.go": 1}},
+		Acks:     map[string]map[string]int{"G-30": {"a.go": 1}},
+	}
+	if verdictFor("G-30", ev, 1) != Ack {
+		t.Fatal("want ack when counts covered")
+	}
+}
+
 func TestLawSeverityUnknownIDIsRefuse(t *testing.T) {
 	if lawSeverity("G-999") != SeverityR {
 		t.Fatal("want refuse severity for unknown catalog id")

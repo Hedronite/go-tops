@@ -41,3 +41,29 @@ func TestRecordSavedRejectsMultiAssign(t *testing.T) {
 		t.Fatal("want no save on multi lhs")
 	}
 }
+
+func TestRecordSavedRejectsNonErrorCall(t *testing.T) {
+	saved := map[string]struct{}{}
+	stmt := &ast.AssignStmt{
+		Lhs: []ast.Expr{&ast.Ident{Name: "msg"}},
+		Rhs: []ast.Expr{&ast.Ident{Name: "other"}},
+	}
+	recordSavedErrorString(stmt, saved)
+	if len(saved) != 0 {
+		t.Fatal("want no save when rhs is not err.Error()")
+	}
+}
+
+func TestRecordSavedAcceptsErrorCall(t *testing.T) {
+	saved := map[string]struct{}{}
+	stmt := &ast.AssignStmt{
+		Lhs: []ast.Expr{&ast.Ident{Name: "msg"}},
+		Rhs: []ast.Expr{&ast.CallExpr{
+			Fun: &ast.SelectorExpr{X: &ast.Ident{Name: "err"}, Sel: &ast.Ident{Name: "Error"}},
+		}},
+	}
+	recordSavedErrorString(stmt, saved)
+	if _, ok := saved["msg"]; !ok {
+		t.Fatal("want msg saved")
+	}
+}

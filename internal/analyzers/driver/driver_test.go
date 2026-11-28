@@ -49,6 +49,9 @@ func TestModuleRelAbsoluteAndEmpty(t *testing.T) {
 	if moduleRel(dir, "") != "(no file)" {
 		t.Fatal("want placeholder for empty name")
 	}
+	if got := moduleRel(dir, "./pkg/a.go"); got != "pkg/a.go" {
+		t.Fatalf("got %q", got)
+	}
 }
 
 func TestShouldSkipPkg(t *testing.T) {

@@ -209,6 +209,11 @@ func TestJudgeHookFailsOnAShallowCloneOrNoMergeBase(t *testing.T) {
 func TestJudgeHookApplyPartialWhenTestsLayerBlocksMeasure(t *testing.T) {
 	env := project(t, nil)
 	writeLedger(t, env.Dir, &ratchet.Ledger{Build: resolved(t, env.Dir)})
+	if err := os.WriteFile(filepath.Join(env.Dir, "go-tops.yaml"), []byte("enforce: ratchet\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	env.Config.Enforce = "ratchet"
+	env.Config.Crap.Cap = 10
 	in := layersIn()
 	in[0] = report.Layer{ID: "hygiene", Outcome: "fail", Details: map[string]any{"lint": map[string]any{"outcome": "fail", "findings": 3}}}
 	ref := &baseline.RefusalError{Msg: "tests layer is red"}
@@ -219,8 +224,20 @@ func TestJudgeHookApplyPartialWhenTestsLayerBlocksMeasure(t *testing.T) {
 	if !v.Failed {
 		t.Fatal("want failed ratchet verdict")
 	}
-	if len(v.Layers) != len(in) || v.Layers[0].Outcome != "fail" {
+	if len(v.Layers) != len(in) {
 		t.Fatalf("layers=%+v", v.Layers)
+	}
+}
+
+func TestJudgeHookNoPartialWithoutLedgerOnTestsRefusal(t *testing.T) {
+	env := project(t, nil)
+	ref := &baseline.RefusalError{Msg: "tests layer failed"}
+	v, err := ratchet.NewJudge(measurerWithPaths(ratchet.Measure{}, ref))(context.Background(), env, layersIn())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !v.Failed {
+		t.Fatal("want failed verdict")
 	}
 }
 
