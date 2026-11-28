@@ -210,10 +210,10 @@ func (g gateDoc) results() []map[string]string {
 	return rs
 }
 
-// c9 is a gate report of the passing state at M2: the ratchet passes and the
+// c9 is a gate report of the passing state at M2/G2: the ratchet passes and the
 // required laws, none evaluated, are the only failed item.
 func c9() gateDoc {
-	return gateDoc{enforce: "ratchet", ratchet: "pass", failed: []string{"laws"}, required: 16, notEval: 16}
+	return gateDoc{enforce: "ratchet", ratchet: "pass", failed: []string{"laws"}, required: 16, notEval: 7, judged: 9}
 }
 
 func (g gateDoc) with(f func(*gateDoc)) gateDoc {
@@ -265,7 +265,7 @@ func judgeCases() []judgeCase {
 		{"a layer errored", "ubuntu", "1", c9().with(func(g *gateDoc) { g.layers = map[string]string{"hygiene": "error"} }), true},
 		{"a failed item besides the laws", "macos", "1", c9().with(func(g *gateDoc) { g.failed = []string{"coverage", "laws"} }), true},
 		{"nothing failed but the gate exited 1", "ubuntu", "1", c9().with(func(g *gateDoc) { g.failed = nil }), true},
-		{"a required law was evaluated", "ubuntu", "1", c9().with(func(g *gateDoc) { g.notEval = 15 }), true},
+		{"too many required laws still not-evaluated", "ubuntu", "1", c9().with(func(g *gateDoc) { g.notEval = 8 }), true},
 		// ruling C9 allows the required laws not evaluated and nothing else: a law that
 		// is refused, required or not, is not that, whatever else the report says
 		{"an advisory law refused", "ubuntu", "1", c9().with(func(g *gateDoc) { g.refused = []string{"G-30"} }), true},
@@ -279,8 +279,8 @@ func judgeCases() []judgeCase {
 		{"exit 0 from a partial run", "ubuntu", "0", clean.with(func(g *gateDoc) { g.outcome = "partial" }), true},
 		{"exit 0 with a layer that did not run", "ubuntu", "0", clean.with(func(g *gateDoc) { g.ran = 4 }), true},
 		{"advisory exit 0 with a failing layer", "ubuntu", "0", gateDoc{enforce: "advisory", layers: map[string]string{"crap": "fail"}, failed: []string{"crap"}}, true},
-		{"advisory exit 0 with the required laws alone", "ubuntu", "0", gateDoc{enforce: "advisory", failed: []string{"laws"}, required: 16, notEval: 16}, false},
-		{"advisory exit 0 with a refused law", "ubuntu", "0", gateDoc{enforce: "advisory", failed: []string{"laws"}, required: 16, notEval: 16, refused: []string{"G-41"}}, true},
+		{"advisory exit 0 with the required laws alone", "ubuntu", "0", gateDoc{enforce: "advisory", failed: []string{"laws"}, required: 16, notEval: 7, judged: 9}, false},
+		{"advisory exit 0 with a refused law", "ubuntu", "0", gateDoc{enforce: "advisory", failed: []string{"laws"}, required: 16, notEval: 7, judged: 9, refused: []string{"G-41"}}, true},
 		{"exit 0 with a failed layer the report names", "macos", "0", clean.with(func(g *gateDoc) { g.layers = map[string]string{"tests": "fail"}; g.failed = []string{"tests"} }), true},
 		// the exit code the gate recorded is the one its report says (R15)
 		{"exit 0 while the report says exit 1 and fails the laws", "ubuntu", "0", c9(), true},

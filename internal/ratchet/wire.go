@@ -196,8 +196,12 @@ func refused(layers []report.Layer, run gobuild.Build, ledger *Ledger, err error
 // measure and the exemptions that match nothing.
 func CollectMeasure() Measurer {
 	return func(_ context.Context, env *gate.Env, in Inputs) (Measure, error) {
+		rep := report.Report{Layers: in.Layers}
+		if env.RatchetLaws.ApplicableJudged > 0 {
+			rep.Laws = env.RatchetLaws
+		}
 		bm, err := baseline.Collect(baseline.Feeds{
-			Report: report.Report{Layers: in.Layers}, Config: env.Config, Dir: env.Dir,
+			Report: rep, Config: env.Config, Dir: env.Dir,
 			Acks: in.Paths.Acks, Build: in.Build, Now: func() time.Time { return in.Now },
 		})
 		if err != nil {

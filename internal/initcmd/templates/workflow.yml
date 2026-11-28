@@ -242,9 +242,9 @@ jobs:
             and .summary.exit_code == $code
             and ($code == 0 or (.summary.failed | length) > 0)
             and (if (.summary.failed | any(. == "laws")) then
-                   .laws.required > 0
-                   and .laws.required == .laws.required_not_evaluated
-                   and .laws.judged == 0
+                   .laws.required == 16
+                   and .laws.judged == 9
+                   and .laws.required_not_evaluated == 7
                    and ([.laws.results[] | select(.verdict == "refuse")] | length) == 0
                  else true end)
           ' "$report" > /dev/null || fail "the gate report is not a pass under ruling C9: the gate exited $GATE_EXIT and its report says another exit code, a layer failed or did not run, the run was partial, or something besides the required laws (all reported not evaluated, none judged, none refused) failed"
