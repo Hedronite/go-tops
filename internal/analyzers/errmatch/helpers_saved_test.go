@@ -23,7 +23,7 @@ func f(err error) {
 	var reports int
 	pass := &analysis.Pass{
 		Analyzer: Analyzer, Fset: fset, Files: []*ast.File{f},
-		Report:   func(analysis.Diagnostic) { reports++ },
+		Report: func(analysis.Diagnostic) { reports++ },
 	}
 	if _, err := run(pass); err != nil {
 		t.Fatal(err)
