@@ -1,0 +1,13 @@
+id: G-24
+title: No package-level mutable state in `library-core`
+severity: ack
+status: active
+classes:
+- library-core
+reader: analyzer
+rationale: >
+  This law is in the §8.2 catalog but is not in the v0.1 mechanical set; the gate reports it not-evaluated until a later milestone provides a reader.
+fix: >
+  No v0.1 rewrite applies until the law's reader lands in a later milestone.
+analyzer: gotops/g-24
+fixture: testdata/laws/pending/G-24

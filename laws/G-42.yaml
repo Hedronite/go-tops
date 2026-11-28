@@ -1,0 +1,24 @@
+id: G-42
+title: 'A package with a `go` statement in non-test code has a leak check in `TestMain`. On a module whose `go` directive is below 1.27 that is a call to `goleak.VerifyTestMain(m)` in the package''s `TestMain`; `goleak.VerifyNone` takes a `testing.TB`, which `TestMain` does not have, so it does not satisfy the law. On 1.27 or later it is that call, or a call to `pprof.Lookup("goroutineleak")` after the call to `m.Run`, whose profile''s `Count()` decides the exit code. The predicate is syntactic: goroutines that a called library starts are not seen'
+severity: refuse
+status: active
+classes:
+- library-core
+- binary-cli
+- tui-app
+- binary-service
+- concurrency-runtime
+- library-util
+- parser-codec
+- unsafe-kernel
+- cgo-bridge
+- codegen
+- embedded-tinygo
+- workspace-root
+reader: analyzer
+rationale: >
+  This law is in the §8.2 catalog but is not in the v0.1 mechanical set; the gate reports it not-evaluated until a later milestone provides a reader.
+fix: >
+  No v0.1 rewrite applies until the law's reader lands in a later milestone.
+analyzer: gotops/g-42
+fixture: testdata/laws/pending/G-42

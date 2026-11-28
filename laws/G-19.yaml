@@ -1,0 +1,25 @@
+id: G-19
+title: HTTP clients and servers set timeouts; no `http.DefaultClient` in production code
+severity: refuse
+status: active
+classes:
+- library-core
+- binary-cli
+- tui-app
+- binary-service
+- concurrency-runtime
+- library-util
+- parser-codec
+- unsafe-kernel
+- cgo-bridge
+- codegen
+- embedded-tinygo
+- workspace-root
+reader: analyzer
+rationale: >
+  Default HTTP clients wait forever; the analyzer flags http.DefaultClient and missing timeouts on clients and servers.
+fix: >
+  Use an http.Client with Timeout, or transport deadlines; set Server ReadHeaderTimeout, ReadTimeout, and WriteTimeout.
+v01: true
+analyzer: gotops/httptimeout
+fixture: testdata/laws/pending/G-19

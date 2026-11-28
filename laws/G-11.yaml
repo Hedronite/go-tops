@@ -1,0 +1,25 @@
+id: G-11
+title: Package-boundary errors wrap with `%w`; no matching on `err.Error()` strings
+severity: refuse
+status: active
+classes:
+- library-core
+- binary-cli
+- tui-app
+- binary-service
+- concurrency-runtime
+- library-util
+- parser-codec
+- unsafe-kernel
+- cgo-bridge
+- codegen
+- embedded-tinygo
+- workspace-root
+reader: tool
+rationale: >
+  String matching on errors breaks when wording changes; errorlint enforces %w at boundaries and rejects err.Error() comparisons.
+fix: >
+  Return errors with fmt.Errorf("...: %w", err); compare with errors.Is or errors.As, not err.Error().
+v01: true
+tool: errorlint
+fixture: testdata/laws/pending/G-11

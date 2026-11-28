@@ -21,6 +21,7 @@ func TestFilesServeSchemasProfilesAndTemplate(t *testing.T) {
 		"profiles/binary-service.yaml",
 		"profiles/library-core.yaml",
 		"config/AGENTS.template.md",
+		"laws/G-01.yaml",
 	}
 	for _, name := range want {
 		data, err := fs.ReadFile(Files(), name)

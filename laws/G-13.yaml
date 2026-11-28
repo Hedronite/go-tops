@@ -1,0 +1,12 @@
+id: G-13
+title: Library code does not `panic` or call `Must*`-style helpers for recoverable conditions; each panic outside `init` and tests carries an ack naming the programmer error
+severity: ack
+status: active
+classes: []
+reader: analyzer
+rationale: >
+  This law is in the §8.2 catalog but is not in the v0.1 mechanical set; the gate reports it not-evaluated until a later milestone provides a reader.
+fix: >
+  No v0.1 rewrite applies until the law's reader lands in a later milestone.
+analyzer: gotops/g-13
+fixture: testdata/laws/pending/G-13

@@ -60,6 +60,7 @@ var checks = []struct {
 	{"lintconfig", checkLintConfig},
 	{"workflow", checkWorkflow},
 	{"version", checkVersion},
+	{"laws", checkLaws},
 }
 
 func checkNames() []string {

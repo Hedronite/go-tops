@@ -1,0 +1,25 @@
+id: G-12
+title: No ignored errors outside the allowlist, including blank assignments (`_ =`, `x, _ :=`) and unchecked type assertions
+severity: refuse
+status: active
+classes:
+- library-core
+- binary-cli
+- tui-app
+- binary-service
+- concurrency-runtime
+- library-util
+- parser-codec
+- unsafe-kernel
+- cgo-bridge
+- codegen
+- embedded-tinygo
+- workspace-root
+reader: tool
+rationale: >
+  Ignored errors drop failures on the floor; errcheck with check-blank and check-type-assertions reports blank assigns and unchecked assertions.
+fix: >
+  Handle or return the error. A deliberate discard is only where the allowlist or an A law with //tops:ack applies; R laws are never ackable, so never use //tops:ack G-12.
+v01: true
+tool: errcheck
+fixture: testdata/laws/pending/G-12

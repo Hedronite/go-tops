@@ -1,0 +1,29 @@
+id: G-17
+title: '`context.Background()`/`TODO()` appear only in `main`, wiring, and tests'
+severity: refuse
+status: active
+classes:
+- library-core
+- binary-cli
+- tui-app
+- binary-service
+- concurrency-runtime
+- library-util
+- parser-codec
+- unsafe-kernel
+- cgo-bridge
+- codegen
+- embedded-tinygo
+- workspace-root
+reader: analyzer
+rationale: >
+  Detached contexts hide leaks and break tracing; the ctxroot analyzer flags Background and TODO outside allowed sites.
+fix: >
+  Take ctx from the caller, or from wire/main setup; use Background or TODO only in main, wiring, and tests.
+v01: true
+analyzer: gotops/ctxroot
+fixture: testdata/laws/pending/G-17
+allow_paths:
+- cmd/**/main.go
+- internal/app/wire*.go
+- '**/*_test.go'

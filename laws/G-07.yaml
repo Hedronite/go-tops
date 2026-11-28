@@ -1,0 +1,25 @@
+id: G-07
+title: Sync primitives are never copied
+severity: refuse
+status: active
+classes:
+- library-core
+- binary-cli
+- tui-app
+- binary-service
+- concurrency-runtime
+- library-util
+- parser-codec
+- unsafe-kernel
+- cgo-bridge
+- codegen
+- embedded-tinygo
+- workspace-root
+reader: tool
+rationale: >
+  Copied mutexes and sync types are undefined behavior; govet copylocks reports them.
+fix: >
+  Pass pointers to sync primitives, or use a single owning struct; never copy a mutex, WaitGroup, or channel value after first use.
+v01: true
+tool: govet
+fixture: testdata/laws/pending/G-07

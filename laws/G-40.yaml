@@ -1,0 +1,25 @@
+id: G-40
+title: Zero reachable vulnerabilities per `govulncheck`
+severity: refuse
+status: active
+classes:
+- library-core
+- binary-cli
+- tui-app
+- binary-service
+- concurrency-runtime
+- library-util
+- parser-codec
+- unsafe-kernel
+- cgo-bridge
+- codegen
+- embedded-tinygo
+- workspace-root
+reader: tool
+rationale: >
+  Reachable known vulnerabilities must not ship; govulncheck lists OSV IDs for the module graph.
+fix: >
+  Upgrade to a fixed version, remove the dependency, or document a reviewed exception with no reachable call path.
+v01: true
+tool: govulncheck
+fixture: testdata/laws/pending/G-40

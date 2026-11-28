@@ -1,0 +1,25 @@
+id: G-33
+title: The `go` directive's language version is at least the protocol floor, compared in Go's order (§2), and `go env GOVERSION` equals the pinned toolchain. The `toolchain` line is optional, because the pin is checked by `GOVERSION`, not by that line
+severity: refuse
+status: active
+classes:
+- library-core
+- binary-cli
+- tui-app
+- binary-service
+- concurrency-runtime
+- library-util
+- parser-codec
+- unsafe-kernel
+- cgo-bridge
+- codegen
+- embedded-tinygo
+- workspace-root
+reader: analyzer
+rationale: >
+  The module must meet the protocol floor and match the pinned toolchain; the analyzer compares the go directive and go env GOVERSION.
+fix: >
+  Set go to at least the protocol floor; align the CI and release toolchain with go-tops.lock and go env GOVERSION.
+v01: true
+analyzer: gotops/goversion
+fixture: testdata/laws/pending/G-33

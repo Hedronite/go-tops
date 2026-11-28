@@ -1,0 +1,13 @@
+id: G-20
+title: Reads of untrusted input are bounded (`io.LimitReader`, `http.MaxBytesReader`); no `io.ReadAll` on unbounded input
+severity: ack
+status: active
+classes:
+- binary-service
+reader: analyzer
+rationale: >
+  This law is in the §8.2 catalog but is not in the v0.1 mechanical set; the gate reports it not-evaluated until a later milestone provides a reader.
+fix: >
+  No v0.1 rewrite applies until the law's reader lands in a later milestone.
+analyzer: gotops/g-20
+fixture: testdata/laws/pending/G-20

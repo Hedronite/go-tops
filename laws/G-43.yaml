@@ -1,0 +1,24 @@
+id: G-43
+title: Every function that matches a glob in `layers.fuzz.targets` has a `Fuzz*` function in its package that calls it, and a committed seed under `testdata/fuzz/`. A glob is a `go list` package pattern, a colon, and a function-name glob in `path.Match` syntax (`./internal/spec:Parse*`). G-29 is the `parser-codec` case
+severity: refuse
+status: active
+classes:
+- library-core
+- binary-cli
+- tui-app
+- binary-service
+- concurrency-runtime
+- library-util
+- parser-codec
+- unsafe-kernel
+- cgo-bridge
+- codegen
+- embedded-tinygo
+- workspace-root
+reader: analyzer
+rationale: >
+  This law is in the §8.2 catalog but is not in the v0.1 mechanical set; the gate reports it not-evaluated until a later milestone provides a reader.
+fix: >
+  No v0.1 rewrite applies until the law's reader lands in a later milestone.
+analyzer: gotops/g-43
+fixture: testdata/laws/pending/G-43

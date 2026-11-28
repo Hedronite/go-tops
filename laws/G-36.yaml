@@ -1,0 +1,12 @@
+id: G-36
+title: No secrets in source or fixtures
+severity: refuse
+status: active
+classes: []
+reader: tool
+rationale: >
+  This law is in the §8.2 catalog but is not in the v0.1 mechanical set; the gate reports it not-evaluated until a later milestone provides a reader.
+fix: >
+  No v0.1 rewrite applies until the law's reader lands in a later milestone.
+tool: gosec
+fixture: testdata/laws/pending/G-36

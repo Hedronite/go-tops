@@ -12,7 +12,7 @@ import (
 	"io/fs"
 )
 
-//go:embed schema/*.json profiles/*.yaml config/AGENTS.template.md
+//go:embed schema/*.json profiles/*.yaml config/AGENTS.template.md laws/*.yaml
 var files embed.FS
 
 // Files returns the embedded schemas, profiles and template as a read-only

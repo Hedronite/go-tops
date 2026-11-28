@@ -1,0 +1,13 @@
+id: G-05
+title: No unbuffered send that can strand a goroutine on early return (leak pattern)
+severity: ack
+status: active
+classes:
+- concurrency-runtime
+reader: analyzer
+rationale: >
+  This law is in the §8.2 catalog but is not in the v0.1 mechanical set; the gate reports it not-evaluated until a later milestone provides a reader.
+fix: >
+  No v0.1 rewrite applies until the law's reader lands in a later milestone.
+analyzer: gotops/g-05
+fixture: testdata/laws/pending/G-05
