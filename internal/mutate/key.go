@@ -124,7 +124,6 @@ var tokenMutantTypes = map[token.Token][]string{
 	token.SHL_ASSIGN:     {"REMOVE_SELF_ASSIGNMENTS", "INVERT_BWASSIGN"},
 	token.SHR:            {"INVERT_BITWISE"},
 	token.SHR_ASSIGN:     {"REMOVE_SELF_ASSIGNMENTS", "INVERT_BWASSIGN"},
-	token.SUB:            {"INVERT_NEGATIVES", "ARITHMETIC_BASE"},
 	token.SUB_ASSIGN:     {"INVERT_ASSIGNMENTS", "REMOVE_SELF_ASSIGNMENTS"},
 	token.XOR:            {"INVERT_BITWISE"},
 	token.XOR_ASSIGN:     {"REMOVE_SELF_ASSIGNMENTS", "INVERT_BWASSIGN"},
@@ -263,7 +262,24 @@ func collectNodeMutants(fset *token.FileSet, n ast.Node, lines map[int]bool, ena
 	if !lines[pos.Line] {
 		return
 	}
-	for _, mt := range tokenMutantTypes[tok] {
+	var types []string
+	switch x := n.(type) {
+	case *ast.UnaryExpr:
+		if x.Op == token.SUB {
+			types = []string{"INVERT_NEGATIVES"}
+		} else {
+			types = tokenMutantTypes[tok]
+		}
+	case *ast.BinaryExpr:
+		if x.Op == token.SUB {
+			types = []string{"ARITHMETIC_BASE"}
+		} else {
+			types = tokenMutantTypes[tok]
+		}
+	default:
+		types = tokenMutantTypes[tok]
+	}
+	for _, mt := range types {
 		if enabled[mt] {
 			out[MutantLoc{Line: pos.Line, Col: pos.Column, Mutator: mt}] = true
 		}

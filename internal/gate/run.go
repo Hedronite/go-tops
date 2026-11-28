@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Hedronite/go-tops/internal/lawpass"
 	"github.com/Hedronite/go-tops/internal/laws"
 	"github.com/Hedronite/go-tops/internal/report"
 )
@@ -32,8 +33,10 @@ type Deps struct {
 	CI          bool // CI=true: refuse --dry-run and a partial range (§3.4 rule 6)
 	Now         func() time.Time
 	ToolVersion string
-	// Laws judges the laws layer; default laws.Judge, the stub until M5.
+	// Laws judges the laws layer; default laws.Judge.
 	Laws func(laws.Input) []laws.Result
+	// LawPass runs the delegated law lint pass; default lawpass.Run.
+	LawPass func(context.Context, *Env) (lawpass.LintResult, error)
 	// Ratchet judges the run against the debt ledger under enforce: ratchet
 	// (§6.7); default DefaultRatchet. See ratchet.go.
 	Ratchet RatchetJudge
@@ -137,7 +140,23 @@ func Execute(ctx context.Context, cfg Config, opts Options, d Deps) (*Run, error
 	layers, stopped, vulnDB := runLayers(ctx, env, plan, opts)
 	verdict, layers := d.ratchetStage(ctx, cfg, env, layers, stopped)
 
-	results := d.Laws(laws.Input{Class: cfg.Class, MaxTier: opts.MaxTier, InRange: lawsIn, Reached: !stopped, Required: required})
+	ev := laws.Evidence{Hygiene: laws.HygieneFromLayers(layers)}
+	if lawsIn && !stopped && opts.MaxTier >= 1 {
+		runLaw := d.LawPass
+		if runLaw == nil {
+			runLaw = func(ctx context.Context, env *Env) (lawpass.LintResult, error) {
+				return lawpass.Run(ctx, env.Dir, lawpassExec{env.Exec}, lawpassTools{env.Tools})
+			}
+		}
+		lintRes, err := runLaw(ctx, env)
+		if err != nil {
+			return nil, exitf(ExitFail, "law pass: %v", err)
+		}
+		ev.Lint = lintRes
+		ev.LintPassOK = true
+	}
+
+	results := d.Laws(laws.Input{Class: cfg.Class, MaxTier: opts.MaxTier, InRange: lawsIn, Reached: !stopped, Required: required, Evidence: ev})
 	rep := assemble(cfg, opts, git, started, d.Now(), d.ToolVersion, vulnDB, layers, results, verdict)
 	return &Run{Report: rep, ExitCode: rep.Summary.ExitCode, Text: verdict.text(report.RenderText(rep))}, nil
 }

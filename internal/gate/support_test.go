@@ -155,7 +155,7 @@ var epoch = time.Date(2026, 11, 17, 18, 0, 0, 0, time.UTC)
 
 func deps(ls []Layer) Deps {
 	return Deps{
-		Dir: ".", Layers: ls, Exec: newExec(), Tools: &ToolResolver{Dir: ".", Exec: newExec()}, ToolVersion: "0.0.0-dev",
+		Dir: ".", Layers: ls, Exec: newExec(), Tools: &ToolResolver{Dir: ".", Exec: newExec()}, ToolVersion: "0.0.0-dev", LawPass: StubLawPass,
 		Now: func() time.Time { return epoch },
 	}
 }

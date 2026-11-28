@@ -160,9 +160,9 @@ func TestExit1RequiredNotEvaluatedFailsOptionalDoesNot(t *testing.T) {
 func TestExit1StubLawsNeverPass(t *testing.T) {
 	r := mustRun(t, cfg(), opts(), deps(gateLayers(nil, nil)))
 	if r.ExitCode != 1 || r.Report.Summary.Outcome != "fail" {
-		t.Fatalf("exit %d outcome %s; every required law is not-evaluated, so the run must fail", r.ExitCode, r.Report.Summary.Outcome)
+		t.Fatalf("exit %d outcome %s; required analyzer laws are still not-evaluated, so the run must fail", r.ExitCode, r.Report.Summary.Outcome)
 	}
-	if r.Report.Laws.RequiredNotEvaluated != 16 || r.Report.Laws.NotEvaluatedByReason.NoReader != 19 {
+	if r.Report.Laws.RequiredNotEvaluated != 7 {
 		t.Fatalf("laws block %+v", r.Report.Laws)
 	}
 }

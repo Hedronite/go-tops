@@ -19,6 +19,8 @@ import (
 	"github.com/Hedronite/go-tops/internal/report"
 )
 
+func init() { testLawPass = gate.StubLawPass }
+
 // GO_TOPS.md §6.7 and §12.1 `baseline`: the only command that writes
 // .go-tops/baseline.json. --init measures and writes when the tests are green and
 // every feeding layer produced non-empty output; a plain write only lowers;
@@ -805,6 +807,8 @@ func TestRunLayersMapsAStartFailureToItsExitCode(t *testing.T) {
 		}
 	}
 }
+
+func init() { testLawPass = gate.StubLawPass }
 
 // GO_TOPS.md §6.7: red thresholds do not stop --init. A package under the
 // coverage floor makes the coverage layer fail; the CRAP layer needs coverage,

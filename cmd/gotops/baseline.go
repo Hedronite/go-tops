@@ -19,9 +19,13 @@ import (
 	"github.com/Hedronite/go-tops/internal/crap"
 	"github.com/Hedronite/go-tops/internal/gate"
 	"github.com/Hedronite/go-tops/internal/gobuild"
+	"github.com/Hedronite/go-tops/internal/lawpass"
 	"github.com/Hedronite/go-tops/internal/layers/tests"
 	"github.com/Hedronite/go-tops/internal/report"
 )
+
+// testLawPass is set by baseline tests to stub the law lint pass.
+var testLawPass func(context.Context, *gate.Env) (lawpass.LintResult, error)
 
 func init() {
 	cli.Register(cli.Command{
@@ -515,7 +519,11 @@ func runLayers(ctx context.Context, dir string, cfg gate.Config, layers []gate.L
 	// The feeding layers read figures and judge nothing, so they run under hard:
 	// the ratchet judgment, once it is wired into the gate, never runs for a write.
 	cfg.Enforce = "hard"
-	res, err := gate.Execute(ctx, cfg, gate.Options{MaxTier: 1}, gate.Deps{Dir: dir, Layers: layers, ToolVersion: toolVersion()})
+	deps := gate.Deps{Dir: dir, Layers: layers, ToolVersion: toolVersion()}
+	if testLawPass != nil {
+		deps.LawPass = testLawPass
+	}
+	res, err := gate.Execute(ctx, cfg, gate.Options{MaxTier: 1}, deps)
 	if err != nil {
 		return report.Report{}, startError(err)
 	}

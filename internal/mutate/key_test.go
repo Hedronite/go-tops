@@ -172,10 +172,10 @@ func f(p *int, a, b int) bool {
 		t.Fatal(err)
 	}
 	// Line 3: `*int` pointer (0). Line 4: `==` (1). Line 5: `<`(2)+`&&`(1)+`>`(2)=5.
-	// Line 7: `<`(2)+`++`(1)=3. Line 8: `+=`(0 enabled)+unary `-`(2: INVERT_NEGATIVES+ARITHMETIC_BASE)=2.
-	// Line 9: `break`(0 enabled). Total = 11.
-	if got != 11 {
-		t.Fatalf("CountMutantsOnLines = %d, want 11", got)
+	// Line 7: `<`(2)+`++`(1)=3. Line 8: `+=`(0 enabled)+unary `-`(1: INVERT_NEGATIVES only)=1.
+	// Line 9: `break`(0 enabled). Total = 10 (E28).
+	if got != 10 {
+		t.Fatalf("CountMutantsOnLines = %d, want 10", got)
 	}
 }
 
@@ -203,5 +203,27 @@ func TestPhysicalPositionsIgnoreLineDirectivesAndDetectThem(t *testing.T) {
 	srcIndented := "package p\nfunc F() {\n\t//line not a directive\n}\n"
 	if _, _, found3, err := FindLineDirective([]byte(srcIndented)); err != nil || found3 {
 		t.Fatalf("indented comment falsely matched line directive: found=%v err=%v", found3, err)
+	}
+}
+
+func TestUnaryMinusIsInvertNegativesOnly(t *testing.T) {
+	src := "package p\n\nfunc f(x int) int { return -x }\n"
+	by, err := CountMutantsByLine([]byte(src), map[int]bool{3: true}, EnabledMutators())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if by[3] != 1 {
+		t.Fatalf("unary minus line count = %d, want 1 (INVERT_NEGATIVES only)", by[3])
+	}
+}
+
+func TestBinaryMinusIsArithmeticBaseOnly(t *testing.T) {
+	src := "package p\n\nfunc f(a, b int) int { return a - b }\n"
+	by, err := CountMutantsByLine([]byte(src), map[int]bool{3: true}, EnabledMutators())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if by[3] != 1 {
+		t.Fatalf("binary minus line count = %d, want 1 (ARITHMETIC_BASE only)", by[3])
 	}
 }

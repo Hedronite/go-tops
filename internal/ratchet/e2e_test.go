@@ -34,6 +34,12 @@ func (s stubLayer) ID() string      { return s.id }
 func (s stubLayer) Tier() int       { return 1 }
 func (s stubLayer) Needs() []string { return s.needs }
 func (s stubLayer) Run(context.Context, *gate.Env) gate.Result {
+	if s.id == "hygiene" {
+		pass := func() map[string]any { return map[string]any{"outcome": "pass"} }
+		return gate.Result{Outcome: gate.Pass, Details: map[string]any{
+			"tidy": pass(), "verify": pass(), "vulnerabilities": pass(),
+		}}
+	}
 	return gate.Result{Outcome: gate.Pass}
 }
 
@@ -189,7 +195,7 @@ func execute(t *testing.T, p *ratchetProject, cfg gate.Config, ls []gate.Layer) 
 
 func executeWith(t *testing.T, p *ratchetProject, cfg gate.Config, ls []gate.Layer, opts gate.Options) *gate.Run {
 	t.Helper()
-	d := gate.Deps{Dir: p.dir, Layers: ls, ToolVersion: "test", Ratchet: ratchet.NewJudge(ratchet.CollectMeasure(), defaultPaths)}
+	d := gate.Deps{Dir: p.dir, Layers: ls, ToolVersion: "test", LawPass: gate.StubLawPass, Ratchet: ratchet.NewJudge(ratchet.CollectMeasure(), defaultPaths)}
 	run, err := gate.Execute(context.Background(), cfg, opts, d)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
@@ -589,11 +595,11 @@ func TestWalkThroughStep5ThroughTheReport(t *testing.T) {
 			}
 			continue
 		}
-		if run.ExitCode != 1 || !slices.Equal(rep.Summary.Failed, []string{"laws"}) {
-			t.Errorf("required %v: exit %d failed %v, want only laws", required, run.ExitCode, rep.Summary.Failed)
+		if run.ExitCode != 0 || len(rep.Summary.Failed) != 0 {
+			t.Errorf("required %v: exit %d failed %v, want pass when delegated laws allow", required, run.ExitCode, rep.Summary.Failed)
 		}
-		if rep.Laws.Required != len(required) || rep.Laws.RequiredNotEvaluated != len(required) {
-			t.Errorf("laws %+v, want %d required and not evaluated until M5", rep.Laws, len(required))
+		if rep.Laws.Required != len(required) || rep.Laws.RequiredNotEvaluated != 0 {
+			t.Errorf("laws %+v, want %d required and all judged", rep.Laws, len(required))
 		}
 	}
 }
@@ -681,7 +687,7 @@ func TestOtherLegBooksHeldVerdictsToTheirOwnLayers(t *testing.T) {
 	ls[0] = lintFailureIn(t, p.dir, "errcheck", "low/only_here.go")
 	run := runGateWith(t, p, "ratchet", ls)
 	o := outcomes(run)
-	if o["hygiene"] != "fail" || o["crap"] != "pass" || o["coverage"] != "pass" || !slices.Equal(run.Report.Summary.Failed, []string{"hygiene"}) {
+	if o["hygiene"] != "fail" || o["crap"] != "pass" || o["coverage"] != "pass" || !slices.Contains(run.Report.Summary.Failed, "hygiene") {
 		t.Errorf("layers %v failed %v, want only hygiene\n%s", o, run.Report.Summary.Failed, run.Text)
 	}
 	q := otherLegProject(t)
