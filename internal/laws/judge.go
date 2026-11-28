@@ -97,11 +97,7 @@ func judgeTool(r *Result, id string, ev Evidence) {
 	if id == "G-11" && ev.AnalyzersOK {
 		count += ev.Analyzers["G-11"]
 	}
-	if count > 0 {
-		r.Verdict = Refuse
-		return
-	}
-	r.Verdict = Allow
+	r.Verdict = verdictFor(id, ev, count)
 }
 
 func judgeAnalyzer(r *Result, id string, ev Evidence) {
@@ -109,9 +105,48 @@ func judgeAnalyzer(r *Result, id string, ev Evidence) {
 		r.Reason = InputMissing
 		return
 	}
-	if ev.Analyzers[id] > 0 {
-		r.Verdict = Refuse
-		return
+	r.Verdict = verdictFor(id, ev, ev.Analyzers[id])
+}
+
+func verdictFor(id string, ev Evidence, instances int) Verdict {
+	switch {
+	case instances == 0:
+		return Allow
+	case lawSeverity(id) == SeverityR:
+		return Refuse
+	case acksCover(id, ev):
+		return Ack
+	default:
+		return Refuse
 	}
-	r.Verdict = Allow
+}
+
+func lawSeverity(id string) Severity {
+	for _, l := range Catalog() {
+		if l.ID == id {
+			return l.Severity
+		}
+	}
+	return SeverityR
+}
+
+func acksCover(id string, ev Evidence) bool {
+	if !Ackable(id) {
+		return false
+	}
+	need := ev.Refusals[id]
+	if len(need) == 0 {
+		return false
+	}
+	have := ev.Acks[id]
+	for file, n := range need {
+		got := 0
+		if have != nil {
+			got = have[file]
+		}
+		if got < n {
+			return false
+		}
+	}
+	return true
 }

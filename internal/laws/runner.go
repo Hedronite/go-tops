@@ -10,8 +10,9 @@ import (
 
 // RunnerResult is the outcome of facts plus in-process analyzers.
 type RunnerResult struct {
-	OK    bool
-	ByLaw map[string]int
+	OK        bool
+	ByLaw     map[string]int
+	ByLawFile map[string]map[string]int
 }
 
 // GoEnvFunc returns go env GOVERSION (injectable for tests).
@@ -34,6 +35,16 @@ func Run(ctx context.Context, dir, class string, goEnv GoEnvFunc) (RunnerResult,
 	for id, n := range res.ByLaw {
 		byLaw[id] += n
 	}
+	byFile := map[string]map[string]int{}
+	maps.Copy(byFile, res.ByLawFile)
+	for id, n := range facts {
+		if n > 0 {
+			if byFile[id] == nil {
+				byFile[id] = map[string]int{}
+			}
+			byFile[id]["(module)"] += n
+		}
+	}
 
-	return RunnerResult{OK: true, ByLaw: byLaw}, nil
+	return RunnerResult{OK: true, ByLaw: byLaw, ByLawFile: byFile}, nil
 }
