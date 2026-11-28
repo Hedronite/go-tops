@@ -2,6 +2,7 @@ package ratchet
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -61,7 +62,14 @@ func NewJudge(measure Measurer, paths func(dir string) (Paths, error)) gate.Ratc
 			// Nothing was measured, so nothing can be judged: a run whose tests or
 			// profile failed gets a failed ratchet, never a guess and never an
 			// environment fault that hides the layers' own report.
-			return refused(layers, run, in.Ledger, fmt.Errorf("the run could not be measured: %w", err)), nil
+			out := layers
+			if in.Ledger != nil && testsOnlyRefusal(err) {
+				feeds := baseline.Feeds{Report: report.Report{Layers: layers}, Config: env.Config, Dir: env.Dir}
+				if findings, ferr := feeds.Findings(); ferr == nil {
+					out = ApplyPartial(layers, Partial{Ledger: in.Ledger, Findings: findings, Cap: env.Config.Crap.Cap})
+				}
+			}
+			return refused(out, run, in.Ledger, fmt.Errorf("the run could not be measured: %w", err)), nil
 		}
 		j := Judge(in)
 		rep, applied := j.Report(), Apply(layers, j, in.Ledger)
@@ -179,6 +187,11 @@ func ledgerSources(in *Input, dir string) {
 	in.LedgerFiles, in.LedgerPackages = sel.Files, sel.Packages
 }
 
+func testsOnlyRefusal(err error) bool {
+	var ref *baseline.RefusalError
+	return errors.As(err, &ref) && strings.Contains(ref.Msg, "tests layer")
+}
+
 // refused is a failed ratchet that judged nothing, with the layers as they ran.
 func refused(layers []report.Layer, run gobuild.Build, ledger *Ledger, err error) *gate.RatchetVerdict {
 	ledgerBuild := run
@@ -199,7 +212,7 @@ func CollectMeasure() Measurer {
 		rep := report.Report{Layers: in.Layers}
 		attachRatchetLaws(&rep, env)
 		bm, err := baseline.Collect(baseline.Feeds{
-			Report: rep, Config: env.Config, Dir: env.Dir,
+			Report: rep, Config: env.Config, Dir: env.Dir, Laws: env.RatchetLawRefusals,
 			Acks: in.Paths.Acks, Build: in.Build, Now: func() time.Time { return in.Now },
 		})
 		if err != nil {
@@ -221,7 +234,7 @@ func CollectMeasure() Measurer {
 func fromBaseline(bm baseline.Measure, cfg gate.Config) Measure {
 	m := Measure{
 		Cap: cfg.Crap.Cap, Floor: cfg.Coverage.StatementsFloor,
-		Packages: bm.Packages, Findings: bm.Findings, Nolint: bm.Nolint, Ack: bm.Ack,
+		Packages: bm.Packages, Findings: bm.Findings, Laws: bm.Laws, Nolint: bm.Nolint, Ack: bm.Ack,
 		Exemptions: bm.Exemptions, JudgedLaws: bm.JudgedLaws,
 	}
 	for key, score := range bm.Functions {
