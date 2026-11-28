@@ -188,6 +188,26 @@ func TestJudgeToolWithoutLintPass(t *testing.T) {
 	}
 }
 
+// G-12 is severity refuse: a ledger ack that mirrors refusals must not downgrade the verdict.
+func TestJudgeRLawG12StaysRefuseDespiteValidLookingAck(t *testing.T) {
+	const file = "internal/check.go"
+	m := byID(Judge(Input{
+		Class: "binary-cli", MaxTier: 1, InRange: true, Reached: true, Required: cliRequired,
+		Evidence: Evidence{
+			LintPassOK: true,
+			Lint:       lawpass.LintResult{ByLaw: map[string]int{"G-12": 1}},
+			Hygiene: HygieneEvidence{
+				Ran: true, TidyPass: true, VerifyPass: true, VulnsPass: true,
+			},
+			Refusals: map[string]map[string]int{"G-12": {file: 1}},
+			Acks:     map[string]map[string]int{"G-12": {file: 1}},
+		},
+	}))
+	if m["G-12"].Verdict != Refuse {
+		t.Fatalf("G-12 = %+v, want refuse (R laws are never ackable)", m["G-12"])
+	}
+}
+
 func TestJudgeHygieneRefusesWhenTidyFails(t *testing.T) {
 	m := byID(Judge(Input{
 		Class: "binary-cli", MaxTier: 1, InRange: true, Reached: true, Required: cliRequired,

@@ -26,6 +26,14 @@ func HasPrefix(err error) bool {
 	return strings.HasPrefix(err.Error(), "p") // want "do not match on err.Error()"
 }
 
+func HasSuffix(err error) bool {
+	return strings.HasSuffix(err.Error(), "s") // want "do not match on err.Error()"
+}
+
+func EqualFold(err error) bool {
+	return strings.EqualFold(err.Error(), "x") // want "do not match on err.Error()"
+}
+
 func SavedCompare(err error) bool {
 	msg := err.Error()
 	return msg == "x" // want "do not match on err.Error()"
