@@ -469,7 +469,7 @@ func measure(ctx context.Context, dir string, cfg gate.Config, acks string, buil
 // currentBuild is the build of the run: the tests layer's build with the GOOS and
 // GOARCH the go command resolves (gobuild.Resolve), because a ledger that left
 // them empty would let every platform write it.
-func currentBuild(_ context.Context, dir string) (baseline.Build, error) {
+func currentBuild(ctx context.Context, dir string) (baseline.Build, error) {
 	b, err := gobuild.Resolve(ctx, dir, tests.Build)
 	if err != nil {
 		return baseline.Build{}, err
