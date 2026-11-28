@@ -1564,11 +1564,17 @@ the tier 0–1 layers only, e.g. hygiene, tests, coverage, crap, mutation). The 
 `required_not_evaluated`, `results[].verdict`) and from `summary.failed`, alongside the
 `layers[]` outcomes.
 
-While `laws.judged` is below `laws.required` (M5 readers not yet live), the gate may exit `1` with
-`laws` alone in `summary.failed` and every required law `not-evaluated` (`laws.judged == 0`,
-`laws.required_not_evaluated == laws.required`, no `refuse` in `laws.results`): that is a pass when
+While `laws.judged == 0` and `laws.judged` is below `laws.required` (M5 readers not yet live), the
+gate may exit `1` with `laws` alone in `summary.failed` and every required law `not-evaluated`
+(`laws.required_not_evaluated == laws.required`, no `refuse` in `laws.results`): that is a pass when
 every listed tier 0–1 layer in `layers[]` passes or skips as today and the ratchet passes on the
 ledger leg.
+
+While `0 < laws.judged < laws.required` (some M5 readers live before all are judged), the gate may
+exit `1` with `laws` alone in `summary.failed` when no law is `refuse`, every judged required law is
+`allow` or `ack`, and every unjudged required law is `not-evaluated` with `no_reader`
+(`laws.required_not_evaluated` equals `laws.required` minus `laws.judged`): that is a pass under the
+same layer and ratchet bar as above.
 
 **C9 retires** when `laws.judged` equals `laws.required` and `laws.required_not_evaluated` is `0`.
 After that, `gotops gate` exits `0` only when `summary.outcome` is `pass`, every tier 0–1 layer in
