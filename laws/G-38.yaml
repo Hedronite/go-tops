@@ -22,4 +22,4 @@ fix: >
   Use parameterized queries with ? or $1 placeholders and bound arguments only.
 v01: true
 analyzer: gotops/sqlparam
-fixture: testdata/laws/pending/G-38
+fixture: internal/analyzers/sqlparam/testdata/src

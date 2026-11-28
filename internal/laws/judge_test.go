@@ -30,9 +30,10 @@ func TestJudgeToolLawsNeedLintPass(t *testing.T) {
 	if len(rs) != 19 {
 		t.Fatalf("%d results, want the 19 laws that apply to binary-cli", len(rs))
 	}
+	analyzer := map[string]bool{"G-08": true, "G-17": true, "G-19": true, "G-25": true, "G-26": true, "G-33": true, "G-38": true}
 	for _, r := range rs {
 		want := NoReader
-		if lawpass.IsToolLaw(r.ID) || r.ID == "G-34" || r.ID == "G-40" {
+		if lawpass.IsToolLaw(r.ID) || analyzer[r.ID] || r.ID == "G-34" || r.ID == "G-40" {
 			want = InputMissing
 		}
 		if r.Verdict != NotEvaluated || r.Reason != want || r.OutOfRange {
@@ -53,16 +54,43 @@ func TestJudgeToolLawsNeedLintPass(t *testing.T) {
 // §3.2: at --max-tier 0 the tool-reader laws are out of range, listed as
 // not-evaluated with input_missing; the analyzer laws are in range.
 func TestJudgeMaxTierZero(t *testing.T) {
-	m := byID(Judge(Input{Evidence: Evidence{}, Class: "binary-cli", MaxTier: 0, InRange: true, Reached: true, Required: cliRequired}))
+	clean := Evidence{AnalyzersOK: true, Analyzers: map[string]int{}}
+	m := byID(Judge(Input{Evidence: clean, Class: "binary-cli", MaxTier: 0, InRange: true, Reached: true, Required: cliRequired}))
 	for _, id := range []string{"G-02", "G-07", "G-11", "G-12", "G-16", "G-18", "G-34", "G-37", "G-40"} {
 		if r := m[id]; !r.OutOfRange || r.Reason != InputMissing || r.Verdict != NotEvaluated {
 			t.Errorf("%s = %+v, want out of range / input_missing", id, r)
 		}
 	}
 	for _, id := range []string{"G-08", "G-17", "G-19", "G-25", "G-26", "G-33", "G-38"} {
-		if r := m[id]; r.OutOfRange || r.Reason != NoReader {
-			t.Errorf("%s = %+v, want in range / no_reader", id, r)
+		if r := m[id]; r.OutOfRange || r.Verdict != Allow {
+			t.Errorf("%s = %+v, want in range / allow with clean analyzers", id, r)
 		}
+	}
+}
+
+func TestJudgeAnalyzerEvidence(t *testing.T) {
+	m := byID(Judge(Input{
+		Class: "binary-cli", MaxTier: 0, InRange: true, Reached: true, Required: cliRequired,
+		Evidence: Evidence{AnalyzersOK: true, Analyzers: map[string]int{"G-17": 2}},
+	}))
+	if m["G-17"].Verdict != Refuse {
+		t.Fatalf("G-17=%+v want refuse", m["G-17"])
+	}
+}
+
+func TestJudgeG11MergesErrmatch(t *testing.T) {
+	m := byID(Judge(Input{
+		Class: "binary-cli", MaxTier: 1, InRange: true, Reached: true, Required: cliRequired,
+		Evidence: Evidence{
+			LintPassOK:  true,
+			Lint:        lawpass.LintResult{ByLaw: map[string]int{"G-11": 1}},
+			AnalyzersOK: true,
+			Analyzers:   map[string]int{"G-11": 2},
+			Hygiene:     HygieneEvidence{Ran: true, TidyPass: true, VerifyPass: true, VulnsPass: true},
+		},
+	}))
+	if m["G-11"].Verdict != Refuse {
+		t.Fatalf("G-11=%+v want refuse when lint+analyzer counts > 0", m["G-11"])
 	}
 }
 

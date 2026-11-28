@@ -1,0 +1,1 @@
+G-26 fact-law fixture: cgo import rules (see facts_test and laws/G-26.yaml).

@@ -1,0 +1,66 @@
+package laws
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
+
+func TestCheckG33Floor(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "go.mod"), "module example.com/t\n\ngo 1.25\n")
+	copyLock(t, dir)
+	out := map[string]int{"G-33": 0}
+	if err := checkG33(dir, func() (string, error) { return "go1.27.4", nil }, out); err != nil {
+		t.Fatal(err)
+	}
+	if out["G-33"] != 1 {
+		t.Fatalf("G-33=%d want 1 for low go directive", out["G-33"])
+	}
+}
+
+func copyLock(t *testing.T, dir string) {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join("..", "..", "go-tops.lock"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(dir, "go-tops.lock"), string(data))
+}
+
+func TestCheckG26NonBridge(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "go.mod"), "module example.com/t\n\ngo 1.26\n")
+	p := filepath.Join(dir, "cgo.go")
+	writeFile(t, p, "package p\nimport \"C\"\n")
+	out := map[string]int{"G-26": 0}
+	if err := checkG26(dir, "library-core", out); err != nil {
+		t.Fatal(err)
+	}
+	if out["G-26"] != 1 {
+		t.Fatalf("G-26=%d want 1", out["G-26"])
+	}
+}
+
+func TestCheckG26TestExempt(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "go.mod"), "module example.com/t\n\ngo 1.26\n")
+	writeFile(t, filepath.Join(dir, "cgo_test.go"), "package p\nimport \"C\"\n")
+	out := map[string]int{"G-26": 0}
+	if err := checkG26(dir, "library-core", out); err != nil {
+		t.Fatal(err)
+	}
+	if out["G-26"] != 0 {
+		t.Fatalf("G-26=%d want 0 for test-only cgo", out["G-26"])
+	}
+}
+
+func writeFile(t *testing.T, path, body string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}

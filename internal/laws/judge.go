@@ -27,9 +27,12 @@ type Result struct {
 	OutOfRange bool
 }
 
-// Judge applies the v0.1 readers wired in G2: delegated lint laws from
-// lint-laws.json, G-34 and G-40 from hygiene; other readers stay stubbed
-// until G3.
+var analyzerLaws = map[string]bool{
+	"G-08": true, "G-17": true, "G-19": true, "G-25": true,
+	"G-26": true, "G-33": true, "G-38": true,
+}
+
+// Judge applies all v0.1 readers: analyzers and facts, delegated lint, hygiene.
 func Judge(in Input) []Result {
 	req := map[string]bool{}
 	for _, id := range in.Required {
@@ -63,6 +66,10 @@ func judgeOne(r *Result, l Law, in Input) {
 			judgeTool(r, l.ID, in.Evidence)
 			return
 		}
+		if analyzerLaws[l.ID] {
+			judgeAnalyzer(r, l.ID, in.Evidence)
+			return
+		}
 		r.Reason = NoReader
 	}
 }
@@ -86,7 +93,23 @@ func judgeTool(r *Result, id string, ev Evidence) {
 		r.Reason = InputMissing
 		return
 	}
-	if ev.Lint.ByLaw[id] > 0 {
+	count := ev.Lint.ByLaw[id]
+	if id == "G-11" && ev.AnalyzersOK {
+		count += ev.Analyzers["G-11"]
+	}
+	if count > 0 {
+		r.Verdict = Refuse
+		return
+	}
+	r.Verdict = Allow
+}
+
+func judgeAnalyzer(r *Result, id string, ev Evidence) {
+	if !ev.AnalyzersOK {
+		r.Reason = InputMissing
+		return
+	}
+	if ev.Analyzers[id] > 0 {
 		r.Verdict = Refuse
 		return
 	}

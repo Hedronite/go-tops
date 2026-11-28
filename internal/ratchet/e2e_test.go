@@ -195,7 +195,7 @@ func execute(t *testing.T, p *ratchetProject, cfg gate.Config, ls []gate.Layer) 
 
 func executeWith(t *testing.T, p *ratchetProject, cfg gate.Config, ls []gate.Layer, opts gate.Options) *gate.Run {
 	t.Helper()
-	d := gate.Deps{Dir: p.dir, Layers: ls, ToolVersion: "test", LawPass: gate.StubLawPass, Ratchet: ratchet.NewJudge(ratchet.CollectMeasure(), defaultPaths)}
+	d := gate.Deps{Dir: p.dir, Layers: ls, ToolVersion: "test", LawPass: gate.StubLawPass, LawsRun: gate.StubLawsRun, Ratchet: ratchet.NewJudge(ratchet.CollectMeasure(), defaultPaths)}
 	run, err := gate.Execute(context.Background(), cfg, opts, d)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)

@@ -22,4 +22,4 @@ fix: >
   Gate cgo behind the cgo-bridge class; ship other classes with CGO_ENABLED=0; keep -race test jobs on cgo where Linux requires it.
 v01: true
 analyzer: gotops/cgobridge
-fixture: testdata/laws/pending/G-26
+fixture: internal/laws/testdata/facts/G-26

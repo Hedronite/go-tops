@@ -229,7 +229,7 @@ func TestOnlyLaws(t *testing.T) {
 	if len(ran) != 0 || len(r.Report.Layers) != 0 {
 		t.Fatalf("layers ran under --only laws: %v", ran)
 	}
-	if r.ExitCode != 1 || r.Report.Laws.RequiredNotEvaluated != 9 {
+	if r.ExitCode != 1 || r.Report.Laws.RequiredNotEvaluated != 2 {
 		t.Fatalf("exit %d required_not_evaluated %d; the stub judges nothing, so 16 required laws fail", r.ExitCode, r.Report.Laws.RequiredNotEvaluated)
 	}
 }
@@ -334,10 +334,10 @@ func TestBaseDefaultsToOriginMain(t *testing.T) {
 func TestLawsBlockCounts(t *testing.T) {
 	r := mustRun(t, cfg(), opts(), deps(gateLayers(nil, nil)))
 	l := r.Report.Laws
-	if l.Catalog != 43 || l.Judged != 9 || l.NotEvaluated != 33 {
+	if l.Catalog != 43 || l.Judged != 16 || l.NotEvaluated != 26 {
 		t.Errorf("release counts %+v", l)
 	}
-	if l.Applicable != 19 || l.ApplicableJudged != 9 || l.Required != 16 || l.RequiredNotEvaluated != 7 {
+	if l.Applicable != 19 || l.ApplicableJudged != 16 || l.Required != 16 || l.RequiredNotEvaluated != 0 {
 		t.Errorf("class counts %+v", l)
 	}
 	by := l.NotEvaluatedByReason
@@ -347,7 +347,7 @@ func TestLawsBlockCounts(t *testing.T) {
 	if len(l.Results) != 19 {
 		t.Errorf("%d results", len(l.Results))
 	}
-	wired := map[string]bool{"G-02": true, "G-07": true, "G-11": true, "G-12": true, "G-16": true, "G-18": true, "G-37": true, "G-34": true, "G-40": true}
+	wired := map[string]bool{"G-02": true, "G-07": true, "G-08": true, "G-11": true, "G-12": true, "G-16": true, "G-17": true, "G-18": true, "G-19": true, "G-25": true, "G-26": true, "G-33": true, "G-34": true, "G-37": true, "G-38": true, "G-40": true}
 	for _, res := range l.Results {
 		if wired[res.ID] && res.Verdict != "allow" {
 			t.Errorf("%s is %s, want allow from G2 readers", res.ID, res.Verdict)

@@ -22,4 +22,4 @@ fix: >
   Use synctest.Test or channels with a clear happens-before; delete time.Sleep used only to wait for goroutines.
 v01: true
 analyzer: gotops/synctest
-fixture: testdata/laws/pending/G-08
+fixture: internal/analyzers/synctest/testdata/src

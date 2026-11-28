@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/Hedronite/go-tops/internal/lawpass"
+	"github.com/Hedronite/go-tops/internal/laws"
 )
 
 type lawpassExec struct{ e Executor }
@@ -22,4 +23,9 @@ func (a lawpassTools) Resolve(ctx context.Context, name string) ([]string, error
 // StubLawPass satisfies tests that run the gate without a real law lint pass.
 func StubLawPass(context.Context, *Env) (lawpass.LintResult, error) {
 	return lawpass.LintResult{ByLaw: map[string]int{}}, nil
+}
+
+// StubLawsRun satisfies tests that run the gate without real analyzers.
+func StubLawsRun(context.Context, string, string) (laws.RunnerResult, error) {
+	return laws.RunnerResult{OK: true, ByLaw: map[string]int{}}, nil
 }
