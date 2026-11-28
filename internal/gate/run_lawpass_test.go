@@ -57,24 +57,3 @@ func TestLawPassErrorFailsGate(t *testing.T) {
 		}
 	}
 }
-
-func TestLawPassHookSkippedWhenMaxTierZero(t *testing.T) {
-	var calls int
-	d := deps(gateLayers(nil, nil))
-	d.LawPass = func(ctx context.Context, env *Env) (lawpass.LintResult, error) {
-		calls++
-		return StubLawPass(ctx, env)
-	}
-	mustRun(t, cfg(), Options{MaxTier: 0}, d)
-	if calls != 0 {
-		t.Fatalf("law pass calls = %d, want 0 at max tier 0", calls)
-	}
-}
-
-func TestLawPassErrorFailsGate(t *testing.T) {
-	d := deps(gateLayers(nil, nil))
-	d.LawPass = func(context.Context, *Env) (lawpass.LintResult, error) {
-		return lawpass.LintResult{}, lawpass.ErrLintPass{Msg: "lint-laws.json missing"}
-	}
-	mustRefuse(t, cfg(), opts(), d, ExitFail)
-}
