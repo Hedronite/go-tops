@@ -1,6 +1,8 @@
 package acks_test
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/Hedronite/go-tops/internal/acks"
@@ -52,5 +54,25 @@ func TestReasonOK(t *testing.T) {
 	}
 	if acks.ReasonOK("one two") {
 		t.Fatal("want false")
+	}
+}
+
+func TestLoadFileRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	rel := ".go-tops/acks.yaml"
+	body := "acks:\n  - {law: G-12, file: a.go, reason: three words here, owner: team}\n"
+	if err := os.MkdirAll(filepath.Join(dir, ".go-tops"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, rel), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	doc, err := acks.LoadFile(dir, rel)
+	if err != nil || len(doc.Acks) != 1 {
+		t.Fatalf("doc=%+v err=%v", doc, err)
+	}
+	empty, err := acks.LoadFile(dir, "")
+	if err != nil || len(empty.Acks) != 0 {
+		t.Fatalf("empty rel=%+v err=%v", empty, err)
 	}
 }
