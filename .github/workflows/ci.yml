@@ -197,6 +197,97 @@ jobs:
           fi
           echo "report assertion: ok"
 
+  # The Go-POIRE exemplars (poire/go/): a nested module with its own go.mod, so
+  # the gate job above never reaches it. Every code block in Go-POIRE is an
+  # excerpt from it. It runs the kit's gate, built from this checkout, inside the
+  # module, and holds it to the same bar as the kit: under advisory until M5, the
+  # report must show hygiene, tests, coverage and crap `pass`, mutation `pass` or
+  # `vacuous`, and every required law `not-evaluated` for `no_reader`. The
+  # lintproof test runs golangci-lint, so the linter is installed first.
+  poire-go:
+    name: poire-go
+    if: ${{ github.event_name == 'pull_request' || github.event_name == 'push' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version: ${{ env.CURRENT_GO }}
+          cache-dependency-path: |
+            go.sum
+            poire/go/tools/go.sum
+      - name: install golangci-lint v2.15.0
+        env:
+          VERSION: 2.15.0
+        run: |
+          set -euo pipefail
+          sha=9b7fe6a6bf6334b98decf8d86b11415ea7889afdabdd1959fdce23af2a9ebcea
+          archive="${RUNNER_TEMP}/golangci-lint.tar.gz"
+          curl --fail --silent --show-error --location --output "${archive}" \
+            "https://github.com/golangci/golangci-lint/releases/download/v${VERSION}/golangci-lint-${VERSION}-linux-amd64.tar.gz"
+          echo "${sha}  ${archive}" | shasum -a 256 -c -
+          mkdir -p "${RUNNER_TEMP}/golangci-lint"
+          tar -xzf "${archive}" --strip-components=1 -C "${RUNNER_TEMP}/golangci-lint"
+          echo "${RUNNER_TEMP}/golangci-lint" >> "${GITHUB_PATH}"
+      - name: build gotops from this checkout
+        run: go build -o "${RUNNER_TEMP}/gotops" ./cmd/gotops
+      - name: gotops gate (poire/go)
+        working-directory: poire/go
+        run: '"${RUNNER_TEMP}/gotops" gate'
+      - name: upload poire/go/.go-tops
+        if: ${{ always() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: go-tops-poire-go
+          path: |
+            poire/go/.go-tops/
+            !poire/go/.go-tops/bin/
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 14
+      - name: assert the report (poire/go)
+        working-directory: poire/go
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s .go-tops/report.json
+          problems="$(jq -r '
+            def layer($id): [.layers[] | select(.id == $id)] | if length == 1 then .[0] else null end;
+            [
+              ( ("hygiene", "tests", "coverage", "crap") as $id
+                | layer($id) as $l
+                | select($l == null or $l.outcome != "pass")
+                | "\($id): outcome \($l.outcome // "absent"), want pass" ),
+              ( "mutation" as $id
+                | layer($id) as $l
+                | select($l == null or ($l.outcome != "pass" and $l.outcome != "vacuous"))
+                | "\($id): outcome \($l.outcome // "absent"), want pass or vacuous" ),
+              ( select(.laws.required < 1 or .laws.required_not_evaluated != .laws.required)
+                | "laws: \(.laws.required_not_evaluated) of \(.laws.required) required laws are not-evaluated, want all" ),
+              # library-core applies G-22, a tier 3 law: at tier 1 it is out of range,
+              # not-evaluated for input_missing. Any other reason is a failure.
+              ( (.laws.out_of_range // []) as $oor
+                | (.laws.results // [])[]
+                | .id as $law
+                | select(.verdict != "not-evaluated"
+                    or (.reason != "no_reader" and (.reason != "input_missing" or ($oor | index($law)) == null)))
+                | "law \(.id): \(.verdict) \(.reason // ""), want not-evaluated with no_reader (or input_missing when out of range)" ),
+              ( select(.summary.enforced != false)
+                | "summary.enforced is \(.summary.enforced), want false under advisory" ),
+              ( select(.enforce != "advisory")
+                | "enforce is \(.enforce), want advisory" ),
+              ( select(.layer_counts.ran != .layer_counts.enabled_in_range)
+                | "layers: \(.layer_counts.ran) ran of \(.layer_counts.enabled_in_range) enabled in range" )
+            ] | .[]' .go-tops/report.json)"
+          if [ -n "${problems}" ]; then
+            while IFS= read -r line; do echo "::error::${line}"; done <<< "${problems}"
+            exit 1
+          fi
+          echo "report assertion: ok"
+
   # The agent skills (.agents/skills, build tag `skills`): each is a Nushell script
   # that wraps gotops and prints one JSON object. The tests run them against a
   # stand-in gotops and doctored reports, and hold the go-tops-gate skill to the
@@ -357,7 +448,7 @@ jobs:
     # runs on the events the gate runs on; a scheduled or dispatched run has no
     # gate to wait for.
     if: ${{ always() && (github.event_name == 'pull_request' || github.event_name == 'push') }}
-    needs: [gate, skills, bootstrap, mutation]
+    needs: [gate, skills, bootstrap, mutation, poire-go]
     runs-on: ubuntu-latest
     steps:
       - name: every ci job succeeded

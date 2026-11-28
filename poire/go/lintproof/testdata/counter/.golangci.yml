@@ -1,0 +1,23 @@
+# The linters Go-POIRE names as detectors, with the Go-TOPS law-pass settings
+# where a law owns them (GO_TOPS.md §8.1). Findings are never capped.
+version: "2"
+linters:
+  default: none
+  enable: [govet, errorlint, errcheck, bodyclose, noctx, ireturn, copyloopvar, perfsprint, nestif]
+  settings:
+    govet:
+      disable-all: true
+      enable: [copylocks, shadow, fieldalignment]
+    errcheck:
+      check-blank: true
+      check-type-assertions: true
+    errorlint:
+      errorf: true
+      asserts: true
+      comparison: true
+    nestif:
+      min-complexity: 4
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  uniq-by-line: false
