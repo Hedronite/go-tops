@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/Hedronite/go-tops/internal/config"
@@ -201,8 +202,9 @@ func TestRatchetOutsideARepositoryIsAnEnvironmentError(t *testing.T) {
 	dir := writeModule(t, ratchetDoc(t), map[string]string{".go-tops/baseline.json": baselineJSON})
 	// Stop git looking above the module for a work tree the temp root may sit in.
 	t.Setenv("GIT_CEILING_DIRECTORIES", filepath.Dir(dir))
-	if _, err := config.Check(context.Background(), dir, opts); err == nil {
-		t.Fatal("Check succeeded outside a git repository under ratchet, want an environment error")
+	_, err := config.Check(context.Background(), dir, opts)
+	if err == nil || !strings.Contains(err.Error(), "cannot be read") {
+		t.Fatalf("outside a git repository want a read error, got err=%v", err)
 	}
 }
 

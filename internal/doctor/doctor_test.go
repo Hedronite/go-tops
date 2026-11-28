@@ -76,6 +76,27 @@ func TestCCFromGoEnvWhenTheVariableIsUnset(t *testing.T) {
 	}
 }
 
+func TestCCFromGoEnvWhenUnsetAndOnlyThatCompilerIsOnPath(t *testing.T) {
+	e := env(t.TempDir(), nil, "go1.27.4")
+	base := e.Run
+	e.Run = func(ctx context.Context, d string, argv ...string) (string, error) {
+		if strings.Join(argv, " ") == "go env CC" {
+			return "clang\n", nil
+		}
+		return base(ctx, d, argv...)
+	}
+	e.LookPath = func(name string) (string, error) {
+		if name == "clang" {
+			return "/usr/bin/clang", nil
+		}
+		return "", errors.New("not found")
+	}
+	c := get(Run(context.Background(), e), "c-compiler")
+	if c.Status != OK || c.Detail != "/usr/bin/clang" {
+		t.Fatalf("%+v", c)
+	}
+}
+
 // The floor is a language version, compared in Go's own order: go1.26.4 and
 // go1.26 both meet go1.26, go1.25.9 does not, and a release candidate or a
 // toolchain suffix is read as the language it carries.
