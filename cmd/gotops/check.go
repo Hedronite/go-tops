@@ -1,8 +1,6 @@
 package main
 
 import (
-	"context"
-
 	"github.com/Hedronite/go-tops/internal/cli"
 	"github.com/Hedronite/go-tops/internal/config"
 )
