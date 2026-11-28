@@ -2,7 +2,6 @@ package laws
 
 import (
 	"errors"
-	"strings"
 	"testing"
 	"testing/fstest"
 )
