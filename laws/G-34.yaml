@@ -22,4 +22,4 @@ fix: >
   Run go mod tidy, commit the diff, and ensure go mod verify passes in hygiene.
 v01: true
 tool: go-mod
-fixture: testdata/laws/pending/G-34
+fixture: internal/laws/testdata/facts/G-34

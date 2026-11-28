@@ -17,7 +17,7 @@ It prints one JSON object. `command` is the exact `gotops gate` argv. `ok` is ju
 - the report exists, is JSON and has its layers, laws, summary and enforce fields;
 - every layer is `pass` or `skip`, or for `mutation` alone `vacuous` (the diff changed no production line), and the run was not partial;
 - the mutation layer lists no unexplained survivor, counts none when it is `pass`, and is off (`skip`) only until a day after today (UTC);
-- the only failed item, if any, is `laws`, and the `.laws` counts match ruling C9 (M4: all required laws not evaluated; interim: some judged with allow/ack and the rest `not-evaluated`/`no_reader`; retired: all required laws judged, none `refuse`);
+- the only failed item, if any, is `laws`, and the `.laws` counts match ruling C9 (M4: all required laws not evaluated; interim: some judged with allow/ack and the rest `not-evaluated`/`no_reader`; retired when `judged == required`: no `laws` carve-out, so a laws failure is not `ok`);
 - under `enforce: ratchet` the ratchet is `pass`, or `skip` on a build that is not the ledger's, never `fail`.
 
 A partial run, and an advisory run with a failing layer, are `ok: false` although the gate exits 0: the report is read, not the exit code alone.
@@ -28,7 +28,7 @@ A law that is `not-evaluated` never turns a failure into a pass. A law that is n
 
 `data.mutation` has the layer's outcome, the counts (`mutants`, `killed`, `survived_explained`, `survived_unexplained`, `dropped`), `timed_out_keys`, `exempt` and `unexplained`: each survivor nothing explains, with its `key`, `line` and `status`. Kill it with a test, or accept it with `gotops survivors explain <key>` and say why. A `vacuous` layer judged nothing and is not a failure.
 
-`data` has `mutation`, `layers`, `ratchet`, `summary`, the `laws` counts and `laws.gaps` (every law that is not allowed, with its reason), and `problems`, each reason `ok` is false. A `not-evaluated` law is a gap, never a pass beyond the required laws C9 names.
+`data` has `mutation`, `layers`, `ratchet`, `summary`, the `laws` counts (`judged_label` as `N of 43 laws judged`, `refused` ids), `laws.gaps` (every law that is not allowed, with its reason), and `problems`, each reason `ok` is false. A `not-evaluated` law is a gap, never a pass beyond the required laws C9 names.
 
 `gotops` is found from `--gotops`, then `$GOTOPS`, then the module's `tools/go.mod` (`go tool -modfile=tools/go.mod gotops`), then PATH. A missing `gotops`, a missing report or a report that is not JSON is `ok: false`.
 

@@ -118,6 +118,19 @@ func TestLawClassesPlantG10ExtraClass(t *testing.T) {
 	}
 }
 
+func TestLawV01PendingFixtureFailsL15(t *testing.T) {
+	r := lawCheckRepo(t, map[string]string{
+		"G-02.yaml": lawYAML("G-02", []string{"library-core", "binary-service", "binary-cli"}, true),
+		"G-10.yaml": lawYAML("G-10", []string{"tui-app"}, false),
+		"G-16.yaml": lawYAML("G-16", []string{"library-core", "binary-service", "binary-cli"}, true),
+	})
+	res := checkLaws(r)
+	msg := findingsText(res)
+	if !strings.Contains(msg, "placeholder fixture") || !strings.Contains(msg, "L15") {
+		t.Fatalf("want L15 pending failure, got:\n%s", msg)
+	}
+}
+
 func TestLawIDFilenamePlantG16G17(t *testing.T) {
 	body := lawYAML("G-17", []string{"library-core", "binary-service", "binary-cli"}, true)
 	r := lawCheckRepo(t, map[string]string{

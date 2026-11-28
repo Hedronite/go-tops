@@ -22,4 +22,4 @@ fix: >
   Return errors with fmt.Errorf("...: %w", err); compare with errors.Is or errors.As, not err.Error().
 v01: true
 tool: errorlint
-fixture: internal/analyzers/errmatch/testdata/src
+fixture: testdata/lints

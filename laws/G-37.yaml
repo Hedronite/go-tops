@@ -22,4 +22,4 @@ fix: >
   Use crypto/rand or stdlib crypto for keys, tokens, and IDs; never math/rand for security-sensitive values.
 v01: true
 tool: gosec
-fixture: testdata/laws/pending/G-37
+fixture: testdata/lints

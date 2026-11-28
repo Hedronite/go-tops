@@ -297,6 +297,7 @@ var gateCases = []gateCase{
 	{"a law that is not required and not evaluated is a gap, not a failure", addResult("G-40", "not-evaluated"), "1", nil, true, ""},
 	{"advisory with a failing layer", both(func(r report) { r["enforce"] = "advisory"; delete(r, "ratchet") }, setLayer("crap", "fail"), failedItems("crap"), setExit(0)), "0", nil, false, "crap"},
 	{"advisory with the required laws alone", both(func(r report) { r["enforce"] = "advisory"; delete(r, "ratchet") }, setExit(0)), "0", nil, true, ""},
+	{"C9 retired: laws failed with every required law judged", both(setLaw("judged", 16), setLaw("required_not_evaluated", 0), failedItems("laws"), setExit(0)), "0", nil, false, "C9 has retired"},
 	{"ratchet fail", both(setRatchet("fail"), failedItems("ratchet", "laws")), "1", nil, false, "ratchet"},
 	{"ratchet fail listed nowhere", setRatchet("fail"), "1", nil, false, "ratchet"},
 	{"no ratchet outcome under enforce ratchet", dropKey("ratchet"), "1", nil, false, "ratchet outcome"},
@@ -521,6 +522,9 @@ func TestGateSkillReportsEachLayerAndLaw(t *testing.T) {
 		t.Errorf("layers = %d, want the 6 of the report", len(layers))
 	}
 	laws := asObj(got.Data["laws"])
+	if lbl := asStr(laws["judged_label"]); lbl != "0 of 43 laws judged" {
+		t.Errorf("judged_label = %q, want 0 of 43 laws judged", lbl)
+	}
 	gaps := asList(laws["gaps"])
 	if len(gaps) == 0 {
 		t.Error("the not-evaluated laws are not listed as gaps")
