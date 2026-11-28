@@ -41,16 +41,16 @@ type Measurer func(ctx context.Context, env *gate.Env, in Inputs) (Measure, erro
 // NewJudge returns the gate's ratchet hook: it reads the ledger at the configured
 // path, measures the run, judges it, and gives the layers the thresholds the
 // ledger replaces. paths gives the configured paths of the module in dir.
-func NewJudge(measure Measurer, paths func(dir string) (Paths, error)) gate.RatchetJudge {
+func NewJudge(measure Measurer, paths func(context.Context, string) (Paths, error)) gate.RatchetJudge {
 	return func(ctx context.Context, env *gate.Env, layers []report.Layer) (*gate.RatchetVerdict, error) {
 		if !holdsFeeds(layers) {
-			return partialVerdict(env, layers, paths)
+			return partialVerdict(ctx, env, layers, paths)
 		}
 		run, err := gobuild.Resolve(ctx, env.Dir, tests.Build)
 		if err != nil {
 			return nil, err
 		}
-		ps, err := paths(env.Dir)
+		ps, err := paths(ctx, env.Dir)
 		if err != nil {
 			return refused(layers, run, nil, fmt.Errorf("the configuration: %w", err)), nil
 		}
@@ -95,9 +95,9 @@ func holdsFeeds(layers []report.Layer) bool {
 // the layers as ApplyPartial gives them. The run ends partial as it would without a
 // ledger. A configuration or a ledger that cannot be read leaves nothing with an entry,
 // so everything is judged at hard.
-func partialVerdict(env *gate.Env, layers []report.Layer, paths func(dir string) (Paths, error)) (*gate.RatchetVerdict, error) {
+func partialVerdict(ctx context.Context, env *gate.Env, layers []report.Layer, paths func(context.Context, string) (Paths, error)) (*gate.RatchetVerdict, error) {
 	p := Partial{Cap: env.Config.Crap.Cap}
-	if ps, err := paths(env.Dir); err == nil {
+	if ps, err := paths(ctx, env.Dir); err == nil {
 		if ledger, err := readLedgerFile(env.Dir, ps.Ledger); err == nil {
 			p.Ledger = ledger
 		}

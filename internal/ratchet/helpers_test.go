@@ -1,6 +1,7 @@
 package ratchet_test
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -162,7 +163,7 @@ func otherLegInput(l *ratchet.Ledger, base ratchet.Base, m ratchet.Measure, comp
 }
 
 // defaultPaths is the configuration of a module that names no baseline or acks path.
-func defaultPaths(string) (ratchet.Paths, error) {
+func defaultPaths(context.Context, string) (ratchet.Paths, error) {
 	return ratchet.Paths{Ledger: ratchet.LedgerPath}, nil
 }
 

@@ -81,7 +81,7 @@ func resolved(t *testing.T, dir string) gobuild.Build {
 }
 
 // measurerWithPaths adapts a fixed measure to NewJudge on the default paths.
-func measurerWithPaths(m ratchet.Measure, err error) (ratchet.Measurer, func(string) (ratchet.Paths, error)) {
+func measurerWithPaths(m ratchet.Measure, err error) (ratchet.Measurer, func(context.Context, string) (ratchet.Paths, error)) {
 	return measurer(m, err), defaultPaths
 }
 
@@ -406,7 +406,7 @@ func TestJudgeHookReadsTheConfiguredBaselinePath(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(env.Dir, filepath.FromSlash(ratchet.LedgerPath)), []byte("{not json"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	paths := func(string) (ratchet.Paths, error) { return ratchet.Paths{Ledger: custom}, nil }
+	paths := func(context.Context, string) (ratchet.Paths, error) { return ratchet.Paths{Ledger: custom}, nil }
 	v, err := ratchet.NewJudge(measurer(emptyMeasure(), nil), paths)(context.Background(), env, layersIn())
 	if err != nil {
 		t.Fatal(err)
@@ -415,7 +415,9 @@ func TestJudgeHookReadsTheConfiguredBaselinePath(t *testing.T) {
 		t.Errorf("verdict %+v notes %v, want a pass from the ledger at %s", v.Report, v.Notes, custom)
 	}
 	// And a missing ledger at the configured path is a failure, whatever sits at the default.
-	missing := func(string) (ratchet.Paths, error) { return ratchet.Paths{Ledger: "ledgers/absent.json"}, nil }
+	missing := func(context.Context, string) (ratchet.Paths, error) {
+		return ratchet.Paths{Ledger: "ledgers/absent.json"}, nil
+	}
 	v, err = ratchet.NewJudge(measurer(emptyMeasure(), nil), missing)(context.Background(), env, layersIn())
 	if err != nil {
 		t.Fatal(err)
@@ -428,7 +430,9 @@ func TestJudgeHookReadsTheConfiguredBaselinePath(t *testing.T) {
 // A configuration that cannot be read fails the ratchet and says so.
 func TestJudgeHookRefusesWhenTheConfigurationCannotBeRead(t *testing.T) {
 	env := project(t, nil)
-	bad := func(string) (ratchet.Paths, error) { return ratchet.Paths{}, errors.New("go-tops.yaml is invalid") }
+	bad := func(context.Context, string) (ratchet.Paths, error) {
+		return ratchet.Paths{}, errors.New("go-tops.yaml is invalid")
+	}
 	v, err := ratchet.NewJudge(measurer(emptyMeasure(), nil), bad)(context.Background(), env, layersIn())
 	if err != nil {
 		t.Fatal(err)
@@ -452,7 +456,7 @@ func TestJudgeHookReadsTheBaseCopyAtTheConfiguredPath(t *testing.T) {
 	}
 	git(t, env.Dir, "add", "-A")
 	git(t, env.Dir, "commit", "-q", "-m", "adopt the ledger")
-	paths := func(string) (ratchet.Paths, error) { return ratchet.Paths{Ledger: custom}, nil }
+	paths := func(context.Context, string) (ratchet.Paths, error) { return ratchet.Paths{Ledger: custom}, nil }
 	v, err := ratchet.NewJudge(measurer(emptyMeasure(), nil), paths)(context.Background(), env, layersIn())
 	if err != nil {
 		t.Fatal(err)
@@ -514,7 +518,7 @@ func TestRelocatingTheLedgerDoesNotResetTheRatchet(t *testing.T) {
 	git(t, env.Dir, "commit", "-q", "-m", "move the baseline and worsen a function")
 
 	worse := ratchet.Measure{Cap: 10, Floor: 90, Functions: []crap.Function{{Key: "example.com/m.F", CRAP: 17.3}}}
-	paths := func(string) (ratchet.Paths, error) { return ratchet.Paths{Ledger: custom}, nil }
+	paths := func(context.Context, string) (ratchet.Paths, error) { return ratchet.Paths{Ledger: custom}, nil }
 	v, err := ratchet.NewJudge(measurer(worse, nil), paths)(context.Background(), env, layersIn())
 	if err != nil {
 		t.Fatal(err)

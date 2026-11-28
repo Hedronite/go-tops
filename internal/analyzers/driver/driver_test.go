@@ -21,6 +21,9 @@ func TestKitDelegatedLawDebt(t *testing.T) {
 	if res.ByLaw["G-11"] != 0 {
 		t.Fatalf("kit G-11 = %d, want 0; byFile=%v", res.ByLaw["G-11"], res.ByLawFile["G-11"])
 	}
+	if res.ByLaw["G-17"] != 0 {
+		t.Fatalf("kit G-17 = %d, want 0; byFile=%v", res.ByLaw["G-17"], res.ByLawFile["G-17"])
+	}
 }
 
 func TestRunOnTempModule(t *testing.T) {
