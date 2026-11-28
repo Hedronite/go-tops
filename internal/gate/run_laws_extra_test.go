@@ -49,10 +49,24 @@ func TestLawEvidenceSkipsRefusalsBelowTierOne(t *testing.T) {
 
 func TestLawEvidenceAttachesRefusals(t *testing.T) {
 	d := deps(nil)
-	d.LawPass = StubLawPass
+	d.LawPass = func(context.Context, *Env) (lawpass.LintResult, error) {
+		return lawpass.LintResult{
+			ByLaw: map[string]int{"G-12": 1},
+			Issues: []lawpass.LintIssue{{
+				FromLinter: "errcheck",
+				Pos: struct {
+					Filename string
+					Line     int
+				}{Filename: "a.go", Line: 1},
+			}},
+		}, nil
+	}
 	ev, err := lawEvidence(context.Background(), d, &Env{Dir: "."}, cfg(), Options{MaxTier: 1}, true, false, nil)
 	if err != nil || !ev.LintPassOK {
 		t.Fatalf("ev=%+v err=%v", ev, err)
+	}
+	if ev.Refusals["G-12"]["a.go"] != 1 {
+		t.Fatalf("refusals=%+v", ev.Refusals)
 	}
 }
 

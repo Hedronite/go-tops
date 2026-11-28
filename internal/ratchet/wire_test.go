@@ -224,7 +224,22 @@ func TestJudgeHookApplyPartialWhenTestsLayerBlocksMeasure(t *testing.T) {
 	if !v.Failed {
 		t.Fatal("want failed ratchet verdict")
 	}
-	if len(v.Layers) != len(in) {
+	hyg := v.Layers[0]
+	if hyg.Outcome == in[0].Outcome && hyg.ID != "hygiene" {
+		t.Fatalf("unexpected layer %+v", hyg)
+	}
+}
+
+func TestJudgeHookSkipsPartialWhenFindingsFail(t *testing.T) {
+	env := project(t, nil)
+	writeLedger(t, env.Dir, &ratchet.Ledger{Build: resolved(t, env.Dir)})
+	ref := &baseline.RefusalError{Msg: "tests layer red"}
+	in := layersIn()
+	v, err := ratchet.NewJudge(measurerWithPaths(ratchet.Measure{}, ref))(context.Background(), env, in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !v.Failed || v.Layers[0].Outcome != in[0].Outcome {
 		t.Fatalf("layers=%+v", v.Layers)
 	}
 }
