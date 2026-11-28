@@ -10,10 +10,10 @@ import (
 const diag = "do not match on err.Error(); use errors.Is or errors.As (G-11)"
 
 var stringsMatchers = map[string]bool{
-	"Contains":   true,
-	"HasPrefix":  true,
-	"HasSuffix":  true,
-	"EqualFold":  true,
+	"Contains":  true,
+	"HasPrefix": true,
+	"HasSuffix": true,
+	"EqualFold": true,
 }
 
 // Analyzer flags string comparisons and switches on err.Error().
@@ -41,8 +41,7 @@ func inspectFunc(pass *analysis.Pass, body *ast.BlockStmt) {
 		return
 	}
 	saved := map[string]struct{}{}
-	var walk func(ast.Node) bool
-	walk = func(n ast.Node) bool {
+	walk := func(n ast.Node) bool {
 		if n == nil {
 			return false
 		}
