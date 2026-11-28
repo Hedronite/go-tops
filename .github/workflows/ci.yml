@@ -267,9 +267,14 @@ jobs:
                 | "\($id): outcome \($l.outcome // "absent"), want pass or vacuous" ),
               ( select(.laws.required < 1 or .laws.required_not_evaluated != .laws.required)
                 | "laws: \(.laws.required_not_evaluated) of \(.laws.required) required laws are not-evaluated, want all" ),
-              ( (.laws.results // [])[]
-                | select(.verdict != "not-evaluated" or .reason != "no_reader")
-                | "law \(.id): \(.verdict) \(.reason // ""), want not-evaluated with no_reader" ),
+              # library-core applies G-22, a tier 3 law: at tier 1 it is out of range,
+              # not-evaluated for input_missing. Any other reason is a failure.
+              ( (.laws.out_of_range // []) as $oor
+                | (.laws.results // [])[]
+                | .id as $law
+                | select(.verdict != "not-evaluated"
+                    or (.reason != "no_reader" and (.reason != "input_missing" or ($oor | index($law)) == null)))
+                | "law \(.id): \(.verdict) \(.reason // ""), want not-evaluated with no_reader (or input_missing when out of range)" ),
               ( select(.summary.enforced != false)
                 | "summary.enforced is \(.summary.enforced), want false under advisory" ),
               ( select(.enforce != "advisory")
