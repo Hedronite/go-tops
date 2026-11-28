@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Hedronite/go-tops/internal/baseline"
 	"github.com/Hedronite/go-tops/internal/crap"
 	"github.com/Hedronite/go-tops/internal/gate"
 	"github.com/Hedronite/go-tops/internal/gobuild"
@@ -205,6 +206,24 @@ func TestJudgeHookFailsOnAShallowCloneOrNoMergeBase(t *testing.T) {
 
 // A run that could not be measured is a failed ratchet that says so, with the
 // layers as they ran: nothing is judged and nothing is guessed.
+func TestJudgeHookApplyPartialWhenTestsLayerBlocksMeasure(t *testing.T) {
+	env := project(t, nil)
+	writeLedger(t, env.Dir, &ratchet.Ledger{Build: resolved(t, env.Dir)})
+	in := layersIn()
+	in[0] = report.Layer{ID: "hygiene", Outcome: "fail", Details: map[string]any{"lint": map[string]any{"outcome": "fail", "findings": 3}}}
+	ref := &baseline.RefusalError{Msg: "tests layer is red"}
+	v, err := ratchet.NewJudge(measurerWithPaths(ratchet.Measure{}, ref))(context.Background(), env, in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !v.Failed {
+		t.Fatal("want failed ratchet verdict")
+	}
+	if len(v.Layers) != len(in) || v.Layers[0].Outcome != "fail" {
+		t.Fatalf("layers=%+v", v.Layers)
+	}
+}
+
 func TestJudgeHookRefusesARunItCouldNotMeasure(t *testing.T) {
 	env := project(t, nil)
 	writeLedger(t, env.Dir, &ratchet.Ledger{Build: resolved(t, env.Dir)})

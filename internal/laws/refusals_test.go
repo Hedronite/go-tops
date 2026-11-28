@@ -26,3 +26,10 @@ func TestRefusalCountsMergesLintAndAnalyzers(t *testing.T) {
 		t.Fatalf("got %#v", got)
 	}
 }
+
+func TestMergeCountsAnalyzerOnly(t *testing.T) {
+	got := mergeCounts(nil, map[string]map[string]int{"G-11": {"b.go": 2}})
+	if got["G-11"]["b.go"] != 2 {
+		t.Fatalf("got %#v", got)
+	}
+}

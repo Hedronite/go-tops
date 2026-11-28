@@ -31,6 +31,24 @@ func TestRunOnTempModule(t *testing.T) {
 	if res.ByLaw["G-17"] < 1 {
 		t.Fatalf("G-17=%d want at least one ctx diagnostic", res.ByLaw["G-17"])
 	}
+	if res.ByLawFile == nil || res.ByLawFile["G-17"]["main.go"] < 1 {
+		t.Fatalf("ByLawFile=%+v want main.go entry", res.ByLawFile)
+	}
+}
+
+func TestModuleRelAbsoluteAndEmpty(t *testing.T) {
+	dir := t.TempDir()
+	abs := filepath.Join(dir, "pkg", "a.go")
+	if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	got := moduleRel(dir, abs)
+	if got != "pkg/a.go" {
+		t.Fatalf("got %q", got)
+	}
+	if moduleRel(dir, "") != "(no file)" {
+		t.Fatal("want placeholder for empty name")
+	}
 }
 
 func TestShouldSkipPkg(t *testing.T) {

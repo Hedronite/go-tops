@@ -7,6 +7,20 @@ import (
 	"testing"
 )
 
+func TestRunnerFactsOnlyModuleByLawFile(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "empty.go"), "package clean\n")
+	writeFile(t, filepath.Join(dir, "go.mod"), "module example.com/clean\n\ngo 1.26\n")
+	ctx := context.Background()
+	rr, err := Run(ctx, dir, "library-core", func() (string, error) { return "go1.27.4", nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rr.ByLawFile == nil {
+		t.Fatal("want ByLawFile map")
+	}
+}
+
 func TestRunnerFactsOnlyModule(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, filepath.Join(dir, "empty.go"), "package clean\n")

@@ -2,6 +2,16 @@ package laws
 
 import "testing"
 
+func TestAcksCoverRespectsAckable(t *testing.T) {
+	ev := Evidence{
+		Refusals: map[string]map[string]int{"G-11": {"a.go": 1}},
+		Acks:     map[string]map[string]int{"G-11": {"a.go": 1}},
+	}
+	if acksCover("G-11", ev) {
+		t.Fatal("G-11 refuse law must not ack")
+	}
+}
+
 func TestAckCountsSatisfy(t *testing.T) {
 	need := map[string]int{"a.go": 2}
 	have := map[string]int{"a.go": 2}

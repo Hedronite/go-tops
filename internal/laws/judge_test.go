@@ -68,6 +68,18 @@ func TestJudgeMaxTierZero(t *testing.T) {
 	}
 }
 
+func TestVerdictForAllowAtZeroInstances(t *testing.T) {
+	if verdictFor("G-11", Evidence{}, 0) != Allow {
+		t.Fatal("want allow at zero")
+	}
+}
+
+func TestLawSeverityUnknownIDIsRefuse(t *testing.T) {
+	if lawSeverity("G-999") != SeverityR {
+		t.Fatal("want refuse severity for unknown catalog id")
+	}
+}
+
 func TestJudgeAnalyzerEvidence(t *testing.T) {
 	m := byID(Judge(Input{
 		Class: "binary-cli", MaxTier: 0, InRange: true, Reached: true, Required: cliRequired,

@@ -34,6 +34,14 @@ func TestModuleRelUnderGoTopsConfig(t *testing.T) {
 	}
 }
 
+func TestModuleRelAbsoluteOutsideModule(t *testing.T) {
+	dir := t.TempDir()
+	got := ModuleRel(dir, "", "/tmp/outside/some.go")
+	if got != "/tmp/outside/some.go" {
+		t.Fatalf("got %q", got)
+	}
+}
+
 func TestModuleRelAbsoluteInsideModule(t *testing.T) {
 	dir := t.TempDir()
 	abs := filepath.Join(dir, "internal", "foo.go")

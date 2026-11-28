@@ -27,6 +27,18 @@ func TestCommentIgnoresNonAck(t *testing.T) {
 	}
 }
 
+func TestCommentRejectsBadLawID(t *testing.T) {
+	if _, _, ok := acks.Comment("//tops:ack G-999 three words here"); ok {
+		t.Fatal("want false for non G-NN id")
+	}
+}
+
+func TestCommentRejectsMissingSlashPrefix(t *testing.T) {
+	if _, _, ok := acks.Comment("tops:ack G-12 three words here"); ok {
+		t.Fatal("want false without // prefix")
+	}
+}
+
 func TestParseYAMLAcceptsValidEntry(t *testing.T) {
 	doc := "acks:\n  - {law: G-12, file: a.go, reason: three words here, owner: x}\n"
 	if _, err := acks.ParseYAML(".go-tops/acks.yaml", []byte(doc)); err != nil {
