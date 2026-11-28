@@ -12,6 +12,10 @@ import (
 	"strings"
 )
 
+// ErrUnreadableRepository is returned when baseline custody needs git but the
+// tree cannot be read.
+var ErrUnreadableRepository = errors.New("the repository cannot be read")
+
 // baselineProblem says why the baseline file is not clean against HEAD, or
 // returns "" when it is tracked and unchanged. The error is an environment
 // failure: git missing, or a repository git cannot read.
@@ -24,7 +28,7 @@ func baselineProblem(ctx context.Context, root, rel string) (string, error) {
 		return "", err
 	}
 	if code, out, err := gitRun(ctx, root, "rev-parse", "--is-inside-work-tree"); err != nil || code != 0 {
-		return "", fmt.Errorf("the repository cannot be read: %w", gitFailure(err, out))
+		return "", fmt.Errorf("%w: %w", ErrUnreadableRepository, gitFailure(err, out))
 	}
 	steps := []struct {
 		problem string

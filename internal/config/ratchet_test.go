@@ -2,9 +2,9 @@ package config_test
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/Hedronite/go-tops/internal/config"
@@ -203,8 +203,8 @@ func TestRatchetOutsideARepositoryIsAnEnvironmentError(t *testing.T) {
 	// Stop git looking above the module for a work tree the temp root may sit in.
 	t.Setenv("GIT_CEILING_DIRECTORIES", filepath.Dir(dir))
 	_, err := config.Check(context.Background(), dir, opts)
-	if err == nil || !strings.Contains(err.Error(), "cannot be read") {
-		t.Fatalf("outside a git repository want a read error, got err=%v", err)
+	if err == nil || !errors.Is(err, config.ErrUnreadableRepository) {
+		t.Fatalf("outside a git repository want ErrUnreadableRepository, got err=%v", err)
 	}
 }
 
