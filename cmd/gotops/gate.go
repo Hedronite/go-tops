@@ -6,9 +6,11 @@ import (
 	"os"
 	"strings"
 
+	"github.com/Hedronite/go-tops/internal/baseline"
 	"github.com/Hedronite/go-tops/internal/cli"
 	"github.com/Hedronite/go-tops/internal/config"
 	"github.com/Hedronite/go-tops/internal/gate"
+	"github.com/Hedronite/go-tops/internal/laws"
 	"github.com/Hedronite/go-tops/internal/report"
 )
 
@@ -27,7 +29,13 @@ func runGate(env cli.Env, args []string) int {
 		LoadConfig:  loadGateConfig,
 		CI:          os.Getenv("CI") == "true",
 		ToolVersion: toolVersion(),
+		ScanAcks:    scanAcks,
 	}, env.Stdout, env.Stderr)
+}
+
+func scanAcks(dir, path string) (laws.FileCounts, error) {
+	_, ack, err := baseline.ScanSuppressions(dir, path)
+	return laws.FileCounts(ack), err
 }
 
 // loadGateConfig is `check` followed by the defaults of the class: the gate
@@ -66,6 +74,7 @@ func toGateConfig(e *config.Config) (gate.Config, error) {
 		Base:         e.Gates.Mutation.Base,
 		ReportPath:   e.Report.Path,
 		RequiredLaws: e.Laws.Required,
+		AckLedger:    e.Laws.AckLedger,
 		Layers:       layerSwitches(e.Gates, e.Layers),
 		Hygiene:      hygieneOf(e.Gates.Hygiene),
 		Coverage:     coverageOf(e.Gates.Coverage),

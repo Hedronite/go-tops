@@ -16,7 +16,8 @@ import (
 
 // CommandDeps are what `gotops gate` needs from its surroundings.
 type CommandDeps struct {
-	Dir string
+	ScanAcks func(dir, ackPath string) (laws.FileCounts, error)
+	Dir      string
 	// LoadConfig loads, validates and merges go-tops.yaml. An error is a
 	// configuration failure: exit 2.
 	LoadConfig  func(dir string) (Config, error)
@@ -67,7 +68,8 @@ func Main(ctx context.Context, args []string, d CommandDeps, stdout, stderr Prin
 		return code
 	}
 	res, err := Execute(ctx, cfg, o, Deps{
-		Dir: d.Dir, Layers: d.Layers, Exec: d.Exec, Tools: d.Tools, CI: d.CI, Now: d.Now, ToolVersion: d.ToolVersion, LawPass: d.LawPass, LawsRun: d.LawsRun,
+		Dir: d.Dir, Layers: d.Layers, Exec: d.Exec, Tools: d.Tools, CI: d.CI, Now: d.Now,
+		ToolVersion: d.ToolVersion, LawPass: d.LawPass, LawsRun: d.LawsRun, ScanAcks: d.ScanAcks,
 	})
 	if err != nil {
 		stderr.Printf("gotops gate: %v\n", err)

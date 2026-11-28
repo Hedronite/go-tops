@@ -16,7 +16,6 @@ import (
 // nolintAll is the name a bare //nolint counts under: it silences every linter.
 const nolintAll = "all"
 
-
 // skipDir says whether the walk leaves a directory out. It is the scope of the
 // CRAP layer (internal/crap): hidden and underscore directories, vendored code,
 // test fixtures and nested modules are not the module's own code.

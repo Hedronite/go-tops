@@ -519,7 +519,7 @@ func runLayers(ctx context.Context, dir string, cfg gate.Config, layers []gate.L
 	// The feeding layers read figures and judge nothing, so they run under hard:
 	// the ratchet judgment, once it is wired into the gate, never runs for a write.
 	cfg.Enforce = "hard"
-	deps := gate.Deps{Dir: dir, Layers: layers, ToolVersion: toolVersion()}
+	deps := gate.Deps{Dir: dir, Layers: layers, ToolVersion: toolVersion(), ScanAcks: scanAcks}
 	if testLawPass != nil {
 		deps.LawPass = testLawPass
 	}

@@ -29,7 +29,9 @@ type Config struct {
 
 	// RequiredLaws is laws.required: the laws whose not-evaluated fails the gate.
 	RequiredLaws []string
-	Exemptions   []report.Exemption
+	// AckLedger is laws.ack_ledger: .go-tops/acks.yaml by default.
+	AckLedger  string
+	Exemptions []report.Exemption
 
 	Hygiene  HygieneConfig
 	Coverage CoverageConfig

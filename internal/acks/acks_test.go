@@ -31,3 +31,26 @@ func TestParseYAMLAcceptsValidEntry(t *testing.T) {
 		t.Fatalf("err=%v", err)
 	}
 }
+
+func TestParseYAMLRejectsBadLaw(t *testing.T) {
+	doc := "acks:\n  - {law: BAD, file: a.go, reason: three words here, owner: x}\n"
+	if _, err := acks.ParseYAML("acks.yaml", []byte(doc)); err == nil {
+		t.Fatal("want error")
+	}
+}
+
+func TestParseYAMLRejectsEmptyOwner(t *testing.T) {
+	doc := "acks:\n  - {law: G-12, file: a.go, reason: three words here, owner: \"\"}\n"
+	if _, err := acks.ParseYAML("acks.yaml", []byte(doc)); err == nil {
+		t.Fatal("want error")
+	}
+}
+
+func TestReasonOK(t *testing.T) {
+	if !acks.ReasonOK("one two three") {
+		t.Fatal("want true")
+	}
+	if acks.ReasonOK("one two") {
+		t.Fatal("want false")
+	}
+}

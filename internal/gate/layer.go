@@ -53,6 +53,8 @@ type Env struct {
 	Tools  Resolver
 	// RatchetLaws holds ApplicableJudged for baseline/ratchet parity (§6.7, M5 G2).
 	RatchetLaws report.Laws
+	// RatchetLawRefusals holds per-file law refusal counts for the ledger (M5 G5).
+	RatchetLawRefusals map[string]map[string]int
 }
 
 // order is the §3.1 gate order. A registered layer takes its place here; one

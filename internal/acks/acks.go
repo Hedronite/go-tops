@@ -12,8 +12,10 @@ import (
 	"go.yaml.in/yaml/v3"
 )
 
-var reasonWords = regexp.MustCompile(`^\S+(\s+\S+){2,}$`)
-var lawID = regexp.MustCompile(`^G-[0-9]{2}$`)
+var (
+	reasonWords = regexp.MustCompile(`^\S+(\s+\S+){2,}$`)
+	lawID       = regexp.MustCompile(`^G-[0-9]{2}$`)
+)
 
 // Entry is one row of .go-tops/acks.yaml.
 type Entry struct {
