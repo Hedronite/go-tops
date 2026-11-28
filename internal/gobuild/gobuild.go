@@ -95,11 +95,11 @@ func cgo(on bool) string {
 // would name no platform and match every one; the CRAP layer, the baseline and
 // the ratchet all call Resolve, so the build of a run is defined here and
 // nowhere else.
-func Resolve(dir string, b Build) (Build, error) {
+func Resolve(ctx context.Context, dir string, b Build) (Build, error) {
 	if b.GOOS != "" && b.GOARCH != "" {
 		return b, nil
 	}
-	cmd := exec.CommandContext(context.Background(), "go", "env", "GOOS", "GOARCH")
+	cmd := exec.CommandContext(ctx, "go", "env", "GOOS", "GOARCH")
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), b.Env()...)
 	out, err := cmd.Output()

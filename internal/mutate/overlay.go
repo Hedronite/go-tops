@@ -249,7 +249,7 @@ func runOverlayPkgCoverage(ctx context.Context, ex gate.Executor, dir, tmpDir, m
 		res, err := ex.Run(ctx, gate.Cmd{Dir: dir, Argv: argv, Env: build.Env()})
 		pkgDurs[pkg] = time.Since(t0)
 		if err != nil {
-			return nil, nil, fmt.Errorf("%w for %s: %v", ErrBaselineCoverage, pkg, err)
+			return nil, nil, fmt.Errorf("%w for %s: %w", ErrBaselineCoverage, pkg, err)
 		}
 		if res.ExitCode != 0 {
 			msg := strings.TrimSpace(string(res.Stdout) + "\n" + string(res.Stderr))
@@ -796,7 +796,7 @@ func checkMutantCompileOutcome(ctx, cctx context.Context, job overlayJob, compTO
 		return ctx.Err()
 	}
 	if errors.Is(cctx.Err(), context.DeadlineExceeded) {
-		return fmt.Errorf("compile mutant %s:%d timed out after %s", job.rel, job.line, compTO)
+		return fmt.Errorf("compile mutant %s:%d: %w after %s", job.rel, job.line, ErrCompileTimedOut, compTO)
 	}
 	if err != nil {
 		return fmt.Errorf("compile mutant %s:%d: %w", job.rel, job.line, err)

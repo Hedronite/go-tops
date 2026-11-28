@@ -42,11 +42,11 @@ func (Layer) Needs() []string { return []string{tests.CoverageID} }
 
 // Run implements gate.Layer. It never runs the tests: it reads the profile of
 // the run the tests layer made, under the build that run used (§3.1).
-func (Layer) Run(_ context.Context, env *gate.Env) gate.Result {
+func (Layer) Run(ctx context.Context, env *gate.Env) gate.Result {
 	cc := env.Config.Crap
 	// The build of the test run, with the platform the go command picks named,
 	// so the files scored are the files the profile covers.
-	build, err := gobuild.Resolve(env.Dir, tests.Build)
+	build, err := gobuild.Resolve(ctx, env.Dir, tests.Build)
 	if err != nil {
 		return failure(err)
 	}

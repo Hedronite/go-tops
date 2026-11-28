@@ -115,7 +115,7 @@ func resolveMergeBase(ctx context.Context, ex gate.Executor, dir, base string) (
 	mb, err := ex.Run(ctx, gate.Cmd{Dir: dir, Argv: []string{"git", "merge-base", "HEAD", base}})
 	sha := strings.TrimSpace(string(mb.Stdout))
 	if err != nil || mb.ExitCode != 0 || sha == "" {
-		return "", fmt.Errorf("git merge-base HEAD %s failed (in CI ensure fetch-depth: 0): %s", base, strings.TrimSpace(string(mb.Stderr)))
+		return "", fmt.Errorf("git merge-base HEAD %s failed (%w): %s", base, ErrNeedFetchDepthZero, strings.TrimSpace(string(mb.Stderr)))
 	}
 	return sha, nil
 }

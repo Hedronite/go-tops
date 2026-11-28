@@ -23,19 +23,19 @@ const LedgerPath = ".go-tops/baseline.json"
 // the file in the working tree (§6.7). A base with no copy is a first ledger
 // (Ledger nil). No merge base, a shallow clone, an unknown ref and a copy that
 // does not parse are errors: the judgment fails and makes no guess.
-func ReadBase(dir, base, rel string) Base {
-	if err := notShallow(dir); err != nil {
+func ReadBase(ctx context.Context, dir, base, rel string) Base {
+	if err := notShallow(ctx, dir); err != nil {
 		return Base{Err: err}
 	}
-	mb, err := mergeBase(dir, base)
+	mb, err := mergeBase(ctx, dir, base)
 	if err != nil {
 		return Base{Err: err}
 	}
-	baseRel, err := baselinePathAt(dir, mb)
+	baseRel, err := baselinePathAt(ctx, dir, mb)
 	if err != nil {
 		return Base{Err: err}
 	}
-	b := ledgerAt(dir, mb, baseRel)
+	b := ledgerAt(ctx, dir, mb, baseRel)
 	if path.Clean(baseRel) != path.Clean(rel) {
 		b.Moved = &Moved{From: baseRel, To: rel}
 	}
@@ -56,8 +56,8 @@ func atRev(rev, rel string) string {
 // diff base is read where the base itself kept it, never where this run's
 // configuration says: a branch that moves the baseline must not turn the base's
 // ledger into a first ledger.
-func baselinePathAt(dir, rev string) (string, error) {
-	out, code, err := git(dir, "show", atRev(rev, "go-tops.yaml"))
+func baselinePathAt(ctx context.Context, dir, rev string) (string, error) {
+	out, code, err := git(ctx, dir, "show", atRev(rev, "go-tops.yaml"))
 	if err != nil {
 		return "", err
 	}
@@ -77,8 +77,8 @@ func baselinePathAt(dir, rev string) (string, error) {
 }
 
 // notShallow fails for a shallow clone: its history may hide the merge base.
-func notShallow(dir string) error {
-	out, code, err := git(dir, "rev-parse", "--is-shallow-repository")
+func notShallow(ctx context.Context, dir string) error {
+	out, code, err := git(ctx, dir, "rev-parse", "--is-shallow-repository")
 	if err != nil || code != 0 {
 		return fmt.Errorf("the repository cannot be read: %s", failure(err, out))
 	}
@@ -90,8 +90,8 @@ func notShallow(dir string) error {
 
 // mergeBase is the commit HEAD and base last had in common. Exit 1 with no output
 // is git's answer for no common ancestor; any other failure is a bad ref.
-func mergeBase(dir, base string) (string, error) {
-	out, code, err := git(dir, "merge-base", "HEAD", base)
+func mergeBase(ctx context.Context, dir, base string) (string, error) {
+	out, code, err := git(ctx, dir, "merge-base", "HEAD", base)
 	switch {
 	case err != nil:
 		return "", err
@@ -104,14 +104,14 @@ func mergeBase(dir, base string) (string, error) {
 }
 
 // ledgerAt reads the baseline in commit rev: no ledger when the commit has none.
-func ledgerAt(dir, rev, rel string) Base {
+func ledgerAt(ctx context.Context, dir, rev, rel string) Base {
 	spec := atRev(rev, rel)
-	if _, code, err := git(dir, "cat-file", "-e", spec); err != nil {
+	if _, code, err := git(ctx, dir, "cat-file", "-e", spec); err != nil {
 		return Base{Err: err}
 	} else if code != 0 {
 		return Base{}
 	}
-	raw, code, err := git(dir, "show", spec)
+	raw, code, err := git(ctx, dir, "show", spec)
 	if err != nil || code != 0 {
 		return Base{Err: fmt.Errorf("read the baseline at the merge base: %s", failure(err, raw))}
 	}
@@ -124,8 +124,8 @@ func ledgerAt(dir, rev, rel string) Base {
 
 // git runs git in dir and returns its output and exit code. The error is non-nil
 // only when git did not run.
-func git(dir string, args ...string) (string, int, error) {
-	cmd := exec.CommandContext(context.Background(), "git", append([]string{"-C", dir}, args...)...)
+func git(ctx context.Context, dir string, args ...string) (string, int, error) {
+	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", dir}, args...)...)
 	cmd.Env = append(os.Environ(), "GIT_OPTIONAL_LOCKS=0")
 	var out bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &out

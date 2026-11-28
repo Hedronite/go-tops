@@ -44,7 +44,7 @@ func (Layer) Preflight(ctx context.Context, env *gate.Env) error {
 
 // Run implements gate.Layer.
 func (Layer) Run(ctx context.Context, env *gate.Env) gate.Result {
-	build, err := gobuild.Resolve(env.Dir, tests.Build)
+	build, err := gobuild.Resolve(ctx, env.Dir, tests.Build)
 	if err != nil {
 		return failure(err)
 	}

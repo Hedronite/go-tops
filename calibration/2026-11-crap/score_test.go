@@ -3,6 +3,7 @@
 package calibration
 
 import (
+	"context"
 	"github.com/Hedronite/go-tops/internal/crap"
 	"github.com/Hedronite/go-tops/internal/gobuild"
 	"github.com/Hedronite/go-tops/internal/layers/tests"
@@ -17,7 +18,7 @@ import (
 func scoreModule(dir, profile string) ([]scored, []unmeasured, error) {
 	// The layer names the platform the go command picks before it scores, so that
 	// a not-measured function is typed under another one; so does the calibration.
-	build, err := gobuild.Resolve(dir, tests.Build)
+	build, err := gobuild.Resolve(context.Background(), dir, tests.Build)
 	if err != nil {
 		return nil, nil, err
 	}

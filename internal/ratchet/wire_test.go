@@ -73,7 +73,7 @@ func nonNil(s []string) []string {
 
 func resolved(t *testing.T, dir string) gobuild.Build {
 	t.Helper()
-	b, err := gobuild.Resolve(dir, tests.Build)
+	b, err := gobuild.Resolve(context.Background(), dir, tests.Build)
 	if err != nil {
 		t.Fatal(err)
 	}

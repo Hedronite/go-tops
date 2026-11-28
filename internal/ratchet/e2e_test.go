@@ -103,7 +103,7 @@ func (p *ratchetProject) writeFirstLedger(t *testing.T) {
 // exemption count, and the package under its floor.
 func (p *ratchetProject) writeLedgerFor(t *testing.T, functions map[string]float64, exemptions int) {
 	t.Helper()
-	build, err := gobuild.Resolve(p.dir, tests.Build)
+	build, err := gobuild.Resolve(context.Background(), p.dir, tests.Build)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -420,7 +420,7 @@ func lintFailureIn(t *testing.T, dir, linter, file string) gate.Layer {
 func otherLegProject(t *testing.T) *ratchetProject {
 	t.Helper()
 	p := legacyProject(t)
-	run, err := gobuild.Resolve(p.dir, tests.Build)
+	run, err := gobuild.Resolve(context.Background(), p.dir, tests.Build)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -477,7 +477,7 @@ func TestOtherLegReportsLedgerHeldDebtAndFailsNothing(t *testing.T) {
 // fails the leg, as does an exemption that matches nothing.
 func TestOtherLegFailsOnlyWhatC3cNames(t *testing.T) {
 	p := otherLegProject(t)
-	run, err := gobuild.Resolve(p.dir, tests.Build)
+	run, err := gobuild.Resolve(context.Background(), p.dir, tests.Build)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -504,7 +504,7 @@ func TestOtherLegFailsOnlyWhatC3cNames(t *testing.T) {
 // not, with a function under the cap.
 func (p *ratchetProject) writeOnlyHere(t *testing.T, dir, body string) {
 	t.Helper()
-	run, err := gobuild.Resolve(p.dir, tests.Build)
+	run, err := gobuild.Resolve(context.Background(), p.dir, tests.Build)
 	if err != nil {
 		t.Fatal(err)
 	}

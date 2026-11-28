@@ -74,7 +74,7 @@ func TestBaseWithoutALedgerIsAFirstLedger(t *testing.T) {
 	commit(t, dir, "base", map[string]string{"a.go": "package a\n"})
 	git(t, dir, "checkout", "-q", "-b", "feature")
 	commit(t, dir, "adopt", map[string]string{baselinePath: ledgerFile(t, 12)})
-	b := ratchet.ReadBase(dir, "main", baselinePath)
+	b := ratchet.ReadBase(context.Background(), dir, "main", baselinePath)
 	if b.Err != nil || b.Ledger != nil {
 		t.Fatalf("base %+v, want no error and no ledger: a first ledger", b)
 	}
@@ -90,7 +90,7 @@ func TestBaseLedgerIsReadAtTheMergeBase(t *testing.T) {
 	commit(t, dir, "main moves", map[string]string{baselinePath: ledgerFile(t, 9)})
 	git(t, dir, "checkout", "-q", "feature")
 
-	b := ratchet.ReadBase(dir, "main", baselinePath)
+	b := ratchet.ReadBase(context.Background(), dir, "main", baselinePath)
 	if b.Err != nil || b.Ledger == nil {
 		t.Fatalf("base %+v", b)
 	}
@@ -109,7 +109,7 @@ func TestBaseIgnoresTheWorkingTree(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, filepath.FromSlash(baselinePath)), []byte(ledgerFile(t, 99)), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	b := ratchet.ReadBase(dir, "main", baselinePath)
+	b := ratchet.ReadBase(context.Background(), dir, "main", baselinePath)
 	if b.Err != nil || b.Ledger == nil || b.Ledger.Functions["example.com/m/p.F"] != 12 {
 		t.Fatalf("base %+v, want the committed 12", b)
 	}
@@ -120,7 +120,7 @@ func TestNoMergeBaseFails(t *testing.T) {
 	commit(t, dir, "base", map[string]string{"a.go": "package a\n"})
 	git(t, dir, "checkout", "-q", "--orphan", "unrelated")
 	commit(t, dir, "an unrelated history", map[string]string{"b.go": "package b\n"})
-	b := ratchet.ReadBase(dir, "main", baselinePath)
+	b := ratchet.ReadBase(context.Background(), dir, "main", baselinePath)
 	if b.Err == nil || !strings.Contains(b.Err.Error(), "merge base") {
 		t.Fatalf("base %+v, want an error naming the merge base", b)
 	}
@@ -132,7 +132,7 @@ func TestShallowCloneFails(t *testing.T) {
 	commit(t, src, "two", map[string]string{"a.go": "package a\n"})
 	clone := filepath.Join(t.TempDir(), "clone")
 	git(t, filepath.Dir(clone), "clone", "-q", "--depth", "1", "file://"+src, clone)
-	b := ratchet.ReadBase(clone, "origin/main", baselinePath)
+	b := ratchet.ReadBase(context.Background(), clone, "origin/main", baselinePath)
 	if b.Err == nil || !strings.Contains(b.Err.Error(), "shallow") {
 		t.Fatalf("base %+v, want an error naming the shallow clone", b)
 	}
@@ -141,7 +141,7 @@ func TestShallowCloneFails(t *testing.T) {
 func TestUnknownBaseFails(t *testing.T) {
 	dir := repo(t)
 	commit(t, dir, "base", map[string]string{"a.go": "package a\n"})
-	if b := ratchet.ReadBase(dir, "origin/main", baselinePath); b.Err == nil {
+	if b := ratchet.ReadBase(context.Background(), dir, "origin/main", baselinePath); b.Err == nil {
 		t.Fatal("a base that does not exist was accepted")
 	}
 }
@@ -151,7 +151,7 @@ func TestBaseLedgerThatCannotBeReadFails(t *testing.T) {
 	commit(t, dir, "base", map[string]string{baselinePath: "{not json"})
 	git(t, dir, "checkout", "-q", "-b", "feature")
 	commit(t, dir, "work", map[string]string{"a.go": "package a\n"})
-	if b := ratchet.ReadBase(dir, "main", baselinePath); b.Err == nil {
+	if b := ratchet.ReadBase(context.Background(), dir, "main", baselinePath); b.Err == nil {
 		t.Fatal("an unreadable base ledger was treated as absent")
 	}
 }
@@ -189,12 +189,12 @@ func TestBaseLedgerIsReadAtTheConfiguredPath(t *testing.T) {
 	})
 	git(t, dir, "checkout", "-q", "-b", "feature")
 	commit(t, dir, "work", map[string]string{"a.go": "package a\n"})
-	b := ratchet.ReadBase(dir, "main", "ledgers/main.json")
+	b := ratchet.ReadBase(context.Background(), dir, "main", "ledgers/main.json")
 	if b.Err != nil || b.Ledger == nil || b.Ledger.Functions["example.com/m/p.F"] != 12 {
 		t.Fatalf("base %+v, want the ledger at the configured path, 12", b)
 	}
 	// The base is read where the base commit keeps it, whatever path this run asks for.
-	if other := ratchet.ReadBase(dir, "main", "ledgers/other.json"); other.Err != nil || other.Ledger == nil || other.Moved == nil {
+	if other := ratchet.ReadBase(context.Background(), dir, "main", "ledgers/other.json"); other.Err != nil || other.Ledger == nil || other.Moved == nil {
 		t.Errorf("base %+v, want the base's own copy and a move", other)
 	}
 }
@@ -212,19 +212,19 @@ func TestBaseIsReadAtThePathTheBaseCommitNames(t *testing.T) {
 		"go-tops.yaml":    "protocol: \"" + protocolID + "\"\nbaseline: new/ledger.json\n",
 		"new/ledger.json": ledgerFile(t, 99),
 	})
-	moved := ratchet.ReadBase(dir, "main", "new/ledger.json")
+	moved := ratchet.ReadBase(context.Background(), dir, "main", "new/ledger.json")
 	if moved.Err != nil || moved.Ledger == nil || moved.Ledger.Functions["example.com/m/p.F"] != 12 {
 		t.Fatalf("base %+v, want the copy at old/ledger.json, 12", moved)
 	}
 	if moved.Moved == nil || moved.Moved.From != "old/ledger.json" || moved.Moved.To != "new/ledger.json" {
 		t.Errorf("moved %+v, want old/ledger.json to new/ledger.json", moved.Moved)
 	}
-	same := ratchet.ReadBase(dir, "main", "old/ledger.json")
+	same := ratchet.ReadBase(context.Background(), dir, "main", "old/ledger.json")
 	if same.Moved != nil || same.Err != nil {
 		t.Errorf("same path: %+v, want no move", same)
 	}
 	// A path written another way is the same path.
-	if again := ratchet.ReadBase(dir, "main", "./old//ledger.json"); again.Moved != nil {
+	if again := ratchet.ReadBase(context.Background(), dir, "main", "./old//ledger.json"); again.Moved != nil {
 		t.Errorf("an equivalent path read as a move: %+v", again.Moved)
 	}
 }
@@ -234,7 +234,7 @@ func TestBaseCommitWithoutAConfigurationKeepsTheLedgerAtTheDefaultPath(t *testin
 	commit(t, dir, "base", map[string]string{baselinePath: ledgerFile(t, 12)})
 	git(t, dir, "checkout", "-q", "-b", "feature")
 	commit(t, dir, "adopt a path", map[string]string{"go-tops.yaml": "baseline: elsewhere.json\n", "elsewhere.json": ledgerFile(t, 50)})
-	b := ratchet.ReadBase(dir, "main", "elsewhere.json")
+	b := ratchet.ReadBase(context.Background(), dir, "main", "elsewhere.json")
 	if b.Err != nil || b.Ledger == nil || b.Ledger.Functions["example.com/m/p.F"] != 12 || b.Moved == nil || b.Moved.From != baselinePath {
 		t.Errorf("base %+v moved %+v, want the default path's copy and a move from it", b, b.Moved)
 	}
@@ -245,7 +245,7 @@ func TestBaseConfigurationThatDoesNotParseFails(t *testing.T) {
 	commit(t, dir, "base", map[string]string{"go-tops.yaml": "baseline: [unclosed\n", baselinePath: ledgerFile(t, 12)})
 	git(t, dir, "checkout", "-q", "-b", "feature")
 	commit(t, dir, "work", map[string]string{"a.go": "package a\n"})
-	if b := ratchet.ReadBase(dir, "main", baselinePath); b.Err == nil {
+	if b := ratchet.ReadBase(context.Background(), dir, "main", baselinePath); b.Err == nil {
 		t.Error("a base go-tops.yaml that does not parse was read as naming the default path")
 	}
 }
@@ -265,7 +265,7 @@ func TestBaseIsReadForAModuleInASubdirectory(t *testing.T) {
 	commit(t, root, "raise an entry by hand", map[string]string{"sub/ledgers/main.json": ledgerFile(t, 17)})
 	sub := filepath.Join(root, "sub")
 
-	b := ratchet.ReadBase(sub, "main", "ledgers/main.json")
+	b := ratchet.ReadBase(context.Background(), sub, "main", "ledgers/main.json")
 	if b.Err != nil || b.Ledger == nil || b.Ledger.Functions["example.com/m/p.F"] != 12 {
 		t.Fatalf("base %+v, want the copy at sub/ledgers/main.json, 12", b)
 	}
@@ -295,7 +295,7 @@ func TestBaseConfigurationIsTheModulesInASubdirectory(t *testing.T) {
 	})
 	git(t, root, "checkout", "-q", "-b", "feature")
 	commit(t, root, "move the baseline", map[string]string{"sub/go-tops.yaml": "baseline: new/ledger.json\n", "sub/new/ledger.json": ledgerFile(t, 99)})
-	b := ratchet.ReadBase(filepath.Join(root, "sub"), "main", "new/ledger.json")
+	b := ratchet.ReadBase(context.Background(), filepath.Join(root, "sub"), "main", "new/ledger.json")
 	if b.Err != nil || b.Ledger == nil || b.Ledger.Functions["example.com/m/p.F"] != 12 {
 		t.Fatalf("base %+v, want the copy at the module's own old/ledger.json", b)
 	}
@@ -310,7 +310,7 @@ func TestBaseIsReadForAModuleInModDirectory(t *testing.T) {
 	commit(t, root, "base", map[string]string{"mod/" + baselinePath: ledgerFile(t, 12), "README.md": "x\n"})
 	git(t, root, "checkout", "-q", "-b", "feature")
 	commit(t, root, "raise", map[string]string{"mod/" + baselinePath: ledgerFile(t, 17)})
-	b := ratchet.ReadBase(filepath.Join(root, "mod"), "main", baselinePath)
+	b := ratchet.ReadBase(context.Background(), filepath.Join(root, "mod"), "main", baselinePath)
 	if b.Err != nil || b.Ledger == nil || b.Ledger.Functions["example.com/m/p.F"] != 12 {
 		t.Fatalf("base %+v, want the copy at mod/%s, 12", b, baselinePath)
 	}
@@ -324,7 +324,7 @@ func TestBaseConfigurationThatDoesNotParseFailsInASubdirectory(t *testing.T) {
 	commit(t, root, "base", map[string]string{"mod/go-tops.yaml": "baseline: [unclosed\n", "mod/" + baselinePath: ledgerFile(t, 12)})
 	git(t, root, "checkout", "-q", "-b", "feature")
 	commit(t, root, "work", map[string]string{"mod/a.go": "package a\n"})
-	b := ratchet.ReadBase(filepath.Join(root, "mod"), "main", baselinePath)
+	b := ratchet.ReadBase(context.Background(), filepath.Join(root, "mod"), "main", baselinePath)
 	if b.Err == nil || !strings.Contains(b.Err.Error(), "go-tops.yaml at the diff base") {
 		t.Errorf("base %+v, want an error naming the base go-tops.yaml", b)
 	}

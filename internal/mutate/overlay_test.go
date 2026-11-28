@@ -721,7 +721,7 @@ func %s(t *testing.T) {
 	if got := os.Getenv("PATH"); !strings.HasPrefix(got, %q) {
 		t.Fatalf("PATH=%%q does not start with %%q", got, %q)
 	}
-	if err := exec.CommandContext(context.Background(), "go", "version").Run(); err != nil {
+	if err := exec.CommandContext(t.Context(), "go", "version").Run(); err != nil {
 		t.Fatalf("go failed: %%v", err)
 	}%s
 }
@@ -988,7 +988,7 @@ func TestReadOverlayPkgMetaAndCompileVerifyErrors(t *testing.T) {
 		t.Errorf("expected wrapped exec err, got %v", err)
 	}
 	errOut := checkCompileOutcome(t.Context(), t.Context(), "lbl", gate.Output{ExitCode: 1, Stdout: []byte("OUT"), Stderr: []byte("ERR")}, nil)
-	if errOut == nil || !strings.Contains(errOut.Error(), "OUT\nERR") {
+	if errOut == nil || !strings.Contains(fmt.Sprint(errOut), "OUT\nERR") {
 		t.Errorf("expected stdout+stderr joined in compile error, got %v", errOut)
 	}
 
@@ -1370,7 +1370,7 @@ import (
 
 func TestChildSleepOnMutant(t *testing.T) {
 	if !IsZero(0) {
-		cmd := exec.CommandContext(context.Background(), "sleep", "30")
+		cmd := exec.CommandContext(t.Context(), "sleep", "30")
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		_ = cmd.Run()

@@ -46,7 +46,7 @@ func NewJudge(measure Measurer, paths func(dir string) (Paths, error)) gate.Ratc
 		if !holdsFeeds(layers) {
 			return partialVerdict(env, layers, paths)
 		}
-		run, err := gobuild.Resolve(env.Dir, tests.Build)
+		run, err := gobuild.Resolve(ctx, env.Dir, tests.Build)
 		if err != nil {
 			return nil, err
 		}
@@ -54,7 +54,7 @@ func NewJudge(measure Measurer, paths func(dir string) (Paths, error)) gate.Ratc
 		if err != nil {
 			return refused(layers, run, nil, fmt.Errorf("the configuration: %w", err)), nil
 		}
-		in, err := judgeInput(env, run, ps)
+		in, err := judgeInput(ctx, env, run, ps)
 		if err != nil {
 			return refused(layers, run, in.Ledger, err), nil
 		}
@@ -147,7 +147,7 @@ func uncarried(j Judgment, layers []report.Layer) bool {
 // judgeInput reads the ledger and its base copy, and on a leg that is not the ledger
 // leg what the ledger build compiles. A ledger that cannot be read is an error: the
 // judge trusts nothing it cannot read.
-func judgeInput(env *gate.Env, run gobuild.Build, ps Paths) (Input, error) {
+func judgeInput(ctx context.Context, env *gate.Env, run gobuild.Build, ps Paths) (Input, error) {
 	in := Input{Run: run}
 	ledger, err := readLedgerFile(env.Dir, ps.Ledger)
 	if err != nil {
@@ -158,7 +158,7 @@ func judgeInput(env *gate.Env, run gobuild.Build, ps Paths) (Input, error) {
 	}
 	// Every leg reads the base copy: the ledger leg judges against it, and the
 	// others only say when the build moved. Only the ledger leg fails on it.
-	in.Base = ReadBase(env.Dir, env.Base, ps.Ledger)
+	in.Base = ReadBase(ctx, env.Dir, env.Base, ps.Ledger)
 	if !run.Equal(ledger.Build) {
 		ledgerSources(&in, env.Dir)
 	}

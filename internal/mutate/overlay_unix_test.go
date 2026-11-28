@@ -76,7 +76,7 @@ import (
 
 func TestMutantWaitsForSIGINT(t *testing.T) {
 	if !IsBase(-1) {
-		child := exec.CommandContext(context.Background(), "sleep", "30")
+		child := exec.CommandContext(t.Context(), "sleep", "30")
 		child.Stdout = os.Stdout
 		child.Stderr = os.Stderr
 		if err := child.Start(); err != nil {
