@@ -280,7 +280,7 @@ func openBaseline(ctx context.Context, env cli.Env, a baselineArgs) (*baselineRu
 	if err != nil {
 		return nil, bfail(baselineEnv, "%v", err)
 	}
-	cfg, acks, rel, err := loadBaselineConfig(dir)
+	cfg, acks, rel, err := loadBaselineConfig(ctx, dir)
 	if err != nil {
 		return nil, err
 	}
@@ -551,8 +551,8 @@ func startError(err error) *baselineError {
 // against HEAD is what this command is here to settle. A ledger that does not
 // parse or is not valid stays an issue. It returns the gate's configuration,
 // the module-relative path of the acks file and of the ledger.
-func loadBaselineConfig(dir string) (gate.Config, string, string, error) {
-	res, err := config.Check(context.Background(), dir, config.Options{})
+func loadBaselineConfig(ctx context.Context, dir string) (gate.Config, string, string, error) {
+	res, err := config.Check(ctx, dir, config.Options{})
 	if err != nil {
 		return gate.Config{}, "", "", bfail(baselineEnv, "%v", err)
 	}

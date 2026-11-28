@@ -157,12 +157,12 @@ func TestModuleToolsAreCheckedWithGoTool(t *testing.T) {
 	e := env(dir, nil, "go1.27.4")
 	base := e.Run
 	var asked []string
-	e.Run = func(_ context.Context, d string, argv ...string) (string, error) {
+	e.Run = func(ctx context.Context, d string, argv ...string) (string, error) {
 		if argv[1] == "tool" {
 			asked = append(asked, strings.Join(argv, " "))
 			return "", errors.New("no such tool")
 		}
-		return base(context.Background(), d, argv...)
+		return base(ctx, d, argv...)
 	}
 	cs := Run(context.Background(), e)
 	if c := get(cs, "govulncheck"); c.Status != Fail || c.Exit != 1 || ExitCode(cs) != 1 {
@@ -199,11 +199,11 @@ func TestGOTOOLCHAINAndCgoStateAreReported(t *testing.T) {
 	}
 	e := env(t.TempDir(), nil, "go1.27.4")
 	base := e.Run
-	e.Run = func(_ context.Context, d string, argv ...string) (string, error) {
+	e.Run = func(ctx context.Context, d string, argv ...string) (string, error) {
 		if strings.Join(argv, " ") == "go env CGO_ENABLED" {
 			return "0\n", nil
 		}
-		return base(context.Background(), d, argv...)
+		return base(ctx, d, argv...)
 	}
 	c := get(Run(context.Background(), e), "cgo")
 	if c.Status != Warn || !strings.Contains(c.Detail, "CGO_ENABLED=0") {

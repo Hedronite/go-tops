@@ -49,7 +49,7 @@ func status(ctx context.Context, a baselineArgs) (statusLine, int) {
 	if err != nil {
 		return cannotTell(statusLine{}, err.Error())
 	}
-	cfg, _, rel, err := loadBaselineConfig(dir)
+	cfg, _, rel, err := loadBaselineConfig(ctx, dir)
 	if err != nil {
 		return cannotTell(statusLine{}, err.Error())
 	}
