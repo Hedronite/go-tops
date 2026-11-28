@@ -1,6 +1,9 @@
 package laws
 
-import "testing"
+import (
+	"context"
+	"testing"
+)
 
 func TestDefaultGoEnvMissingTool(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())

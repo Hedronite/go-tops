@@ -1,6 +1,7 @@
 package doctor
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"os"
@@ -47,7 +48,7 @@ func TestBinaryTheLockRefusesIsNotOK(t *testing.T) {
 	dir := t.TempDir()
 	lockFor(t, dir, "go1.27.4", pinnedBinary)
 	binaryAt(t, dir, "a golangci-lint from go install")
-	cs := Run(env(dir, nil, "go1.27.4"))
+	cs := Run(context.Background(), env(dir, nil, "go1.27.4"))
 	c := get(cs, "golangci-lint")
 	if c.Status != Fail || c.Exit != 2 || ExitCode(cs) != 2 {
 		t.Fatalf("exit %d, %+v: a binary the lock refuses is a pin mismatch, exit 2", ExitCode(cs), c)
@@ -61,7 +62,7 @@ func TestBinaryTheLockHoldsIsOK(t *testing.T) {
 	dir := t.TempDir()
 	lockFor(t, dir, "go1.27.4", pinnedBinary)
 	binaryAt(t, dir, pinnedBinary)
-	cs := Run(env(dir, nil, "go1.27.4"))
+	cs := Run(context.Background(), env(dir, nil, "go1.27.4"))
 	if c := get(cs, "golangci-lint"); c.Status != OK || ExitCode(cs) != 0 {
 		t.Fatalf("exit %d, %+v", ExitCode(cs), c)
 	}
@@ -84,10 +85,10 @@ func TestGoVersionAgainstTheConfiguredFloor(t *testing.T) {
 	}{
 		{"1.27", "go1.26.9", false}, {"1.27", "go1.27.4", true}, {"1.27.0", "go1.26.9", false}, {"1.27.0", "go1.27.0", true}, {"1.26", "go1.26.9", true},
 	} {
-		t.Run(c.floor+" on "+c.goVersion, func(t *testing.T) {
+		t.Run(context.Background(), c.floor+" on "+c.goVersion, func(t *testing.T) {
 			dir := t.TempDir()
 			writeConfigFloor(t, dir, c.floor)
-			cs := Run(env(dir, nil, c.goVersion))
+			cs := Run(context.Background(), env(dir, nil, c.goVersion))
 			got := get(cs, "go")
 			if c.ok != (got.Status != Fail) {
 				t.Fatalf("%+v", got)

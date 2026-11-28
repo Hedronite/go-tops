@@ -101,7 +101,7 @@ func TestCheckG33LockMissing(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, filepath.Join(dir, "go.mod"), "module example.com/t\n\ngo 1.26\n")
 	out := map[string]int{"G-33": 0}
-	if err := checkG33(dir, func() (string, error) { return "go1.27.4", nil }, out); err != nil {
+	if err := checkG33(context.Background(), dir, func() (string, error) { return "go1.27.4", nil }, out); err != nil {
 		t.Fatal(err)
 	}
 	if out["G-33"] != 1 {
