@@ -75,85 +75,19 @@ func (p planned) enabled() bool { return p.cfg.Enabled }
 // starts returns a Run, whose exit code is 0 or 1, and whose report the caller
 // writes.
 func Execute(ctx context.Context, cfg Config, opts Options, d Deps) (*Run, error) {
-	if d.Exec == nil {
-		d.Exec = OS{}
-	}
-	if d.Tools == nil {
-		r := &ToolResolver{Dir: d.Dir, Exec: d.Exec, Binary: DefaultBinaries()}
-		if BinaryVerifier != nil {
-			r.Verify = BinaryVerifier(d.Dir)
-		}
-		d.Tools = r
-	}
-	if d.Now == nil {
-		d.Now = time.Now
-	}
-	if d.Laws == nil {
-		d.Laws = laws.Judge
-	}
-	if d.Layers == nil {
-		d.Layers = Layers()
-	}
+	fillDefaultDeps(&d)
 	if err := check(d.Layers); err != nil {
 		return nil, exitf(ExitEnv, "%v", err)
 	}
 	base := cfg.base(opts.Base)
-
 	plan, err := makePlan(d.Layers, cfg, opts)
 	if err != nil {
 		return nil, err
 	}
-	lawsIn := opts.Only == "" || opts.Only == LawsLayer
-	required := cfg.RequiredLaws
-	static := d.Laws(laws.Input{Class: cfg.Class, MaxTier: opts.MaxTier, InRange: lawsIn, Reached: true, Required: required})
-	partial := false
-	for _, r := range static {
-		if r.Required && r.OutOfRange {
-			partial = true
-		}
+	if run, err := tryDryRun(cfg, opts, d, plan); run != nil || err != nil {
+		return run, err
 	}
-
-	// Policy first (§12.2 code 4): a dry run, and a range that would end partial.
-	if d.CI && opts.DryRun {
-		return nil, exitf(ExitRefused, "--dry-run is refused when CI=true: a dry run judges nothing (§3.4 rule 6)")
-	}
-	if d.CI && partial {
-		return nil, exitf(ExitRefused, "this range leaves a required law out of range and would end partial; it is refused when CI=true (§3.4 rule 6)")
-	}
-	if opts.DryRun {
-		return &Run{DryRun: true, Text: renderPlan(cfg, opts, plan, static)}, nil
-	}
-
-	env := &Env{Dir: d.Dir, Config: cfg, Base: base, Exec: d.Exec, Tools: d.Tools}
-	for _, p := range plan {
-		if !p.inRange || !p.enabled() {
-			continue
-		}
-		if pf, ok := p.layer.(Preflighter); ok {
-			if err := pf.Preflight(ctx, env); err != nil {
-				return nil, &ExitError{Code: exitCodeFor(err), Err: fmt.Errorf("%s: %w", p.layer.ID(), err)}
-			}
-		}
-	}
-	started := d.Now()
-	git, err := gitState(ctx, d.Exec, d.Dir, base)
-	if err != nil {
-		return nil, &ExitError{Code: ExitEnv, Err: err}
-	}
-
-	layers, stopped, vulnDB := runLayers(ctx, env, plan, opts)
-
-	ev, err := lawEvidence(ctx, d, env, cfg, opts, lawsIn, stopped, layers)
-	if err != nil {
-		return nil, err
-	}
-
-	results := d.Laws(laws.Input{Class: cfg.Class, MaxTier: opts.MaxTier, InRange: lawsIn, Reached: !stopped, Required: required, Evidence: ev})
-	env.RatchetLaws = report.Laws{ApplicableJudged: applicableJudged(results)}
-
-	verdict, layers := d.ratchetStage(ctx, cfg, env, layers, stopped)
-	rep := assemble(cfg, opts, git, started, d.Now(), d.ToolVersion, vulnDB, layers, results, verdict)
-	return &Run{Report: rep, ExitCode: rep.Summary.ExitCode, Text: verdict.text(report.RenderText(rep))}, nil
+	return executeRun(ctx, cfg, opts, d, base, plan)
 }
 
 // makePlan decides, for each layer, whether it is in range (§3.2, §3.5) and

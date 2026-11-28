@@ -129,24 +129,3 @@ func lawSeverity(id string) Severity {
 	}
 	return SeverityR
 }
-
-func acksCover(id string, ev Evidence) bool {
-	if !Ackable(id) {
-		return false
-	}
-	need := ev.Refusals[id]
-	if len(need) == 0 {
-		return false
-	}
-	have := ev.Acks[id]
-	for file, n := range need {
-		got := 0
-		if have != nil {
-			got = have[file]
-		}
-		if got < n {
-			return false
-		}
-	}
-	return true
-}
