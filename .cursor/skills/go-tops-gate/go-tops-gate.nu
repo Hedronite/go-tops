@@ -76,7 +76,8 @@ def laws-problems [laws: record, failed_laws: bool] {
   let judged = ($laws.judged? | default 0)
   let req = ($laws.required? | default 0)
   if $req > 0 and $judged >= $req {
-    $out = ($out | append $"the required laws failed and ruling C9 has retired ($judged of ($laws.catalog? | default 43) laws judged)")
+    let catalog = ($laws.catalog? | default 43)
+    $out = ($out | append $"the required laws failed and ruling C9 has retired ($judged of ($catalog) laws judged)")
   } else if not (c9-laws-ok $laws) {
     $out = ($out | append "the laws block does not satisfy ruling C9 for this judged count")
   }
