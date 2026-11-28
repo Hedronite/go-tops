@@ -48,7 +48,7 @@ func writeLedgerAt(t *testing.T, dir, rel string, l *ratchet.Ledger) {
 		ledger["findings"] = l.Findings
 	}
 	doc := map[string]any{
-		"build":  map[string]any{"goos": l.Build.GOOS, "goarch": l.Build.GOARCH, "tags": nonNil(l.Build.Tags), "cgo_enabled": l.Build.CGOEnabled},
+		"build": map[string]any{"goos": l.Build.GOOS, "goarch": l.Build.GOARCH, "tags": nonNil(l.Build.Tags), "cgo_enabled": l.Build.CGOEnabled},
 		"ledger": ledger, "judged_laws": l.JudgedLaws,
 	}
 	raw, err := json.Marshal(doc)
@@ -259,6 +259,19 @@ func TestJudgeHookApplyPartialWhenTestsLayerBlocksMeasure(t *testing.T) {
 	}
 	if v.Layers[0].Outcome != "pass" {
 		t.Fatalf("hygiene after partial=%s reason=%q", v.Layers[0].Outcome, v.Layers[0].Reason)
+	}
+}
+
+func TestJudgeHookTestsRefusalWithoutLedgerDoesNotPartial(t *testing.T) {
+	env := project(t, nil)
+	ref := &baseline.RefusalError{Msg: "tests layer red"}
+	in := layersIn()
+	v, err := ratchet.NewJudge(measurerWithPaths(ratchet.Measure{}, ref))(context.Background(), env, in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !v.Failed || v.Layers[0].Outcome != in[0].Outcome {
+		t.Fatalf("layers=%+v", v.Layers)
 	}
 }
 

@@ -20,6 +20,14 @@ func TestLawEvidenceScanAcksErrorFails(t *testing.T) {
 	}
 }
 
+func TestLawEvidenceReturnsEarlyWhenLawsOutOfRange(t *testing.T) {
+	d := deps(nil)
+	ev, err := lawEvidence(context.Background(), d, &Env{Dir: "."}, cfg(), Options{MaxTier: 1}, false, false, nil)
+	if err != nil || ev.LintPassOK || ev.AnalyzersOK {
+		t.Fatalf("ev=%+v err=%v", ev, err)
+	}
+}
+
 func TestLawEvidenceStoppedSkipsRefusals(t *testing.T) {
 	d := deps(nil)
 	ev, err := lawEvidence(context.Background(), d, &Env{Dir: "."}, cfg(), Options{MaxTier: 1}, true, true, nil)
