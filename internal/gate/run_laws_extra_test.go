@@ -70,6 +70,26 @@ func TestLawEvidenceAttachesRefusals(t *testing.T) {
 	}
 }
 
+func TestAttachRefusalsSetsEnvMap(t *testing.T) {
+	env := &Env{Dir: "."}
+	ev := &laws.Evidence{
+		LintPassOK: true,
+		Lint: lawpass.LintResult{
+			Issues: []lawpass.LintIssue{{
+				FromLinter: "errcheck",
+				Pos: struct {
+					Filename string
+					Line     int
+				}{Filename: "x.go", Line: 2},
+			}},
+		},
+	}
+	attachRefusals(env, ev)
+	if env.RatchetLawRefusals == nil || ev.Refusals["G-12"]["x.go"] != 1 {
+		t.Fatalf("env=%+v ev=%+v", env.RatchetLawRefusals, ev.Refusals)
+	}
+}
+
 func TestLawEvidenceCollectsAcks(t *testing.T) {
 	want := laws.FileCounts{"G-12": {"a.go": 1}}
 	d := deps(nil)
