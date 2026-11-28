@@ -65,12 +65,13 @@ func listFixtureGoFiles(moduleRoot string) ([]string, error) {
 	return files, err
 }
 
+func markerOrderKey(m Marker) string {
+	return m.File + "\x00" + strconv.Itoa(m.Line)
+}
+
 func sortMarkers(out []Marker) {
 	sort.Slice(out, func(i, j int) bool {
-		if out[i].File != out[j].File {
-			return out[i].File < out[j].File
-		}
-		return out[i].Line < out[j].Line
+		return markerOrderKey(out[i]) < markerOrderKey(out[j])
 	})
 }
 
@@ -181,15 +182,13 @@ func lineHasWantLaw(moduleRoot, file string, line int, id string) bool {
 	return len(m) == 2 && m[1] == id
 }
 
+func fixtureDiffOrderKey(d FixtureDiff) string {
+	return d.Law + "\x00" + d.File + "\x00" + strconv.Itoa(d.Line)
+}
+
 func sortFixtureDiffs(out []FixtureDiff) {
 	sort.Slice(out, func(i, j int) bool {
-		if out[i].Law != out[j].Law {
-			return out[i].Law < out[j].Law
-		}
-		if out[i].File != out[j].File {
-			return out[i].File < out[j].File
-		}
-		return out[i].Line < out[j].Line
+		return fixtureDiffOrderKey(out[i]) < fixtureDiffOrderKey(out[j])
 	})
 }
 

@@ -148,8 +148,31 @@ func TestMarkersInFileCollectsWants(t *testing.T) {
 	path := filepath.Join(dir, "a.go")
 	writeFixture(t, dir, "a.go", "package p\n// want G-02\n// want G-07\n")
 	got, err := markersInFile(path)
-	if err != nil || len(got) != 2 || got[0].id != "G-02" || got[0].line != 2 || got[1].id != "G-07" {
+	if err != nil || len(got) != 2 || got[0].id != "G-02" || got[0].line != 2 || got[1].id != "G-07" || got[1].line != 3 {
 		t.Fatalf("markers %v err=%v", got, err)
+	}
+}
+
+func TestMarkerOrderKeyStrictLess(t *testing.T) {
+	t.Parallel()
+	if markerOrderKey(Marker{File: "a.go", Line: 2}) <= markerOrderKey(Marker{File: "a.go", Line: 1}) {
+		t.Fatal("line order")
+	}
+	if markerOrderKey(Marker{File: "b.go", Line: 1}) <= markerOrderKey(Marker{File: "a.go", Line: 9}) {
+		t.Fatal("file order")
+	}
+}
+
+func TestFixtureDiffOrderKeyStrictLess(t *testing.T) {
+	t.Parallel()
+	a := FixtureDiff{Law: "G-12", File: "a.go", Line: 2}
+	b := FixtureDiff{Law: "G-12", File: "a.go", Line: 1}
+	if fixtureDiffOrderKey(a) <= fixtureDiffOrderKey(b) {
+		t.Fatal("line order")
+	}
+	c := FixtureDiff{Law: "G-16", File: "a.go", Line: 1}
+	if fixtureDiffOrderKey(c) <= fixtureDiffOrderKey(b) {
+		t.Fatal("law order")
 	}
 }
 
@@ -201,6 +224,30 @@ func TestScanMarkersNestedFile(t *testing.T) {
 	m, err := ScanMarkers(dir)
 	if err != nil || len(m) != 1 || m[0].File != "pkg/a.go" {
 		t.Fatalf("markers %v err=%v", m, err)
+	}
+}
+
+func TestDiffFixtureMarkersDiffsSorted(t *testing.T) {
+	dir := t.TempDir()
+	writeFixture(t, dir, "a.go", "package p\n\nfunc f() {}\n")
+	issues := []LintIssue{
+		{FromLinter: "errcheck", Text: "x", Pos: struct {
+			Filename string
+			Line     int
+		}{Filename: "a.go", Line: 3}},
+		{FromLinter: "govet", Text: "copylocks", Pos: struct {
+			Filename string
+			Line     int
+		}{Filename: "a.go", Line: 3}},
+	}
+	d, err := DiffFixtureMarkers(dir, issues)
+	if err != nil || len(d) < 2 {
+		t.Fatalf("diff %v err=%v", d, err)
+	}
+	for i := 1; i < len(d); i++ {
+		if fixtureDiffOrderKey(d[i-1]) >= fixtureDiffOrderKey(d[i]) {
+			t.Fatalf("unsorted at %d: %v", i, d)
+		}
 	}
 }
 
