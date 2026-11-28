@@ -73,6 +73,7 @@ gates:
 		"a_test.go": `package ctrlcgate
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
