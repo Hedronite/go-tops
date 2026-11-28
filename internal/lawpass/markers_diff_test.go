@@ -155,11 +155,22 @@ func TestMarkersInFileCollectsWants(t *testing.T) {
 
 func TestMarkerOrderKeyStrictLess(t *testing.T) {
 	t.Parallel()
-	if markerOrderKey(Marker{File: "a.go", Line: 2}) <= markerOrderKey(Marker{File: "a.go", Line: 1}) {
+	if markerOrderKey(Marker{File: "a.go", Line: 2, ID: "G-02"}) <= markerOrderKey(Marker{File: "a.go", Line: 1, ID: "G-02"}) {
 		t.Fatal("line order")
 	}
-	if markerOrderKey(Marker{File: "b.go", Line: 1}) <= markerOrderKey(Marker{File: "a.go", Line: 9}) {
+	if markerOrderKey(Marker{File: "b.go", Line: 1, ID: "G-02"}) <= markerOrderKey(Marker{File: "a.go", Line: 9, ID: "G-02"}) {
 		t.Fatal("file order")
+	}
+}
+
+func TestSortMarkersNumericLineOrder(t *testing.T) {
+	out := []Marker{
+		{File: "a.go", Line: 10, ID: "G-02"},
+		{File: "a.go", Line: 2, ID: "G-07"},
+	}
+	sortMarkers(out)
+	if out[0].Line != 2 || out[1].Line != 10 {
+		t.Fatalf("order %v", out)
 	}
 }
 
@@ -173,6 +184,9 @@ func TestFixtureDiffOrderKeyStrictLess(t *testing.T) {
 	c := FixtureDiff{Law: "G-16", File: "a.go", Line: 1}
 	if fixtureDiffOrderKey(c) <= fixtureDiffOrderKey(b) {
 		t.Fatal("law order")
+	}
+	if fixtureDiffOrderKey(FixtureDiff{Law: "G-12", File: "a.go", Line: 10}) <= fixtureDiffOrderKey(FixtureDiff{Law: "G-12", File: "a.go", Line: 2}) {
+		t.Fatal("numeric line order")
 	}
 }
 
