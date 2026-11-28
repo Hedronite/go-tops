@@ -49,6 +49,26 @@ func CountByLaw(issues []LintIssue) map[string]int {
 	return out
 }
 
+// CountsByLawFile counts mapped issues per law id and module-relative file path.
+func CountsByLawFile(issues []LintIssue, rel func(filename string) string) map[string]map[string]int {
+	var out map[string]map[string]int
+	for _, is := range issues {
+		id := lawForIssue(is)
+		if id == "" {
+			continue
+		}
+		file := rel(is.Pos.Filename)
+		if out == nil {
+			out = map[string]map[string]int{}
+		}
+		if out[id] == nil {
+			out[id] = map[string]int{}
+		}
+		out[id][file]++
+	}
+	return out
+}
+
 // toolLawIDs are tier-1 laws judged from lint-laws.json.
 var toolLawIDs = []string{"G-02", "G-07", "G-11", "G-12", "G-16", "G-18", "G-37"}
 

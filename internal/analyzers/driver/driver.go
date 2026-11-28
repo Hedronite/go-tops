@@ -18,7 +18,8 @@ import (
 
 // Result holds per-law diagnostic counts from one analyzer run.
 type Result struct {
-	ByLaw map[string]int
+	ByLaw     map[string]int
+	ByLawFile map[string]map[string]int
 }
 
 // Run loads ./... under dir and runs every custom analyzer.
@@ -40,6 +41,7 @@ func Run(_ context.Context, dir string) (Result, error) {
 	}
 
 	out := map[string]int{}
+	byFile := map[string]map[string]int{}
 	sizes := types.SizesFor("gc", "amd64")
 	for _, a := range analyzers.All() {
 		law := analyzers.LawID[a.Name]
@@ -61,6 +63,11 @@ func Run(_ context.Context, dir string) (Result, error) {
 				ResultOf:   map[*analysis.Analyzer]any{},
 				Report: func(d analysis.Diagnostic) {
 					diags = append(diags, d)
+					file := moduleRel(dir, fset.Position(d.Pos).Filename)
+					if byFile[law] == nil {
+						byFile[law] = map[string]int{}
+					}
+					byFile[law][file]++
 				},
 				ImportObjectFact:  func(obj types.Object, fact analysis.Fact) bool { return false },
 				AllObjectFacts:    func() []analysis.ObjectFact { return nil },
@@ -73,7 +80,20 @@ func Run(_ context.Context, dir string) (Result, error) {
 			out[law] += len(diags)
 		}
 	}
-	return Result{ByLaw: out}, nil
+	return Result{ByLaw: out, ByLawFile: byFile}, nil
+}
+
+func moduleRel(dir, name string) string {
+	name = filepath.ToSlash(name)
+	if name == "" {
+		return "(no file)"
+	}
+	if filepath.IsAbs(name) {
+		if rel, err := filepath.Rel(dir, name); err == nil {
+			name = filepath.ToSlash(rel)
+		}
+	}
+	return strings.TrimPrefix(name, "./")
 }
 
 func skipPackage(pkg *packages.Package) bool {
