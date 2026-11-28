@@ -71,7 +71,7 @@ func markersInFile(path string) ([]fileMarker, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	var out []fileMarker
 	sc := bufio.NewScanner(f)
 	line := 0
@@ -156,7 +156,7 @@ func readLine(root, rel string, line int) string {
 	if err != nil {
 		return ""
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	sc := bufio.NewScanner(f)
 	n := 0
 	for sc.Scan() {
