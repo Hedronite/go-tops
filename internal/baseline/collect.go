@@ -30,6 +30,8 @@ type Feeds struct {
 	Dir    string
 	// Acks is the module-relative path of .go-tops/acks.yaml; "" for none.
 	Acks string
+	// Laws is the per-law per-file refusal count when the gate judged laws.
+	Laws Counts
 	// Build is the build this run measured (ruling C3).
 	Build Build
 	// Now is the clock for the exemptions in force today (§6.8); nil is the real
@@ -60,6 +62,7 @@ func Collect(f Feeds) (Measure, error) {
 	if m.Nolint, m.Ack, err = scanSuppressions(f.Dir, f.Acks); err != nil {
 		return m, err
 	}
+	m.Laws = f.Laws
 	m.Exemptions = exempt.Count(f.Config.Exemptions, f.today())
 	m.JudgedLaws = f.Report.Laws.ApplicableJudged
 	m.Build = f.Build

@@ -10,13 +10,9 @@ import (
 	"strings"
 
 	"go.yaml.in/yaml/v3"
-
 )
 
-// reasonWords is the core.schema.json reasonText pattern: at least three words.
 var reasonWords = regexp.MustCompile(`^\S+(\s+\S+){2,}$`)
-
-// LawID is the G-NN form of a law id in a suppression comment or ack ledger entry.
 var lawID = regexp.MustCompile(`^G-[0-9]{2}$`)
 
 // Entry is one row of .go-tops/acks.yaml.
@@ -37,7 +33,7 @@ func ReasonOK(text string) bool {
 	return reasonWords.MatchString(strings.TrimSpace(text))
 }
 
-// Comment is a parsed //tops:ack G-NN <reason> line comment (reason only; no owner).
+// Comment is a parsed //tops:ack G-NN <reason> line comment.
 func Comment(text string) (law, reason string, ok bool) {
 	text, ok = strings.CutPrefix(text, "//")
 	if !ok {
