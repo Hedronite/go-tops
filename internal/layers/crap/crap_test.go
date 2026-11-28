@@ -286,6 +286,9 @@ func TestDetailsEmitFunctionsListF18(t *testing.T) {
 	if !ok || row["crap"] == nil || row["cov_pct"] == nil {
 		t.Fatalf("row=%+v", rows[0])
 	}
+	if cov, ok := row["cov_pct"].(float64); !ok || cov != 100 {
+		t.Fatalf("cov_pct=%v want 100", row["cov_pct"])
+	}
 }
 
 func TestReasonSaysHowManyPlatformsWereLoaded(t *testing.T) {

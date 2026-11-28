@@ -33,6 +33,15 @@ func f(err error) {
 	}
 }
 
+func TestRecordSavedRejectsEmptyRhs(t *testing.T) {
+	saved := map[string]struct{}{}
+	stmt := &ast.AssignStmt{Lhs: []ast.Expr{&ast.Ident{Name: "x"}}, Rhs: nil}
+	recordSavedErrorString(stmt, saved)
+	if len(saved) != 0 {
+		t.Fatal("want no save without rhs")
+	}
+}
+
 func TestRecordSavedRejectsMultiAssign(t *testing.T) {
 	saved := map[string]struct{}{}
 	stmt := &ast.AssignStmt{Lhs: []ast.Expr{&ast.Ident{}, &ast.Ident{}}, Rhs: []ast.Expr{&ast.CallExpr{}}}

@@ -62,6 +62,16 @@ func TestAttachLawResultsCountsNoReader(t *testing.T) {
 	}
 }
 
+func TestAttachLawResultsCountsConfigOff(t *testing.T) {
+	rep := report.Report{}
+	_, _ = attachLawResults(&rep, []laws.Result{{
+		ID: "G-41", Verdict: laws.NotEvaluated, Reason: laws.ConfigOff, Required: false,
+	}})
+	if rep.Laws.NotEvaluatedByReason.ConfigOff != 1 {
+		t.Fatalf("counts %+v", rep.Laws.NotEvaluatedByReason)
+	}
+}
+
 func TestAttachLawResultsCountsInputMissing(t *testing.T) {
 	rep := report.Report{}
 	_, _ = attachLawResults(&rep, []laws.Result{{

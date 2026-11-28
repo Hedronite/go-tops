@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/Hedronite/go-tops/internal/lawpass"
 	"github.com/Hedronite/go-tops/internal/laws"
 )
 
@@ -23,6 +24,25 @@ func TestLawEvidenceStoppedSkipsRefusals(t *testing.T) {
 	d := deps(nil)
 	ev, err := lawEvidence(context.Background(), d, &Env{Dir: "."}, cfg(), Options{MaxTier: 1}, true, true, nil)
 	if err != nil || ev.LintPassOK || len(ev.Refusals) != 0 {
+		t.Fatalf("ev=%+v err=%v", ev, err)
+	}
+}
+
+func TestLawEvidenceSkipsRefusalsWhenLintFails(t *testing.T) {
+	d := deps(nil)
+	d.LawPass = func(context.Context, *Env) (lawpass.LintResult, error) {
+		return lawpass.LintResult{}, errors.New("lint broke")
+	}
+	ev, err := lawEvidence(context.Background(), d, &Env{Dir: "."}, cfg(), Options{MaxTier: 1}, true, false, nil)
+	if err != nil || ev.LintPassOK || ev.Refusals != nil {
+		t.Fatalf("ev=%+v err=%v", ev, err)
+	}
+}
+
+func TestLawEvidenceSkipsRefusalsBelowTierOne(t *testing.T) {
+	d := deps(nil)
+	ev, err := lawEvidence(context.Background(), d, &Env{Dir: "."}, cfg(), Options{MaxTier: 0}, true, false, nil)
+	if err != nil || len(ev.Refusals) != 0 {
 		t.Fatalf("ev=%+v err=%v", ev, err)
 	}
 }

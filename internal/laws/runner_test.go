@@ -28,6 +28,24 @@ func TestRunnerMergesPositiveFactsIntoByLawFile(t *testing.T) {
 	}
 }
 
+func TestRunnerOmitsZeroFactsFromByLawFile(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "go.mod"), "module example.com/clean\n\ngo 1.26\n")
+	writeFile(t, filepath.Join(dir, "plain.go"), "package clean\n")
+	data, err := os.ReadFile(filepath.Join("..", "..", "go-tops.lock"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(dir, "go-tops.lock"), string(data))
+	rr, err := Run(context.Background(), dir, "library-core", func() (string, error) { return "go1.27.4", nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rr.ByLawFile["G-26"] != nil {
+		t.Fatalf("ByLawFile=%+v want no G-26 module entry", rr.ByLawFile)
+	}
+}
+
 func TestRunnerFactsOnlyModuleByLawFile(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, filepath.Join(dir, "empty.go"), "package clean\n")

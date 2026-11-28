@@ -229,6 +229,18 @@ func TestJudgeHookApplyPartialWhenTestsLayerBlocksMeasure(t *testing.T) {
 	}
 }
 
+func TestJudgeHookNoPartialOnNonTestsMeasureError(t *testing.T) {
+	env := project(t, nil)
+	writeLedger(t, env.Dir, &ratchet.Ledger{Build: resolved(t, env.Dir)})
+	v, err := ratchet.NewJudge(measurerWithPaths(ratchet.Measure{}, errors.New("coverage profile missing")))(context.Background(), env, layersIn())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !v.Failed {
+		t.Fatal("want failed verdict")
+	}
+}
+
 func TestJudgeHookNoPartialWithoutLedgerOnTestsRefusal(t *testing.T) {
 	env := project(t, nil)
 	ref := &baseline.RefusalError{Msg: "tests layer failed"}
