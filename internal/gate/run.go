@@ -140,7 +140,6 @@ func Execute(ctx context.Context, cfg Config, opts Options, d Deps) (*Run, error
 	}
 
 	layers, stopped, vulnDB := runLayers(ctx, env, plan, opts)
-	verdict, layers := d.ratchetStage(ctx, cfg, env, layers, stopped)
 
 	ev := laws.Evidence{Hygiene: laws.HygieneFromLayers(layers)}
 	if lawsIn && !stopped && opts.MaxTier >= 0 {
@@ -166,13 +165,18 @@ func Execute(ctx context.Context, cfg Config, opts Options, d Deps) (*Run, error
 		}
 		lintRes, err := runLaw(ctx, env)
 		if err != nil {
-			return nil, exitf(ExitFail, "law pass: %v", err)
+			// Missing or broken law-pass output leaves tier-1 tool laws input_missing (§3.4).
+			ev.LintPassOK = false
+		} else {
+			ev.Lint = lintRes
+			ev.LintPassOK = true
 		}
-		ev.Lint = lintRes
-		ev.LintPassOK = true
 	}
 
 	results := d.Laws(laws.Input{Class: cfg.Class, MaxTier: opts.MaxTier, InRange: lawsIn, Reached: !stopped, Required: required, Evidence: ev})
+	env.RatchetLaws = report.Laws{ApplicableJudged: applicableJudged(results)}
+
+	verdict, layers := d.ratchetStage(ctx, cfg, env, layers, stopped)
 	rep := assemble(cfg, opts, git, started, d.Now(), d.ToolVersion, vulnDB, layers, results, verdict)
 	return &Run{Report: rep, ExitCode: rep.Summary.ExitCode, Text: verdict.text(report.RenderText(rep))}, nil
 }
@@ -430,4 +434,14 @@ func assemble(cfg Config, opts Options, git report.Git, started, ended time.Time
 		s.Enforced, s.ExitCode, s.AdvisoryExpires = false, ExitOK, cfg.AdvisoryExpires
 	}
 	return rep
+}
+
+func applicableJudged(results []laws.Result) int {
+	var n int
+	for _, r := range results {
+		if r.Verdict != laws.NotEvaluated {
+			n++
+		}
+	}
+	return n
 }

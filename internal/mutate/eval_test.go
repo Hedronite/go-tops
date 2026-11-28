@@ -285,3 +285,26 @@ func TestEvalHelpersAndBoundaries(t *testing.T) {
 		t.Fatalf("NOT VIABLE got nv=%+v err=%v", nv, err)
 	}
 }
+
+func TestE28OutOfBuildBinaryAndUnaryMinusNotMeasured(t *testing.T) {
+	dir := t.TempDir()
+	const rel = "e28_linux.go"
+	src := "//go:build linux\n\npackage p\n\nfunc F(a, b, x int) int {\n\ty := a - b\n\treturn -x\n}\n"
+	if err := os.WriteFile(filepath.Join(dir, rel), []byte(src), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module example.com/e28\n\ngo 1.26\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	diff := DiffResult{
+		Base: "main", BaseSHA: "abc",
+		OutOfBuildFiles: map[string]map[int]bool{rel: {6: true, 7: true}},
+	}
+	ev, err := EvaluateOverlayEmpty(gate.MutationConfig{Engine: "overlay"}, nil, diff, dir, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ev.NotMeasured != 2 {
+		t.Fatalf("NotMeasured = %d, want 2", ev.NotMeasured)
+	}
+}

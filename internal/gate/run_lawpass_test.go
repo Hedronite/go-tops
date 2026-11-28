@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/Hedronite/go-tops/internal/lawpass"
+	"github.com/Hedronite/go-tops/internal/report"
 )
 
 // GO_TOPS §8.1: the gate runs the delegated law pass after tier-1 layers when laws are in range.
@@ -39,5 +40,20 @@ func TestLawPassErrorFailsGate(t *testing.T) {
 	d.LawPass = func(context.Context, *Env) (lawpass.LintResult, error) {
 		return lawpass.LintResult{}, lawpass.ErrLintPass{Msg: "lint-laws.json missing"}
 	}
-	mustRefuse(t, cfg(), opts(), d, ExitFail)
+	r := mustRun(t, cfg(), opts(), d)
+	if r.ExitCode != 1 {
+		t.Fatalf("exit %d, want 1 when the law pass cannot run", r.ExitCode)
+	}
+	for _, id := range []string{"G-02", "G-07", "G-11", "G-12", "G-16", "G-18", "G-37"} {
+		var lr report.LawResult
+		for _, x := range r.Report.Laws.Results {
+			if x.ID == id {
+				lr = x
+				break
+			}
+		}
+		if lr.Verdict != "not-evaluated" || lr.Reason != "input_missing" {
+			t.Errorf("%s = %s/%s, want not-evaluated/input_missing", id, lr.Verdict, lr.Reason)
+		}
+	}
 }

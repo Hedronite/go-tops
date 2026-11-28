@@ -2,6 +2,7 @@ package initcmd
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -104,13 +105,14 @@ type gateDoc struct {
 	failed            []string
 	required, notEval int
 	judged            int
-	refused           []string // ids of laws with verdict refuse, required or not
-	outcome           string   // summary.outcome; "" derives it from failed
-	ran               int      // layer_counts.ran; 0 means every layer in range
-	sameBuild         bool     // a ratchet skip on the ledger's own build
-	offUntil          string   // expires of a skipped mutation layer; "" a future day, "-" none
-	survived          int      // survived_unexplained of a mutation layer that passed
-	noCounts          bool     // a mutation layer that passed without its details
+	refused           []string            // ids of laws with verdict refuse, required or not
+	outcome           string              // summary.outcome; "" derives it from failed
+	ran               int                 // layer_counts.ran; 0 means every layer in range
+	sameBuild         bool                // a ratchet skip on the ledger's own build
+	offUntil          string              // expires of a skipped mutation layer; "" a future day, "-" none
+	survived          int                 // survived_unexplained of a mutation layer that passed
+	noCounts          bool                // a mutation layer that passed without its details
+	lawRows           []map[string]string // optional explicit law results for C9
 }
 
 func (g gateDoc) json(t *testing.T) string {
@@ -201,19 +203,31 @@ func (g gateDoc) runBuild() map[string]any {
 	return linuxBuild
 }
 
-// results lists one not-evaluated result and a refuse for each refused id.
+// results builds law rows for ruling C9: M4, interim, or retired.
 func (g gateDoc) results() []map[string]string {
-	rs := []map[string]string{{"id": "G-02", "verdict": "not-evaluated"}}
+	if len(g.lawRows) > 0 {
+		return append([]map[string]string{}, g.lawRows...)
+	}
+	var rs []map[string]string
+	for i := 0; i < g.judged; i++ {
+		rs = append(rs, map[string]string{"id": fmt.Sprintf("G-%02d", 2+i), "verdict": "allow"})
+	}
+	for i := 0; i < g.notEval; i++ {
+		rs = append(rs, map[string]string{"id": fmt.Sprintf("G-%02d", 20+i), "verdict": "not-evaluated", "reason": "no_reader"})
+	}
 	for _, id := range g.refused {
 		rs = append(rs, map[string]string{"id": id, "verdict": "refuse"})
+	}
+	if g.judged == 0 && len(rs) == 0 {
+		rs = []map[string]string{{"id": "G-02", "verdict": "not-evaluated", "reason": "no_reader"}}
 	}
 	return rs
 }
 
-// c9 is a gate report of the passing state at M2: the ratchet passes and the
+// c9 is a gate report of the passing state at M2/G2: the ratchet passes and the
 // required laws, none evaluated, are the only failed item.
 func c9() gateDoc {
-	return gateDoc{enforce: "ratchet", ratchet: "pass", failed: []string{"laws"}, required: 16, notEval: 16}
+	return gateDoc{enforce: "ratchet", ratchet: "pass", failed: []string{"laws"}, required: 16, notEval: 7, judged: 9}
 }
 
 func (g gateDoc) with(f func(*gateDoc)) gateDoc {
@@ -254,6 +268,9 @@ func judgeCases() []judgeCase {
 		// exit 1 passes on the required laws alone
 		{"C9 on the ledger leg", "ubuntu", "1", c9(), false},
 		{"C9 on another leg, ratchet pass", "macos", "1", c9(), false},
+
+		{"C9 retired all required judged", "ubuntu", "0", gateDoc{enforce: "advisory", failed: []string{"laws"}, required: 16, notEval: 0, judged: 16}, false},
+		{"interim: judged law refuse", "ubuntu", "1", c9().with(func(g *gateDoc) { g.refused = []string{"G-02"} }), true},
 		{"C9 on another leg, ratchet skip", "macos", "1", c9().with(func(g *gateDoc) { g.ratchet = "skip" }), false},
 		{"C9 on the ledger leg, ratchet skip", "ubuntu", "1", c9().with(func(g *gateDoc) { g.ratchet = "skip" }), true},
 		{"C9 on the ledger leg, ratchet fail", "ubuntu", "1", c9().with(func(g *gateDoc) { g.ratchet = "fail"; g.failed = []string{"ratchet", "laws"} }), true},
@@ -265,13 +282,15 @@ func judgeCases() []judgeCase {
 		{"a layer errored", "ubuntu", "1", c9().with(func(g *gateDoc) { g.layers = map[string]string{"hygiene": "error"} }), true},
 		{"a failed item besides the laws", "macos", "1", c9().with(func(g *gateDoc) { g.failed = []string{"coverage", "laws"} }), true},
 		{"nothing failed but the gate exited 1", "ubuntu", "1", c9().with(func(g *gateDoc) { g.failed = nil }), true},
-		{"a required law was evaluated", "ubuntu", "1", c9().with(func(g *gateDoc) { g.notEval = 15 }), true},
+		{"interim: bad pending reason", "ubuntu", "1", c9().with(func(g *gateDoc) {
+			g.lawRows = []map[string]string{{"id": "G-02", "verdict": "allow"}, {"id": "G-20", "verdict": "not-evaluated", "reason": "input_missing"}}
+		}), true},
 		// ruling C9 allows the required laws not evaluated and nothing else: a law that
 		// is refused, required or not, is not that, whatever else the report says
 		{"an advisory law refused", "ubuntu", "1", c9().with(func(g *gateDoc) { g.refused = []string{"G-30"} }), true},
 		{"G-41 refused", "macos", "1", c9().with(func(g *gateDoc) { g.refused = []string{"G-41"} }), true},
 		{"a required law refused", "ubuntu", "1", c9().with(func(g *gateDoc) { g.refused = []string{"G-01"} }), true},
-		{"a law was judged", "ubuntu", "1", c9().with(func(g *gateDoc) { g.judged = 1 }), true},
+		{"interim: judged allow with pending no_reader", "ubuntu", "1", c9(), false},
 		{"a law was judged and refused", "ubuntu", "1", c9().with(func(g *gateDoc) { g.judged, g.refused = 1, []string{"G-41"} }), true},
 		{"exit 0 with a refused law is the gate's verdict, not this step's", "ubuntu", "0", clean.with(func(g *gateDoc) { g.refused = []string{"G-41"} }), false},
 		{"no required laws, so exit 1 is something else", "ubuntu", "1", c9().with(func(g *gateDoc) { g.required, g.notEval = 0, 0 }), true},
@@ -279,8 +298,8 @@ func judgeCases() []judgeCase {
 		{"exit 0 from a partial run", "ubuntu", "0", clean.with(func(g *gateDoc) { g.outcome = "partial" }), true},
 		{"exit 0 with a layer that did not run", "ubuntu", "0", clean.with(func(g *gateDoc) { g.ran = 4 }), true},
 		{"advisory exit 0 with a failing layer", "ubuntu", "0", gateDoc{enforce: "advisory", layers: map[string]string{"crap": "fail"}, failed: []string{"crap"}}, true},
-		{"advisory exit 0 with the required laws alone", "ubuntu", "0", gateDoc{enforce: "advisory", failed: []string{"laws"}, required: 16, notEval: 16}, false},
-		{"advisory exit 0 with a refused law", "ubuntu", "0", gateDoc{enforce: "advisory", failed: []string{"laws"}, required: 16, notEval: 16, refused: []string{"G-41"}}, true},
+		{"advisory exit 0 with the required laws alone", "ubuntu", "0", gateDoc{enforce: "advisory", failed: []string{"laws"}, required: 16, notEval: 7, judged: 9}, false},
+		{"advisory exit 0 with a refused law", "ubuntu", "0", gateDoc{enforce: "advisory", failed: []string{"laws"}, required: 16, notEval: 7, judged: 9, refused: []string{"G-41"}}, true},
 		{"exit 0 with a failed layer the report names", "macos", "0", clean.with(func(g *gateDoc) { g.layers = map[string]string{"tests": "fail"}; g.failed = []string{"tests"} }), true},
 		// the exit code the gate recorded is the one its report says (R15)
 		{"exit 0 while the report says exit 1 and fails the laws", "ubuntu", "0", c9(), true},

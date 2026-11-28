@@ -85,7 +85,7 @@ func TestParseLintOutputMissingFileFailsClosed(t *testing.T) {
 func TestParseLintOutputValidIssues(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "lint.json")
-	if err := os.WriteFile(path, []byte(`{"Issues":[{"FromLinter":"errcheck","Text":"x","Pos":{"Filename":"a.go","Line":1}}]}`), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(`{"Issues":[{"FromLinter":"errcheck","Text":"x","Pos":{"Filename":"a.go","Line":1}}],"Report":{"Linters":[{"Name":"errcheck","Enabled":true}]}}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	res, err := parseLintOutput(dir, path, Output{ExitCode: 0})

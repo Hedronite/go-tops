@@ -51,6 +51,39 @@ func TestParseLintLawsJSONRejectsGarbage(t *testing.T) {
 	if _, err := lawpass.ParseLintLawsJSON([]byte(`{"Report":{}}`)); err == nil {
 		t.Fatal("want error when Issues missing")
 	}
+	if _, err := lawpass.ParseLintLawsJSON([]byte(`{"Issues":null,"Report":{"Linters":[]}}`)); err == nil {
+		t.Fatal("want error when Issues is null")
+	}
+	if _, err := lawpass.ParseLintLawsJSON([]byte(`{"Issues":[]}`)); err == nil {
+		t.Fatal("want error when Report missing")
+	}
+	if _, err := lawpass.ParseLintLawsJSON([]byte(`{"Issues":[],"Report":{"Linters":{}}}`)); err == nil {
+		t.Fatal("want error when Report.Linters is not an array")
+	}
+	if _, err := lawpass.ParseLintLawsJSON([]byte(`{"Issues":[],"Report":{"Linters":[]},"Version":1}`)); err != nil {
+		t.Fatalf("extra top-level keys are allowed: %v", err)
+	}
+	if _, err := lawpass.ParseLintLawsJSON([]byte(`{"Issues":[],"Report":[]}`)); err == nil {
+		t.Fatal("want error when Report is not an object")
+	}
+	if _, err := lawpass.ParseLintLawsJSON([]byte(`{"Issues":[],"Report":{}}`)); err == nil {
+		t.Fatal("want error when Report.Linters missing")
+	}
+}
+
+func TestParseLintLawsJSONAcceptsGolangciV215EmptyRun(t *testing.T) {
+	t.Parallel()
+	doc, err := os.ReadFile(filepath.Join("testdata", "golangci-v2.15.0-clean.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := lawpass.ParseLintLawsJSON(doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Issues) != 0 {
+		t.Fatalf("Issues len = %d", len(res.Issues))
+	}
 }
 
 func TestMissingAndTamperedLintLawsJSONFailClosed(t *testing.T) {
@@ -80,7 +113,7 @@ func TestMissingAndTamperedLintLawsJSONFailClosed(t *testing.T) {
 }
 
 func TestGosecRuleMapsFromText(t *testing.T) {
-	res, err := lawpass.ParseLintLawsJSON([]byte(`{"Issues":[{"FromLinter":"gosec","Text":"G401: Use of weak cryptographic primitive","Pos":{"Filename":"a.go","Line":1}}]}`))
+	res, err := lawpass.ParseLintLawsJSON([]byte(`{"Issues":[{"FromLinter":"gosec","Text":"G401: Use of weak cryptographic primitive","Pos":{"Filename":"a.go","Line":1}}],"Report":{"Linters":[{"Name":"gosec","Enabled":true}]}}`))
 	if err != nil {
 		t.Fatal(err)
 	}

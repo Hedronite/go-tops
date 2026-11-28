@@ -16,6 +16,7 @@ import (
 	"github.com/Hedronite/go-tops/internal/baseline"
 	"github.com/Hedronite/go-tops/internal/cli"
 	"github.com/Hedronite/go-tops/internal/gate"
+	"github.com/Hedronite/go-tops/internal/lawpass"
 	"github.com/Hedronite/go-tops/internal/report"
 )
 
@@ -1098,5 +1099,22 @@ func TestBaselineKindSurvivorsRefusalNamesM6(t *testing.T) {
 	code, _, stderr := baselineIn(t, dir, "--init", "--kind", "survivors")
 	if code != 2 || !strings.Contains(stderr, "M6") {
 		t.Fatalf("exit %d, stderr %q, want 2 naming M6", code, stderr)
+	}
+}
+
+func TestRunLayersHonorsTestLawPassHook(t *testing.T) {
+	dir := repoWith(t, ratchetConfig(t), "")
+	var called int
+	old := testLawPass
+	testLawPass = func(ctx context.Context, env *gate.Env) (lawpass.LintResult, error) {
+		called++
+		return gate.StubLawPass(ctx, env)
+	}
+	t.Cleanup(func() { testLawPass = old })
+	_, err := runLayers(t.Context(), dir, gate.Config{Module: "example.com/app", Class: "binary-cli", Enforce: "hard"}, []gate.Layer{
+		fakeLayer{id: "hygiene", outcome: gate.Pass},
+	})
+	if err != nil || called != 1 {
+		t.Fatalf("runLayers err=%v lawPassCalls=%d", err, called)
 	}
 }
