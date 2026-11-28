@@ -37,3 +37,4 @@ result-*
 .DS_Store
 *.swp
 /tmp
+internal/lawpass/testdata/noctxfour/.go-tops/

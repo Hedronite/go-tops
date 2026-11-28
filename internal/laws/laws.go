@@ -103,7 +103,10 @@ func Lookup(id string) (Law, bool) {
 
 // liveReaders holds the laws that have a reader in this release. The stub
 // judges none, so none is listed; M5 adds each law as its reader lands.
-var liveReaders = map[string]bool{}
+var liveReaders = map[string]bool{
+	"G-02": true, "G-07": true, "G-11": true, "G-12": true, "G-16": true, "G-18": true, "G-37": true,
+	"G-34": true, "G-40": true,
+}
 
 // Live reports whether id has a reader implemented in this release.
 func Live(id string) bool { return liveReaders[id] }

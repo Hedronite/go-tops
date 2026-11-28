@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Hedronite/go-tops/internal/crap"
 	"github.com/Hedronite/go-tops/internal/gate"
@@ -396,5 +397,73 @@ func TestJudgeHookForAModuleInASubdirectory(t *testing.T) {
 	}
 	if !bad.Failed || !strings.Contains(strings.Join(bad.Notes, ""), "go-tops.yaml at the diff base") {
 		t.Errorf("verdict %+v notes %v, want a failure naming the base go-tops.yaml", bad.Report, bad.Notes)
+	}
+}
+
+func writeCollectFeeds(t *testing.T, dir string) {
+	t.Helper()
+	write := func(rel, data string) {
+		p := filepath.Join(dir, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(data), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write(".go-tops/cover.out", "mode: atomic\nexample.com/m/m.go:3.10,5.2 4 1\n")
+	write(".go-tops/lint-style.json", `{"Issues":[]}`)
+}
+
+func TestCollectMeasureUsesRatchetLaws(t *testing.T) {
+	env := project(t, nil)
+	env.Config.Coverage = gate.CoverageConfig{StatementsFloor: 90}
+	env.Config.Crap = gate.CrapConfig{Cap: 10}
+	writeCollectFeeds(t, env.Dir)
+	env.RatchetLaws = report.Laws{ApplicableJudged: 9}
+	build := resolved(t, env.Dir)
+	m, err := ratchet.CollectMeasure()(context.Background(), env, ratchet.Inputs{
+		Layers: layersIn(), Build: build, Paths: ratchet.Paths{Ledger: ratchet.LedgerPath, Acks: ".go-tops/acks.yaml"}, Now: time.Now(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.JudgedLaws != 9 {
+		t.Fatalf("JudgedLaws = %d, want 9", m.JudgedLaws)
+	}
+}
+
+func TestCollectMeasureWithOneJudgedLaw(t *testing.T) {
+	env := project(t, nil)
+	env.Config.Coverage = gate.CoverageConfig{StatementsFloor: 90}
+	env.Config.Crap = gate.CrapConfig{Cap: 10}
+	writeCollectFeeds(t, env.Dir)
+	env.RatchetLaws = report.Laws{ApplicableJudged: 1}
+	build := resolved(t, env.Dir)
+	m, err := ratchet.CollectMeasure()(context.Background(), env, ratchet.Inputs{
+		Layers: layersIn(), Build: build, Paths: ratchet.Paths{Ledger: ratchet.LedgerPath, Acks: ".go-tops/acks.yaml"}, Now: time.Now(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.JudgedLaws != 1 {
+		t.Fatalf("JudgedLaws = %d, want 1", m.JudgedLaws)
+	}
+}
+
+func TestCollectMeasureWithoutRatchetLawsLeavesJudgedZero(t *testing.T) {
+	env := project(t, nil)
+	env.Config.Coverage = gate.CoverageConfig{StatementsFloor: 90}
+	env.Config.Crap = gate.CrapConfig{Cap: 10}
+	writeCollectFeeds(t, env.Dir)
+	build := resolved(t, env.Dir)
+	m, err := ratchet.CollectMeasure()(context.Background(), env, ratchet.Inputs{
+		Layers: layersIn(), Build: build, Paths: ratchet.Paths{Ledger: ratchet.LedgerPath, Acks: ".go-tops/acks.yaml"}, Now: time.Now(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.JudgedLaws != 0 {
+		t.Fatalf("JudgedLaws = %d, want 0", m.JudgedLaws)
 	}
 }

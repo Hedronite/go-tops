@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"sort"
 	"sync"
+
+	"github.com/Hedronite/go-tops/internal/report"
 )
 
 // Layer is one gate of §3.1 or one class layer of §7.
@@ -49,6 +51,8 @@ type Env struct {
 	Base   string
 	Exec   Executor
 	Tools  Resolver
+	// RatchetLaws holds ApplicableJudged for baseline/ratchet parity (§6.7, M5 G2).
+	RatchetLaws report.Laws
 }
 
 // order is the §3.1 gate order. A registered layer takes its place here; one

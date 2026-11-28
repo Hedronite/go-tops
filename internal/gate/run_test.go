@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Hedronite/go-tops/internal/laws"
 	"github.com/Hedronite/go-tops/internal/report"
 )
 
@@ -229,7 +230,7 @@ func TestOnlyLaws(t *testing.T) {
 	if len(ran) != 0 || len(r.Report.Layers) != 0 {
 		t.Fatalf("layers ran under --only laws: %v", ran)
 	}
-	if r.ExitCode != 1 || r.Report.Laws.RequiredNotEvaluated != 16 {
+	if r.ExitCode != 1 || r.Report.Laws.RequiredNotEvaluated != 9 {
 		t.Fatalf("exit %d required_not_evaluated %d; the stub judges nothing, so 16 required laws fail", r.ExitCode, r.Report.Laws.RequiredNotEvaluated)
 	}
 }
@@ -330,15 +331,14 @@ func TestBaseDefaultsToOriginMain(t *testing.T) {
 }
 
 // The laws block states the catalog and the class counts (§12.3): 43 catalog
-// rows, none judged by the stub, 42 not-evaluated; 19 apply to binary-cli, all
-// not-evaluated for no_reader; the counts by reason sum to applicable minus judged.
+// rows; G2 judges 9 delegated/hygiene laws when the stub law pass and fake hygiene pass.
 func TestLawsBlockCounts(t *testing.T) {
 	r := mustRun(t, cfg(), opts(), deps(gateLayers(nil, nil)))
 	l := r.Report.Laws
-	if l.Catalog != 43 || l.Judged != 0 || l.NotEvaluated != 42 {
+	if l.Catalog != 43 || l.Judged != 9 || l.NotEvaluated != 33 {
 		t.Errorf("release counts %+v", l)
 	}
-	if l.Applicable != 19 || l.ApplicableJudged != 0 || l.Required != 16 || l.RequiredNotEvaluated != 16 {
+	if l.Applicable != 19 || l.ApplicableJudged != 9 || l.Required != 16 || l.RequiredNotEvaluated != 7 {
 		t.Errorf("class counts %+v", l)
 	}
 	by := l.NotEvaluatedByReason
@@ -348,9 +348,13 @@ func TestLawsBlockCounts(t *testing.T) {
 	if len(l.Results) != 19 {
 		t.Errorf("%d results", len(l.Results))
 	}
+	wired := map[string]bool{"G-02": true, "G-07": true, "G-11": true, "G-12": true, "G-16": true, "G-18": true, "G-37": true, "G-34": true, "G-40": true}
 	for _, res := range l.Results {
-		if res.Verdict != "not-evaluated" {
-			t.Errorf("%s is %s: a stub never allows", res.ID, res.Verdict)
+		if wired[res.ID] && res.Verdict != "allow" {
+			t.Errorf("%s is %s, want allow from G2 readers", res.ID, res.Verdict)
+		}
+		if !wired[res.ID] && res.Verdict == "allow" {
+			t.Errorf("%s is allow, want not-evaluated or refuse", res.ID)
 		}
 	}
 }
@@ -397,5 +401,25 @@ func TestNoCommandIsNotRunWhateverItsNeeds(t *testing.T) {
 	o = layerOutcomes(mustRun(t, c, Options{MaxTier: 1, Only: "crap"}, deps(mk())))
 	if o["coverage"] != "not-run" || o["crap"] != "not-reached" {
 		t.Fatalf("under --only crap: %v", o)
+	}
+}
+
+func TestApplicableJudgedCountsNonNotEvaluated(t *testing.T) {
+	results := []laws.Result{
+		{ID: "G-02", Verdict: laws.Allow},
+		{ID: "G-08", Verdict: laws.NotEvaluated, Reason: laws.NoReader},
+	}
+	if n := applicableJudged(results); n != 1 {
+		t.Fatalf("applicableJudged = %d, want 1", n)
+	}
+}
+
+func TestApplicableJudgedCountsOnlyNotEvaluated(t *testing.T) {
+	results := []laws.Result{
+		{ID: "G-02", Verdict: laws.NotEvaluated, Reason: laws.NoReader},
+		{ID: "G-08", Verdict: laws.NotEvaluated, Reason: laws.NoReader},
+	}
+	if n := applicableJudged(results); n != 0 {
+		t.Fatalf("applicableJudged = %d, want 0", n)
 	}
 }

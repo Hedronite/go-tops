@@ -17,7 +17,7 @@ It prints one JSON object. `command` is the exact `gotops gate` argv. `ok` is ju
 - the report exists, is JSON and has its layers, laws, summary and enforce fields;
 - every layer is `pass` or `skip`, or for `mutation` alone `vacuous` (the diff changed no production line), and the run was not partial;
 - the mutation layer lists no unexplained survivor, counts none when it is `pass`, and is off (`skip`) only until a day after today (UTC);
-- the only failed item, if any, is `laws`, with every required law reported not evaluated, none judged and none refused;
+- the only failed item, if any, is `laws`, and the `.laws` counts match ruling C9 (M4: all required laws not evaluated; interim: some judged with allow/ack and the rest `not-evaluated`/`no_reader`; retired: all required laws judged, none `refuse`);
 - under `enforce: ratchet` the ratchet is `pass`, or `skip` on a build that is not the ledger's, never `fail`.
 
 A partial run, and an advisory run with a failing layer, are `ok: false` although the gate exits 0: the report is read, not the exit code alone.

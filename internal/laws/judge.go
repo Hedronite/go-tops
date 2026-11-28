@@ -1,5 +1,7 @@
 package laws
 
+import "github.com/Hedronite/go-tops/internal/lawpass"
+
 // Input is what the laws layer needs to know about the run.
 type Input struct {
 	Class   string
@@ -10,6 +12,7 @@ type Input struct {
 	Reached bool
 	// Required is the profile's laws.required plus any IDs go-tops.yaml adds.
 	Required []string
+	Evidence Evidence
 }
 
 // Result is one law's outcome in one run.
@@ -24,16 +27,9 @@ type Result struct {
 	OutOfRange bool
 }
 
-// Judge is the stub of the laws layer. No reader exists yet (M5), so it
-// judges nothing: an applicable law is never allow, ack or refuse.
-//
-//   - a law above --max-tier, or any law when --only left the layer out, is
-//     out of range: not-evaluated, input_missing, listed as out of range;
-//   - when --fail-fast stopped the run before the layer, the output no law
-//     could read was never produced: not-evaluated, input_missing;
-//   - otherwise not-evaluated, no_reader.
-//
-// It returns one result per applicable law, sorted by ID.
+// Judge applies the v0.1 readers wired in G2: delegated lint laws from
+// lint-laws.json, G-34 and G-40 from hygiene; other readers stay stubbed
+// until G3.
 func Judge(in Input) []Result {
 	req := map[string]bool{}
 	for _, id := range in.Required {
@@ -49,9 +45,50 @@ func Judge(in Input) []Result {
 		case !in.Reached:
 			r.Reason = InputMissing
 		default:
-			r.Reason = NoReader
+			judgeOne(&r, l, in)
 		}
 		out = append(out, r)
 	}
 	return out
+}
+
+func judgeOne(r *Result, l Law, in Input) {
+	switch l.ID {
+	case "G-34":
+		judgeHygienePair(r, in.Evidence.Hygiene, in.Evidence.Hygiene.TidyPass && in.Evidence.Hygiene.VerifyPass)
+	case "G-40":
+		judgeHygienePair(r, in.Evidence.Hygiene, in.Evidence.Hygiene.VulnsPass)
+	default:
+		if lawpass.IsToolLaw(l.ID) {
+			judgeTool(r, l.ID, in.Evidence)
+			return
+		}
+		r.Reason = NoReader
+	}
+}
+
+func judgeHygienePair(r *Result, h HygieneEvidence, ok bool) {
+	if !h.Ran {
+		r.Reason = InputMissing
+		return
+	}
+	if ok {
+		r.Verdict = Allow
+		r.Reason = ""
+		return
+	}
+	r.Verdict = Refuse
+	r.Reason = ""
+}
+
+func judgeTool(r *Result, id string, ev Evidence) {
+	if !ev.LintPassOK {
+		r.Reason = InputMissing
+		return
+	}
+	if ev.Lint.ByLaw[id] > 0 {
+		r.Verdict = Refuse
+		return
+	}
+	r.Verdict = Allow
 }

@@ -115,3 +115,42 @@ func TestTheGateSkillAndTheDropInJudgeAgreeOnEveryCase(t *testing.T) {
 		t.Fatal("the judge step has no script")
 	}
 }
+
+func TestC9InterimParityCases(t *testing.T) {
+	for _, tool := range []string{"nu", "jq", "bash"} {
+		if _, err := exec.LookPath(tool); err != nil {
+			t.Fatalf("%s is required under -tags skills: %v", tool, err)
+		}
+	}
+	_, judge := judgeSteps(t)
+	for _, c := range []judgeCase{
+		{"interim G2 clean partial", "ubuntu", "1", c9(), false},
+		{"interim judged refuse", "ubuntu", "1", c9().with(func(g *gateDoc) { g.refused = []string{"G-02"} }), true},
+		{"interim bad no_reader", "ubuntu", "1", c9().with(func(g *gateDoc) {
+			g.lawRows = []map[string]string{{"id": "G-02", "verdict": "allow"}, {"id": "G-20", "verdict": "not-evaluated", "reason": "input_missing"}}
+		}), true},
+		{"C9 retired counts", "ubuntu", "0", gateDoc{enforce: "advisory", required: 16, notEval: 0, judged: 16, failed: []string{"laws"}}, false},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			dir := t.TempDir()
+			if err := os.MkdirAll(filepath.Join(dir, ".go-tops"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(dir, ".go-tops", "report.json"), []byte(c.doc.json(t)), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			cmd := exec.Command("bash", "-e", "-c", judge.Run)
+			cmd.Dir = dir
+			cmd.Env = append(os.Environ(), "GATE_EXIT="+c.code, "LEG="+c.leg)
+			_, err := cmd.CombinedOutput()
+			dropInPasses := err == nil
+			if dropInPasses == c.fails {
+				t.Fatalf("drop-in pass=%v want fails=%v", dropInPasses, c.fails)
+			}
+			skill := skillJudges(t, []byte(c.doc.json(t)), c.code)
+			if skill != dropInPasses {
+				t.Fatalf("skill ok=%v drop-in pass=%v", skill, dropInPasses)
+			}
+		})
+	}
+}

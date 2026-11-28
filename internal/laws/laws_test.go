@@ -165,10 +165,10 @@ func TestDriftTestCatchesEdits(t *testing.T) {
 }
 
 // §8.2 and §12.3 state the counts: 43 catalog rows, 42 active (G-03 is
-// retired), 16 targeted for v0.1. The stub judges none.
+// retired), 16 targeted for v0.1. G2 wires nine readers (seven lint + G-34/G-40).
 func TestReleaseCounts(t *testing.T) {
 	c := Release()
-	want := Counts{Catalog: 43, Active: 42, V01: 16, Judged: 0, NotEvaluated: 42}
+	want := Counts{Catalog: 43, Active: 42, V01: 16, Judged: 9, NotEvaluated: 33}
 	if c != want {
 		t.Fatalf("Release() = %+v, want %+v", c, want)
 	}
@@ -177,8 +177,8 @@ func TestReleaseCounts(t *testing.T) {
 // An honest stub: no law has a live reader until M5, and a law never counts
 // as judged because the table lists it.
 func TestNoLiveReaders(t *testing.T) {
-	if len(liveReaders) != 0 {
-		t.Fatalf("liveReaders = %v, want none before M5", liveReaders)
+	if len(liveReaders) != 9 {
+		t.Fatalf("liveReaders = %d, want 9 G2 readers", len(liveReaders))
 	}
 }
 

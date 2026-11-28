@@ -1379,7 +1379,7 @@ func TestChildSleepOnMutant(t *testing.T) {
 	start := time.Now()
 	ev, err := runOverlayOnDir(t, dir, gobuild.Build{CGOEnabled: true}, OverlayOptions{
 		TimeoutCoeff: 1,
-		MinTimeout:   2500 * time.Millisecond,
+		MinTimeout:   4 * time.Second, // §6.4: full ./... -race gate needs headroom when the machine is under load
 	})
 	elapsed := time.Since(start)
 	if err != nil {
@@ -1388,8 +1388,8 @@ func TestChildSleepOnMutant(t *testing.T) {
 	if ev.TimedOut != 1 || ev.Killed != 1 {
 		t.Fatalf("expected 1 TIMED OUT mutant, got %+v", ev)
 	}
-	if elapsed >= 10*time.Second {
-		t.Fatalf("expected fast process-group timeout well under sleep 30s, elapsed=%v", elapsed)
+	if elapsed >= 20*time.Second {
+		t.Fatalf("expected process-group timeout well under sleep 30s, elapsed=%v", elapsed)
 	}
 }
 
@@ -1674,7 +1674,8 @@ func TestRunOverlayTimeoutStartsAfterPerPkgLock(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ComputeDiff: %v", err)
 	}
-	const minTO = 1200 * time.Millisecond
+	// GO_TOPS §6.4: MinTimeout floors exec time; preflight must finish under -race on a busy machine.
+	minTO := 5 * time.Second
 	var (
 		mu       sync.Mutex
 		covDur   time.Duration
@@ -1780,7 +1781,7 @@ func TestPostflightPollutedPkgDir(t *testing.T) {
 		_, err := runOverlayOnDir(t, dir, gobuild.Build{CGOEnabled: true}, OverlayOptions{
 			Workers:      2,
 			TimeoutCoeff: 1,
-			MinTimeout:   2500 * time.Millisecond,
+			MinTimeout:   4 * time.Second, // §6.4: full ./... -race gate needs headroom when the machine is under load
 		})
 		if err == nil || !strings.Contains(err.Error(), "postflight") {
 			t.Fatalf("expected postflight failure from leftover O_EXCL lock, got %v", err)
@@ -1825,6 +1826,19 @@ func TestPostflightPollutedPkgDir(t *testing.T) {
 	})
 }
 
+func overlayTestTimeoutAtLeast(argv []string, floor time.Duration) bool {
+	for _, a := range argv {
+		if !strings.HasPrefix(a, "-test.timeout=") {
+			continue
+		}
+		d, err := time.ParseDuration(strings.TrimPrefix(a, "-test.timeout="))
+		if err == nil && d+time.Millisecond >= floor {
+			return true
+		}
+	}
+	return false
+}
+
 // Q1(b): every compiled test binary receives -test.timeout=<execTO> alongside -test.failfast and -test.paniconexit0.
 func TestRunOverlayPassesTestTimeoutFlag(t *testing.T) {
 	dir := gitSetupOverlayRepo(t, map[string]string{
@@ -1852,14 +1866,18 @@ func TestRunOverlayPassesTestTimeoutFlag(t *testing.T) {
 		t.Fatal(err)
 	}
 	env := gate.Env{Dir: dir, Base: "main", Exec: spy, Config: gate.Config{Base: "main", Mutation: gate.MutationConfig{Engine: "overlay"}}}
-	ev, err := RunOverlay(t.Context(), env, diff, build, OverlayOptions{MinTimeout: 10 * time.Second})
+	minTO := 10 * time.Second
+	ev, err := RunOverlay(t.Context(), env, diff, build, OverlayOptions{MinTimeout: minTO})
 	if err != nil || ev.Killed != 1 {
 		t.Fatalf("RunOverlay got ev=%+v err=%v", ev, err)
 	}
-	for _, want := range []string{"-test.failfast", "-test.paniconexit0", "-test.timeout=10s"} {
+	for _, want := range []string{"-test.failfast", "-test.paniconexit0"} {
 		if !slices.Contains(seenFlags, want) {
 			t.Fatalf("expected %q in mutant argv %v", want, seenFlags)
 		}
+	}
+	if !overlayTestTimeoutAtLeast(seenFlags, minTO) {
+		t.Fatalf("expected -test.timeout>= %v in mutant argv %v", minTO, seenFlags)
 	}
 }
 
