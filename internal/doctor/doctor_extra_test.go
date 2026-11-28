@@ -85,7 +85,7 @@ func TestGoVersionAgainstTheConfiguredFloor(t *testing.T) {
 	}{
 		{"1.27", "go1.26.9", false}, {"1.27", "go1.27.4", true}, {"1.27.0", "go1.26.9", false}, {"1.27.0", "go1.27.0", true}, {"1.26", "go1.26.9", true},
 	} {
-		t.Run(context.Background(), c.floor+" on "+c.goVersion, func(t *testing.T) {
+		t.Run(c.floor+" on "+c.goVersion, func(t *testing.T) {
 			dir := t.TempDir()
 			writeConfigFloor(t, dir, c.floor)
 			cs := Run(context.Background(), env(dir, nil, c.goVersion))

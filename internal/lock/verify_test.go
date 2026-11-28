@@ -299,14 +299,14 @@ func TestVerifyStaleModuleToolBinaryInGoTopsBin(t *testing.T) {
 		"go-licenses": buildInfo("github.com/google/go-licenses/v2", "v2.0.1"),
 		"gotestsum":   buildInfo("gotest.tools/gotestsum", "v1.13.0"),
 	}
-	run := func(d string, argv ...string) (string, error) {
+	run := func(_ context.Context, d string, argv ...string) (string, error) {
 		if argv[1] == "version" && strings.Contains(argv[len(argv)-1], ".go-tops") {
 			return buildInfo("golang.org/x/vuln", "v1.7.0"), nil
 		}
 		if argv[1] == "version" && filepath.Base(argv[len(argv)-1]) == "govulncheck" {
 			return buildInfo("golang.org/x/vuln", "v1.9.0"), nil
 		}
-		return moduleRun("go1.27.4", reports)(d, argv...)
+		return moduleRun("go1.27.4", reports)(context.Background(), d, argv...)
 	}
 	fs := Verify(context.Background(), VerifyOptions{Dir: dir, Platform: platform, Run: run, LookPath: noPath})
 	if f, ok := find(fs, "govulncheck (.go-tops/bin)"); !ok || f.Status != StatusMismatch || ExitCode(fs) != 2 {
@@ -318,7 +318,7 @@ func TestVerifyAToolThatCannotBeBuiltIsMissing(t *testing.T) {
 	dir := writeLock(t, "go1.27.4", "tool", sha(t, "x"), false)
 	place(t, dir, "tool", "x")
 	writeTools(t, dir)
-	run := func(_ string, argv ...string) (string, error) {
+	run := func(_ context.Context, _ string, argv ...string) (string, error) {
 		if argv[1] == "env" {
 			return "go1.27.4\n", nil
 		}
@@ -368,7 +368,7 @@ func TestVerifyBuildFailureKinds(t *testing.T) {
 			dir := writeLock(t, "go1.27.4", "tool", sha(t, "x"), false)
 			place(t, dir, "tool", "x")
 			writeTools(t, dir)
-			run := func(_ string, argv ...string) (string, error) {
+			run := func(_ context.Context, _ string, argv ...string) (string, error) {
 				if argv[1] == "env" {
 					return "go1.27.4\n", nil
 				}

@@ -82,7 +82,7 @@ func TestCCFromGoEnvWhenTheVariableIsUnset(t *testing.T) {
 func TestGoVersionAgainstTheFloor(t *testing.T) {
 	cases := map[string]bool{"go1.26": true, "go1.26.4": true, "go1.27.4": true, "go1.26rc1": true, "go1.25.9": false, "go1.24": false, "go1.27.4 X:nocoverageredesign": true}
 	for v, ok := range cases {
-		t.Run(context.Background(), v, func(t *testing.T) {
+		t.Run(v, func(t *testing.T) {
 			c := get(Run(context.Background(), env(t.TempDir(), nil, v)), "go")
 			if ok != (c.Status != Fail) {
 				t.Fatalf("%s: %+v", v, c)
@@ -157,12 +157,12 @@ func TestModuleToolsAreCheckedWithGoTool(t *testing.T) {
 	e := env(dir, nil, "go1.27.4")
 	base := e.Run
 	var asked []string
-	e.Run = func(d string, argv ...string) (string, error) {
+	e.Run = func(_ context.Context, d string, argv ...string) (string, error) {
 		if argv[1] == "tool" {
 			asked = append(asked, strings.Join(argv, " "))
 			return "", errors.New("no such tool")
 		}
-		return base(d, argv...)
+		return base(context.Background(), d, argv...)
 	}
 	cs := Run(context.Background(), e)
 	if c := get(cs, "govulncheck"); c.Status != Fail || c.Exit != 1 || ExitCode(cs) != 1 {
@@ -199,11 +199,11 @@ func TestGOTOOLCHAINAndCgoStateAreReported(t *testing.T) {
 	}
 	e := env(t.TempDir(), nil, "go1.27.4")
 	base := e.Run
-	e.Run = func(d string, argv ...string) (string, error) {
+	e.Run = func(_ context.Context, d string, argv ...string) (string, error) {
 		if strings.Join(argv, " ") == "go env CGO_ENABLED" {
 			return "0\n", nil
 		}
-		return base(d, argv...)
+		return base(context.Background(), d, argv...)
 	}
 	c := get(Run(context.Background(), e), "cgo")
 	if c.Status != Warn || !strings.Contains(c.Detail, "CGO_ENABLED=0") {
