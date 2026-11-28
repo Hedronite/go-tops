@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"flag"
 	"fmt"
@@ -60,7 +61,7 @@ func runLock(env cli.Env, args []string) int {
 }
 
 func verifyLock(env cli.Env, dir string) int {
-	findings := lock.Verify(lock.VerifyOptions{Dir: dir})
+	findings := lock.Verify(context.Background(), lock.VerifyOptions{Dir: dir})
 	for _, f := range findings {
 		env.Stdout.Printf("%-9s %-22s %s\n", statusWord(f.Status), f.Subject, f.Detail)
 	}

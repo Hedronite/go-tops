@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"flag"
 	"io"
@@ -57,7 +58,7 @@ func runInit(env cli.Env, args []string) int {
 		env.Stderr.Printf("gotops init: %v\n", err)
 		return cli.ExitEnvironment
 	}
-	return initcmd.Run(initcmd.Options{
+	return initcmd.Run(context.Background(), initcmd.Options{
 		Class: *class, Dir: dir, Owner: *owner, Force: *force, Offline: *offline,
 		Assets: gotops.Files(), KitVersion: kitVersion(),
 	}, env.Stdout, env.Stderr)

@@ -1,6 +1,7 @@
 package config_test
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -379,7 +380,7 @@ func TestRequiredLawsAreJudgedAgainstTheCatalog(t *testing.T) {
 			d := baseDoc(t)
 			setPath(d, "laws.required", append(profileLaws(t), tt.id))
 			dir := writeModule(t, d, nil)
-			res, err := config.Check(dir, config.Options{Now: fixedNow, Laws: cat})
+			res, err := config.Check(context.Background(), dir, config.Options{Now: fixedNow, Laws: cat})
 			if err != nil {
 				t.Fatal(err)
 			}

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -43,7 +44,7 @@ func scanAcks(dir, path string) (laws.FileCounts, error) {
 // Issues from check are a configuration failure (exit 2); a repository or file
 // that cannot be read is an environment failure (exit 3).
 func loadGateConfig(dir string) (gate.Config, error) {
-	res, err := config.Check(dir, config.Options{})
+	res, err := config.Check(context.Background(), dir, config.Options{})
 	if err != nil {
 		return gate.Config{}, &gate.EnvError{Err: err}
 	}

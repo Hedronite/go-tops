@@ -53,7 +53,7 @@ func TestNetworkModuleToolBuildAndStaleBinary(t *testing.T) {
 	dir := writeLock(t, strings.TrimSpace(out), "tool", sha(t, "x"), false)
 	place(t, dir, "tool", "x")
 	toolsRepo(t, dir, "go.mod", "v1.13.0")
-	verify := func() []Finding { return Verify(VerifyOptions{Dir: dir, Platform: platform}) }
+	verify := func() []Finding { return Verify(context.Background(), VerifyOptions{Dir: dir, Platform: platform}) }
 	fs := verify()
 	if f, ok := find(fs, "gotestsum"); !ok || f.Status != StatusOK || ExitCode(fs) != 0 {
 		t.Fatalf("the pinned build must verify: exit %d, %+v", ExitCode(fs), fs)

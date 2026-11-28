@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"github.com/Hedronite/go-tops/internal/cli"
 	"github.com/Hedronite/go-tops/internal/config"
 )
@@ -26,7 +27,7 @@ func runCheck(env cli.Env, args []string) int {
 		env.Stderr.Printf("gotops check: takes no arguments, got %q\n", args[0])
 		return cli.ExitUsage
 	}
-	res, err := config.Check(".", config.Options{})
+	res, err := config.Check(context.Background(), ".", config.Options{})
 	if err != nil {
 		env.Stderr.Printf("gotops check: %v\n", err)
 		return cli.ExitEnvironment

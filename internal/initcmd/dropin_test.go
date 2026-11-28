@@ -165,7 +165,7 @@ func TestOfflineNoteExplainsTheCachePathCaveat(t *testing.T) {
 	}
 	// online, the tidy writes tools/go.sum, so the caveat is not printed
 	o := opts(newModule(t, "github.com/acme/demo", "1.26"), "binary-cli")
-	o.Offline, o.Tidy = false, func(string) error { return nil }
+	o.Offline, o.Tidy = false, func(context.Context, string) error { return nil }
 	if _, out, _ := run(o); strings.Contains(out, "cache-dependency-path") {
 		t.Errorf("an online init must not print the offline caveat:\n%s", out)
 	}

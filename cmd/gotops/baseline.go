@@ -552,7 +552,7 @@ func startError(err error) *baselineError {
 // parse or is not valid stays an issue. It returns the gate's configuration,
 // the module-relative path of the acks file and of the ledger.
 func loadBaselineConfig(dir string) (gate.Config, string, string, error) {
-	res, err := config.Check(dir, config.Options{})
+	res, err := config.Check(context.Background(), dir, config.Options{})
 	if err != nil {
 		return gate.Config{}, "", "", bfail(baselineEnv, "%v", err)
 	}

@@ -1,8 +1,8 @@
 package lock
 
 import (
-	"bytes"
 	"context"
+	"bytes"
 	"errors"
 	"fmt"
 	"os"
@@ -39,11 +39,12 @@ type Finding struct {
 }
 
 // Runner runs a command in dir and returns its standard output.
-type Runner func(dir string, argv ...string) (string, error)
+type Runner func(ctx context.Context, dir string, argv ...string) (string, error)
 
 // VerifyOptions are the inputs of Verify; the zero value of each seam uses the
 // real thing.
 type VerifyOptions struct {
+	Ctx      context.Context
 	Dir      string
 	Platform string // such as "darwin/arm64"; default HostPlatform()
 	Run      Runner
@@ -55,7 +56,9 @@ func (o VerifyOptions) withDefaults() VerifyOptions {
 		o.Platform = HostPlatform()
 	}
 	if o.Run == nil {
-		o.Run = execRunner
+		o.Run = func(ctx context.Context, dir string, argv ...string) (string, error) {
+			return execRunner(ctx, dir, argv...)
+		}
 	}
 	if o.LookPath == nil {
 		o.LookPath = exec.LookPath
@@ -63,8 +66,8 @@ func (o VerifyOptions) withDefaults() VerifyOptions {
 	return o
 }
 
-func execRunner(dir string, argv ...string) (string, error) {
-	cmd := exec.CommandContext(context.Background(), argv[0], argv[1:]...)
+func execRunner(ctx context.Context, dir string, argv ...string) (string, error) {
+	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
 	cmd.Dir = dir
 	var out, errb bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &errb
@@ -75,7 +78,8 @@ func execRunner(dir string, argv ...string) (string, error) {
 }
 
 // Verify checks every pin of the repository at o.Dir.
-func Verify(o VerifyOptions) []Finding {
+func Verify(ctx context.Context, o VerifyOptions) []Finding {
+	o.Ctx = ctx
 	o = o.withDefaults()
 	l, err := LoadDir(o.Dir)
 	if err != nil {
@@ -103,7 +107,7 @@ func ExitCode(fs []Finding) int {
 }
 
 func verifyToolchain(o VerifyOptions, l *Lock) Finding {
-	out, err := o.Run(o.Dir, "go", "env", "GOVERSION")
+	out, err := o.Run(o.Ctx, o.Dir, "go", "env", "GOVERSION")
 	if err != nil {
 		return Finding{"toolchain", StatusMissing, err.Error()}
 	}
@@ -252,7 +256,7 @@ func verifyModuleTools(o VerifyOptions) []Finding {
 // .go-tops/bin is read the same way, so a stale copy is a mismatch too.
 func verifyModuleTool(o VerifyOptions, t ModuleTool, tmp string) []Finding {
 	built := filepath.Join(tmp, t.Name)
-	if _, err := o.Run(o.Dir, "go", "build", "-modfile="+toolsModfile, "-o", built, t.Package); err != nil {
+	if _, err := o.Run(o.Ctx, o.Dir, "go", "build", "-modfile="+toolsModfile, "-o", built, t.Package); err != nil {
 		if custodyRe.MatchString(err.Error()) {
 			return []Finding{{t.Name, StatusMismatch, "the module does not match its checksum record (" + toolsModfile + ", tools/go.sum): " + err.Error()}}
 		}
@@ -280,7 +284,7 @@ var custodyRe = regexp.MustCompile(`(?i)checksum mismatch|missing go\.sum entry|
 var buildInfoRe = regexp.MustCompile(`(?m)^\s*(?:mod|dep)\s+(\S+)\s+(\S+)`)
 
 func moduleVersionFinding(o VerifyOptions, t ModuleTool, binary, what string) Finding {
-	out, err := o.Run(o.Dir, "go", "version", "-m", binary)
+	out, err := o.Run(o.Ctx, o.Dir, "go", "version", "-m", binary)
 	if err != nil {
 		return Finding{t.Name, StatusMismatch, "go version -m: " + err.Error()}
 	}

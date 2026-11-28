@@ -472,7 +472,7 @@ func TestTidyRunsUnlessOffline(t *testing.T) {
 	}
 	dir3 := newModule(t, "github.com/acme/demo", "1.26")
 	o3 := opts(dir3, "binary-cli")
-	o3.Offline, o3.Tidy = false, func(string) error { return fmt.Errorf("no network") }
+	o3.Offline, o3.Tidy = false, func(context.Context, string) error { return fmt.Errorf("no network") }
 	if code, _, errs := run(o3); code != ExitFailure || !strings.Contains(errs, "no network") {
 		t.Fatalf("a tidy failure must exit %d, got %d:\n%s", ExitFailure, code, errs)
 	}

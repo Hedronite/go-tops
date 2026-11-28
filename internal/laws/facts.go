@@ -1,8 +1,8 @@
 package laws
 
 import (
-	"bytes"
 	"context"
+	"bytes"
 	"fmt"
 	"go/parser"
 	"go/token"
@@ -20,12 +20,12 @@ import (
 const protocolLangFloor = "go1.26"
 
 // CheckFacts returns violation counts for fact laws G-26 and G-33.
-func CheckFacts(dir, class string, goEnv func() (string, error)) (map[string]int, error) {
+func CheckFacts(ctx context.Context, dir, class string, goEnv func() (string, error)) (map[string]int, error) {
 	out := map[string]int{"G-26": 0, "G-33": 0}
 	if err := checkG26(dir, class, out); err != nil {
 		return nil, err
 	}
-	if err := checkG33(dir, goEnv, out); err != nil {
+	if err := checkG33(ctx, dir, goEnv, out); err != nil {
 		return nil, err
 	}
 	return out, nil
@@ -129,7 +129,7 @@ func checkGoModCGO(dir string) error {
 	return nil
 }
 
-func checkG33(dir string, goEnv func() (string, error), out map[string]int) error {
+func checkG33(ctx context.Context, dir string, goEnv func() (string, error), out map[string]int) error {
 	data, err := os.ReadFile(filepath.Join(dir, "go.mod"))
 	if err != nil {
 		return err
@@ -153,7 +153,7 @@ func checkG33(dir string, goEnv func() (string, error), out map[string]int) erro
 		return nil
 	}
 	if goEnv == nil {
-		goEnv = defaultGoEnv
+		goEnv = func() (string, error) { return defaultGoEnv(ctx) }
 	}
 	got, err := goEnv()
 	if err != nil || got != lk.Toolchain {
@@ -162,8 +162,8 @@ func checkG33(dir string, goEnv func() (string, error), out map[string]int) erro
 	return nil
 }
 
-func defaultGoEnv() (string, error) {
-	out, err := exec.CommandContext(context.Background(), "go", "env", "GOVERSION").Output()
+func defaultGoEnv(ctx context.Context) (string, error) {
+	out, err := exec.CommandContext(ctx, "go", "env", "GOVERSION").Output()
 	if err != nil {
 		return "", err
 	}

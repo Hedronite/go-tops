@@ -22,7 +22,7 @@ type GoEnvFunc func() (string, error)
 func Run(ctx context.Context, dir, class string, goEnv GoEnvFunc) (RunnerResult, error) {
 	byLaw := map[string]int{}
 
-	facts, err := CheckFacts(dir, class, goEnv)
+	facts, err := CheckFacts(ctx, dir, class, goEnv)
 	if err != nil {
 		return RunnerResult{}, fmt.Errorf("facts: %w", err)
 	}

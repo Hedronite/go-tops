@@ -44,6 +44,7 @@ type Env struct {
 	Getenv   func(string) string
 	Run      lock.Runner
 	LookPath func(string) (string, error)
+	ctx      context.Context
 }
 
 func (e Env) withDefaults() Env {
@@ -51,8 +52,8 @@ func (e Env) withDefaults() Env {
 		e.Getenv = os.Getenv
 	}
 	if e.Run == nil {
-		e.Run = func(dir string, argv ...string) (string, error) {
-			cmd := exec.CommandContext(context.Background(), argv[0], argv[1:]...)
+		e.Run = func(ctx context.Context, dir string, argv ...string) (string, error) {
+			cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
 			cmd.Dir = dir
 			out, err := cmd.Output()
 			return string(out), err
@@ -65,7 +66,8 @@ func (e Env) withDefaults() Env {
 }
 
 // Run performs every check and returns them in order.
-func Run(e Env) []Check {
+func Run(ctx context.Context, e Env) []Check {
+	e.ctx = ctx
 	e = e.withDefaults()
 	var l *lock.Lock
 	if got, err := lock.LoadDir(e.Dir); err == nil {
@@ -114,7 +116,7 @@ func floorOf(dir string) floor {
 }
 
 func goVersion(e Env, l *lock.Lock) Check {
-	out, err := e.Run(e.Dir, "go", "env", "GOVERSION")
+	out, err := e.Run(e.ctx, e.Dir, "go", "env", "GOVERSION")
 	if err != nil {
 		return Check{"go", Fail, "go is not usable: " + err.Error(), 3}
 	}
@@ -141,7 +143,7 @@ func goVersion(e Env, l *lock.Lock) Check {
 func cCompiler(e Env) Check {
 	cc := strings.TrimSpace(e.Getenv("CC"))
 	if cc == "" {
-		if out, err := e.Run(e.Dir, "go", "env", "CC"); err == nil {
+		if out, err := e.Run(e.ctx, e.Dir, "go", "env", "CC"); err == nil {
 			cc = strings.TrimSpace(out)
 		}
 	}
@@ -160,7 +162,7 @@ func cCompiler(e Env) Check {
 }
 
 func cgoState(e Env) Check {
-	out, err := e.Run(e.Dir, "go", "env", "CGO_ENABLED")
+	out, err := e.Run(e.ctx, e.Dir, "go", "env", "CGO_ENABLED")
 	if err != nil {
 		return Check{"cgo", Warn, "cannot read CGO_ENABLED: " + err.Error(), 0}
 	}
@@ -211,7 +213,7 @@ func binaryCheck(e Env, l *lock.Lock, name string) Check {
 }
 
 func moduleCheck(e Env, t lock.ModuleTool) Check {
-	if _, err := e.Run(e.Dir, "go", "tool", "-modfile=tools/go.mod", "-n", t.Name); err != nil {
+	if _, err := e.Run(e.ctx, e.Dir, "go", "tool", "-modfile=tools/go.mod", "-n", t.Name); err != nil {
 		return Check{t.Name, Fail, "not a tool of tools/go.mod, or its modules are missing (tool-missing): " + err.Error(), 1}
 	}
 	return Check{t.Name, OK, t.Module + " " + t.Version + " (tools/go.mod)", 0}
