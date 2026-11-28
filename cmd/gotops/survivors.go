@@ -62,7 +62,7 @@ func stop(code int, format string, a ...any) error {
 // ledgerFiles is what the commands work on: the module directory and the ledger
 // and report paths go-tops.yaml names.
 type ledgerFiles struct {
-	ctx           context.Context
+	ctx                 context.Context
 	dir, ledger, report string
 }
 
