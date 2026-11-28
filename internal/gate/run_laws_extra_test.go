@@ -38,20 +38,34 @@ func TestLawEvidenceStoppedSkipsRefusals(t *testing.T) {
 
 func TestLawEvidenceSkipsRefusalsWhenLintFails(t *testing.T) {
 	d := deps(nil)
+	d.LawsRun = func(context.Context, string, string) (laws.RunnerResult, error) {
+		return laws.RunnerResult{
+			OK:        true,
+			ByLawFile: map[string]map[string]int{"G-11": {"a.go": 1}},
+		}, nil
+	}
 	d.LawPass = func(context.Context, *Env) (lawpass.LintResult, error) {
 		return lawpass.LintResult{}, errors.New("lint broke")
 	}
-	ev, err := lawEvidence(context.Background(), d, &Env{Dir: "."}, cfg(), Options{MaxTier: 1}, true, false, nil)
-	if err != nil || ev.LintPassOK || ev.Refusals != nil {
-		t.Fatalf("ev=%+v err=%v", ev, err)
+	env := &Env{Dir: "."}
+	ev, err := lawEvidence(context.Background(), d, env, cfg(), Options{MaxTier: 1}, true, false, nil)
+	if err != nil || ev.LintPassOK || ev.Refusals != nil || env.RatchetLawRefusals != nil {
+		t.Fatalf("ev=%+v env=%v err=%v", ev, env.RatchetLawRefusals, err)
 	}
 }
 
 func TestLawEvidenceSkipsRefusalsBelowTierOne(t *testing.T) {
 	d := deps(nil)
-	ev, err := lawEvidence(context.Background(), d, &Env{Dir: "."}, cfg(), Options{MaxTier: 0}, true, false, nil)
-	if err != nil || len(ev.Refusals) != 0 {
-		t.Fatalf("ev=%+v err=%v", ev, err)
+	d.LawsRun = func(context.Context, string, string) (laws.RunnerResult, error) {
+		return laws.RunnerResult{
+			OK:        true,
+			ByLawFile: map[string]map[string]int{"G-11": {"a.go": 1}},
+		}, nil
+	}
+	env := &Env{Dir: "."}
+	ev, err := lawEvidence(context.Background(), d, env, cfg(), Options{MaxTier: 0}, true, false, nil)
+	if err != nil || ev.Refusals != nil || env.RatchetLawRefusals != nil {
+		t.Fatalf("ev=%+v env=%v err=%v", ev, env.RatchetLawRefusals, err)
 	}
 }
 

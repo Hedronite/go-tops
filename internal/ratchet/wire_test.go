@@ -48,7 +48,7 @@ func writeLedgerAt(t *testing.T, dir, rel string, l *ratchet.Ledger) {
 		ledger["findings"] = l.Findings
 	}
 	doc := map[string]any{
-		"build": map[string]any{"goos": l.Build.GOOS, "goarch": l.Build.GOARCH, "tags": nonNil(l.Build.Tags), "cgo_enabled": l.Build.CGOEnabled},
+		"build":  map[string]any{"goos": l.Build.GOOS, "goarch": l.Build.GOARCH, "tags": nonNil(l.Build.Tags), "cgo_enabled": l.Build.CGOEnabled},
 		"ledger": ledger, "judged_laws": l.JudgedLaws,
 	}
 	raw, err := json.Marshal(doc)
@@ -264,14 +264,43 @@ func TestJudgeHookApplyPartialWhenTestsLayerBlocksMeasure(t *testing.T) {
 
 func TestJudgeHookTestsRefusalWithoutLedgerDoesNotPartial(t *testing.T) {
 	env := project(t, nil)
+	yaml, err := os.ReadFile(filepath.Join("..", "..", "go-tops.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(env.Dir, "go-tops.yaml"), yaml, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	lintJSON := `{"Issues":[`
+	for i := 0; i < 5; i++ {
+		if i > 0 {
+			lintJSON += ","
+		}
+		lintJSON += `{"FromLinter":"revive","Pos":{"Filename":"x.go","Line":1}}`
+	}
+	lintJSON += `]}`
+	if err := os.MkdirAll(filepath.Join(env.Dir, ".go-tops"), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(env.Dir, ".go-tops/lint-style.json"), []byte(lintJSON), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	env.Config = gate.Config{Module: "example.com/m", Enforce: "ratchet", Crap: gate.CrapConfig{Cap: 10}}
 	ref := &baseline.RefusalError{Msg: "tests layer red"}
 	in := layersIn()
+	in[0] = report.Layer{
+		ID: "hygiene", Tier: 1, Outcome: "fail",
+		Details: map[string]any{
+			"golangci_lint": "v2.15.0", "findings": 5,
+			"lint": map[string]any{"outcome": "fail", "findings": 5, "by_linter": map[string]any{"revive": 5}},
+		},
+	}
 	v, err := ratchet.NewJudge(measurerWithPaths(ratchet.Measure{}, ref))(context.Background(), env, in)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !v.Failed || v.Layers[0].Outcome != in[0].Outcome {
-		t.Fatalf("layers=%+v", v.Layers)
+	if !v.Failed || v.Layers[0].Outcome != "fail" {
+		t.Fatalf("hygiene=%s layers=%+v", v.Layers[0].Outcome, v.Layers)
 	}
 }
 
