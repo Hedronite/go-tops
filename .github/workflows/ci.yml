@@ -158,8 +158,8 @@ jobs:
       # advisory, so this step reads the report and fails unless
       #   - hygiene, tests, coverage and crap are `pass`;
       #   - mutation is `pass` or `vacuous` (never `skip`);
-      #   - G3 (M5): all 16 v0.1 laws judged (`allow` or `refuse`); none `no_reader`;
-      #     kit G-16 `refuse` expected while enforce is advisory. G6 hardens enforce.
+      #   - G5 (M5): all 16 v0.1 laws judged and the laws layer passes (none `no_reader`;
+      #     G-11 and G-16 allow on kit under advisory).
       #   - the run is reported as not enforced, and every enabled layer ran.
       # To plant a failure locally, change .go-tops/report.json and run this step's
       # script from the repository root.
@@ -193,8 +193,11 @@ jobs:
                   and ($r.reason // "") == "no_reader" )
                 | "law \($r.id): still no_reader, want a tier-1 judgment (G3)" ),
               ( (.laws.results // [])[] as $r
-                | select(.id == "G-16" and .verdict != "refuse")
-                | "law G-16: \($r.verdict), want refuse on kit under advisory (pre-existing noctx)" ),
+                | select( ($r.id | test("^G-(02|07|08|11|12|16|17|18|19|25|26|33|34|37|38|40)$"))
+                  and ($r.verdict == "refuse") )
+                | "law \($r.id): verdict refuse (G5, §11)" ),
+              ( select((.summary.failed // []) | index("laws"))
+                | "summary.failed includes laws (G5, §11: read .laws not layers[])" ),
               ( select(.summary.enforced != false)
                 | "summary.enforced is \(.summary.enforced), want false under advisory" ),
               ( select(.enforce != "advisory")

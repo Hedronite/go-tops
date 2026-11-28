@@ -39,6 +39,8 @@ type Deps struct {
 	LawPass func(context.Context, *Env) (lawpass.LintResult, error)
 	// LawsRun runs fact laws and analyzers; default laws.Run.
 	LawsRun func(context.Context, string, string) (laws.RunnerResult, error)
+	// ScanAcks counts //tops:ack and acks.yaml; wired from cmd/gotops to avoid an import cycle.
+	ScanAcks func(dir, ackPath string) (laws.FileCounts, error)
 	// Ratchet judges the run against the debt ledger under enforce: ratchet
 	// (§6.7); default DefaultRatchet. See ratchet.go.
 	Ratchet RatchetJudge
@@ -73,112 +75,19 @@ func (p planned) enabled() bool { return p.cfg.Enabled }
 // starts returns a Run, whose exit code is 0 or 1, and whose report the caller
 // writes.
 func Execute(ctx context.Context, cfg Config, opts Options, d Deps) (*Run, error) {
-	if d.Exec == nil {
-		d.Exec = OS{}
-	}
-	if d.Tools == nil {
-		r := &ToolResolver{Dir: d.Dir, Exec: d.Exec, Binary: DefaultBinaries()}
-		if BinaryVerifier != nil {
-			r.Verify = BinaryVerifier(d.Dir)
-		}
-		d.Tools = r
-	}
-	if d.Now == nil {
-		d.Now = time.Now
-	}
-	if d.Laws == nil {
-		d.Laws = laws.Judge
-	}
-	if d.Layers == nil {
-		d.Layers = Layers()
-	}
+	fillDefaultDeps(&d)
 	if err := check(d.Layers); err != nil {
 		return nil, exitf(ExitEnv, "%v", err)
 	}
 	base := cfg.base(opts.Base)
-
 	plan, err := makePlan(d.Layers, cfg, opts)
 	if err != nil {
 		return nil, err
 	}
-	lawsIn := opts.Only == "" || opts.Only == LawsLayer
-	required := cfg.RequiredLaws
-	static := d.Laws(laws.Input{Class: cfg.Class, MaxTier: opts.MaxTier, InRange: lawsIn, Reached: true, Required: required})
-	partial := false
-	for _, r := range static {
-		if r.Required && r.OutOfRange {
-			partial = true
-		}
+	if run, err := tryDryRun(cfg, opts, d, plan); run != nil || err != nil {
+		return run, err
 	}
-
-	// Policy first (§12.2 code 4): a dry run, and a range that would end partial.
-	if d.CI && opts.DryRun {
-		return nil, exitf(ExitRefused, "--dry-run is refused when CI=true: a dry run judges nothing (§3.4 rule 6)")
-	}
-	if d.CI && partial {
-		return nil, exitf(ExitRefused, "this range leaves a required law out of range and would end partial; it is refused when CI=true (§3.4 rule 6)")
-	}
-	if opts.DryRun {
-		return &Run{DryRun: true, Text: renderPlan(cfg, opts, plan, static)}, nil
-	}
-
-	env := &Env{Dir: d.Dir, Config: cfg, Base: base, Exec: d.Exec, Tools: d.Tools}
-	for _, p := range plan {
-		if !p.inRange || !p.enabled() {
-			continue
-		}
-		if pf, ok := p.layer.(Preflighter); ok {
-			if err := pf.Preflight(ctx, env); err != nil {
-				return nil, &ExitError{Code: exitCodeFor(err), Err: fmt.Errorf("%s: %w", p.layer.ID(), err)}
-			}
-		}
-	}
-	started := d.Now()
-	git, err := gitState(ctx, d.Exec, d.Dir, base)
-	if err != nil {
-		return nil, &ExitError{Code: ExitEnv, Err: err}
-	}
-
-	layers, stopped, vulnDB := runLayers(ctx, env, plan, opts)
-
-	ev := laws.Evidence{Hygiene: laws.HygieneFromLayers(layers)}
-	if lawsIn && !stopped && opts.MaxTier >= 0 {
-		lawsRun := d.LawsRun
-		if lawsRun == nil {
-			lawsRun = func(ctx context.Context, dir, class string) (laws.RunnerResult, error) {
-				return laws.Run(ctx, dir, class, nil)
-			}
-		}
-		rr, err := lawsRun(ctx, env.Dir, cfg.Class)
-		if err != nil {
-			return nil, exitf(ExitFail, "law analyzers: %v", err)
-		}
-		ev.AnalyzersOK = rr.OK
-		ev.Analyzers = rr.ByLaw
-	}
-	if lawsIn && !stopped && opts.MaxTier >= 1 {
-		runLaw := d.LawPass
-		if runLaw == nil {
-			runLaw = func(ctx context.Context, env *Env) (lawpass.LintResult, error) {
-				return lawpass.Run(ctx, env.Dir, lawpassExec{env.Exec}, lawpassTools{env.Tools})
-			}
-		}
-		lintRes, err := runLaw(ctx, env)
-		if err != nil {
-			// Missing or broken law-pass output leaves tier-1 tool laws input_missing (§3.4).
-			ev.LintPassOK = false
-		} else {
-			ev.Lint = lintRes
-			ev.LintPassOK = true
-		}
-	}
-
-	results := d.Laws(laws.Input{Class: cfg.Class, MaxTier: opts.MaxTier, InRange: lawsIn, Reached: !stopped, Required: required, Evidence: ev})
-	env.RatchetLaws = report.Laws{ApplicableJudged: applicableJudged(results)}
-
-	verdict, layers := d.ratchetStage(ctx, cfg, env, layers, stopped)
-	rep := assemble(cfg, opts, git, started, d.Now(), d.ToolVersion, vulnDB, layers, results, verdict)
-	return &Run{Report: rep, ExitCode: rep.Summary.ExitCode, Text: verdict.text(report.RenderText(rep))}, nil
+	return executeRun(ctx, cfg, opts, d, base, plan)
 }
 
 // makePlan decides, for each layer, whether it is in range (§3.2, §3.5) and
@@ -343,105 +252,4 @@ func judge(l Layer, r Result) Result {
 		return bad("the %s layer returned vacuous, which only an empty mutation diff may be (§3.3)", l.ID())
 	}
 	return r
-}
-
-// assemble builds the report and the verdict of the run (§3.3, §12.3).
-func assemble(cfg Config, opts Options, git report.Git, started, ended time.Time, toolVersion, vulnDB string, layers []report.Layer, results []laws.Result, rv *RatchetVerdict) report.Report {
-	rep := report.Report{
-		Protocol: report.Protocol, ToolVersion: toolVersion, Module: cfg.Module, Class: cfg.Class, Enforce: cfg.Enforce,
-		Git: git, MaxTier: opts.MaxTier,
-		StartedAt:  started.UTC().Format(time.RFC3339),
-		DurationMS: ended.Sub(started).Milliseconds(),
-		Exemptions: cfg.Exemptions,
-		Layers:     layers,
-	}
-	if vulnDB != "" {
-		rep.VulnDBTimestamp = &vulnDB
-	}
-	var failed []string
-	for _, l := range layers {
-		o := Outcome(l.Outcome)
-		if o != Skip {
-			rep.LayerCounts.EnabledInRange++
-		}
-		if o.ran() {
-			rep.LayerCounts.Ran++
-		}
-		if o.fails() {
-			failed = append(failed, l.ID)
-		}
-	}
-
-	rel := laws.Release()
-	lw := &rep.Laws
-	lw.Catalog, lw.Judged, lw.NotEvaluated = rel.Catalog, rel.Judged, rel.NotEvaluated
-	refused, partial := false, false
-	for _, r := range results {
-		lw.Applicable++
-		if r.Verdict != laws.NotEvaluated {
-			lw.ApplicableJudged++
-		} else {
-			switch r.Reason {
-			case laws.NoReader:
-				lw.NotEvaluatedByReason.NoReader++
-			case laws.ConfigOff:
-				lw.NotEvaluatedByReason.ConfigOff++
-			case laws.InputMissing:
-				lw.NotEvaluatedByReason.InputMissing++
-			}
-		}
-		if r.Required {
-			lw.Required++
-			if r.OutOfRange {
-				partial = true
-			} else if r.Verdict == laws.NotEvaluated {
-				lw.RequiredNotEvaluated++
-			}
-		}
-		if r.OutOfRange {
-			lw.OutOfRange = append(lw.OutOfRange, r.ID)
-		}
-		if r.Verdict == laws.Refuse {
-			refused = true
-		}
-		lr := report.LawResult{ID: r.ID, Verdict: string(r.Verdict), Reader: string(r.Reader)}
-		if r.Verdict == laws.NotEvaluated {
-			lr.Reason = string(r.Reason)
-		}
-		lw.Results = append(lw.Results, lr)
-	}
-	if refused || lw.RequiredNotEvaluated > 0 {
-		failed = append(failed, LawsLayer)
-	}
-	failed = rv.mark(&rep, failed)
-	if rep.LayerCounts.Ran != rep.LayerCounts.EnabledInRange && len(failed) == 0 {
-		failed = append(failed, "layer_counts")
-	}
-
-	s := &rep.Summary
-	s.Failed = failed
-	switch {
-	case len(failed) > 0:
-		s.Outcome, s.ExitCode = string(RunFail), ExitFail
-	case partial:
-		s.Outcome = string(RunPartial)
-	default:
-		s.Outcome = string(RunPass)
-	}
-	s.Enforced = true
-	if cfg.Enforce == "advisory" {
-		// B1: the run is honest about its outcome and exits 0 (§6.7).
-		s.Enforced, s.ExitCode, s.AdvisoryExpires = false, ExitOK, cfg.AdvisoryExpires
-	}
-	return rep
-}
-
-func applicableJudged(results []laws.Result) int {
-	var n int
-	for _, r := range results {
-		if r.Verdict != laws.NotEvaluated {
-			n++
-		}
-	}
-	return n
 }

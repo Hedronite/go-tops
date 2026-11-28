@@ -9,6 +9,23 @@ import (
 	"golang.org/x/tools/go/packages"
 )
 
+func TestKitDelegatedLawDebt(t *testing.T) {
+	root, err := filepath.Abs("../..")
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := Run(context.Background(), root)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if res.ByLaw["G-11"] != 0 {
+		t.Fatalf("kit G-11 = %d, want 0; byFile=%v", res.ByLaw["G-11"], res.ByLawFile["G-11"])
+	}
+	if res.ByLaw["G-17"] != 0 {
+		t.Fatalf("kit G-17 = %d, want 0; byFile=%v", res.ByLaw["G-17"], res.ByLawFile["G-17"])
+	}
+}
+
 func TestRunOnTempModule(t *testing.T) {
 	dir := t.TempDir()
 	mod := filepath.Join(dir, "go.mod")
@@ -30,6 +47,27 @@ func TestRunOnTempModule(t *testing.T) {
 	}
 	if res.ByLaw["G-17"] < 1 {
 		t.Fatalf("G-17=%d want at least one ctx diagnostic", res.ByLaw["G-17"])
+	}
+	if res.ByLawFile == nil || res.ByLawFile["G-17"]["main.go"] < 1 {
+		t.Fatalf("ByLawFile=%+v want main.go entry", res.ByLawFile)
+	}
+}
+
+func TestModuleRelAbsoluteAndEmpty(t *testing.T) {
+	dir := t.TempDir()
+	abs := filepath.Join(dir, "pkg", "a.go")
+	if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	got := moduleRel(dir, abs)
+	if got != "pkg/a.go" {
+		t.Fatalf("got %q", got)
+	}
+	if moduleRel(dir, "") != "(no file)" {
+		t.Fatal("want placeholder for empty name")
+	}
+	if got := moduleRel(dir, "./pkg/a.go"); got != "pkg/a.go" {
+		t.Fatalf("got %q", got)
 	}
 }
 

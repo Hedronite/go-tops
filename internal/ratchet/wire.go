@@ -2,6 +2,7 @@ package ratchet
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -40,20 +41,20 @@ type Measurer func(ctx context.Context, env *gate.Env, in Inputs) (Measure, erro
 // NewJudge returns the gate's ratchet hook: it reads the ledger at the configured
 // path, measures the run, judges it, and gives the layers the thresholds the
 // ledger replaces. paths gives the configured paths of the module in dir.
-func NewJudge(measure Measurer, paths func(dir string) (Paths, error)) gate.RatchetJudge {
+func NewJudge(measure Measurer, paths func(context.Context, string) (Paths, error)) gate.RatchetJudge {
 	return func(ctx context.Context, env *gate.Env, layers []report.Layer) (*gate.RatchetVerdict, error) {
 		if !holdsFeeds(layers) {
-			return partialVerdict(env, layers, paths)
+			return partialVerdict(ctx, env, layers, paths)
 		}
-		run, err := gobuild.Resolve(env.Dir, tests.Build)
+		run, err := gobuild.Resolve(ctx, env.Dir, tests.Build)
 		if err != nil {
 			return nil, err
 		}
-		ps, err := paths(env.Dir)
+		ps, err := paths(ctx, env.Dir)
 		if err != nil {
 			return refused(layers, run, nil, fmt.Errorf("the configuration: %w", err)), nil
 		}
-		in, err := judgeInput(env, run, ps)
+		in, err := judgeInput(ctx, env, run, ps)
 		if err != nil {
 			return refused(layers, run, in.Ledger, err), nil
 		}
@@ -61,7 +62,14 @@ func NewJudge(measure Measurer, paths func(dir string) (Paths, error)) gate.Ratc
 			// Nothing was measured, so nothing can be judged: a run whose tests or
 			// profile failed gets a failed ratchet, never a guess and never an
 			// environment fault that hides the layers' own report.
-			return refused(layers, run, in.Ledger, fmt.Errorf("the run could not be measured: %w", err)), nil
+			out := layers
+			if in.Ledger != nil && testsOnlyRefusal(err) {
+				feeds := baseline.Feeds{Report: report.Report{Layers: layers}, Config: env.Config, Dir: env.Dir}
+				if findings, ferr := feeds.Findings(); ferr == nil {
+					out = ApplyPartial(layers, Partial{Ledger: in.Ledger, Findings: findings, Cap: env.Config.Crap.Cap})
+				}
+			}
+			return refused(out, run, in.Ledger, fmt.Errorf("the run could not be measured: %w", err)), nil
 		}
 		j := Judge(in)
 		rep, applied := j.Report(), Apply(layers, j, in.Ledger)
@@ -87,9 +95,9 @@ func holdsFeeds(layers []report.Layer) bool {
 // the layers as ApplyPartial gives them. The run ends partial as it would without a
 // ledger. A configuration or a ledger that cannot be read leaves nothing with an entry,
 // so everything is judged at hard.
-func partialVerdict(env *gate.Env, layers []report.Layer, paths func(dir string) (Paths, error)) (*gate.RatchetVerdict, error) {
+func partialVerdict(ctx context.Context, env *gate.Env, layers []report.Layer, paths func(context.Context, string) (Paths, error)) (*gate.RatchetVerdict, error) {
 	p := Partial{Cap: env.Config.Crap.Cap}
-	if ps, err := paths(env.Dir); err == nil {
+	if ps, err := paths(ctx, env.Dir); err == nil {
 		if ledger, err := readLedgerFile(env.Dir, ps.Ledger); err == nil {
 			p.Ledger = ledger
 		}
@@ -139,7 +147,7 @@ func uncarried(j Judgment, layers []report.Layer) bool {
 // judgeInput reads the ledger and its base copy, and on a leg that is not the ledger
 // leg what the ledger build compiles. A ledger that cannot be read is an error: the
 // judge trusts nothing it cannot read.
-func judgeInput(env *gate.Env, run gobuild.Build, ps Paths) (Input, error) {
+func judgeInput(ctx context.Context, env *gate.Env, run gobuild.Build, ps Paths) (Input, error) {
 	in := Input{Run: run}
 	ledger, err := readLedgerFile(env.Dir, ps.Ledger)
 	if err != nil {
@@ -150,7 +158,7 @@ func judgeInput(env *gate.Env, run gobuild.Build, ps Paths) (Input, error) {
 	}
 	// Every leg reads the base copy: the ledger leg judges against it, and the
 	// others only say when the build moved. Only the ledger leg fails on it.
-	in.Base = ReadBase(env.Dir, env.Base, ps.Ledger)
+	in.Base = ReadBase(ctx, env.Dir, env.Base, ps.Ledger)
 	if !run.Equal(ledger.Build) {
 		ledgerSources(&in, env.Dir)
 	}
@@ -179,6 +187,11 @@ func ledgerSources(in *Input, dir string) {
 	in.LedgerFiles, in.LedgerPackages = sel.Files, sel.Packages
 }
 
+func testsOnlyRefusal(err error) bool {
+	var ref *baseline.RefusalError
+	return errors.As(err, &ref) && strings.Contains(ref.Msg, "tests layer")
+}
+
 // refused is a failed ratchet that judged nothing, with the layers as they ran.
 func refused(layers []report.Layer, run gobuild.Build, ledger *Ledger, err error) *gate.RatchetVerdict {
 	ledgerBuild := run
@@ -199,7 +212,7 @@ func CollectMeasure() Measurer {
 		rep := report.Report{Layers: in.Layers}
 		attachRatchetLaws(&rep, env)
 		bm, err := baseline.Collect(baseline.Feeds{
-			Report: rep, Config: env.Config, Dir: env.Dir,
+			Report: rep, Config: env.Config, Dir: env.Dir, Laws: env.RatchetLawRefusals,
 			Acks: in.Paths.Acks, Build: in.Build, Now: func() time.Time { return in.Now },
 		})
 		if err != nil {
@@ -221,7 +234,7 @@ func CollectMeasure() Measurer {
 func fromBaseline(bm baseline.Measure, cfg gate.Config) Measure {
 	m := Measure{
 		Cap: cfg.Crap.Cap, Floor: cfg.Coverage.StatementsFloor,
-		Packages: bm.Packages, Findings: bm.Findings, Nolint: bm.Nolint, Ack: bm.Ack,
+		Packages: bm.Packages, Findings: bm.Findings, Laws: bm.Laws, Nolint: bm.Nolint, Ack: bm.Ack,
 		Exemptions: bm.Exemptions, JudgedLaws: bm.JudgedLaws,
 	}
 	for key, score := range bm.Functions {

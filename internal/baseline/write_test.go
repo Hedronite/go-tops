@@ -601,7 +601,7 @@ func TestRenameRefusesAKeyThatIsBothAFunctionAndAPackage(t *testing.T) {
 	}}
 	_, err := baseline.Rename(old, "m/x", "m/y", inv{fns: set("m/y"), pkgs: set("m/y")})
 	var ref *baseline.RefusalError
-	if !errors.As(err, &ref) || !strings.Contains(err.Error(), "both") {
+	if !errors.As(err, &ref) || !strings.Contains(ref.Msg, "both") {
 		t.Errorf("err %v", err)
 	}
 }

@@ -60,7 +60,9 @@ func runLock(env cli.Env, args []string) int {
 }
 
 func verifyLock(env cli.Env, dir string) int {
-	findings := lock.Verify(lock.VerifyOptions{Dir: dir})
+	ctx, stop := signalContext()
+	defer stop()
+	findings := lock.Verify(ctx, lock.VerifyOptions{Ctx: ctx, Dir: dir})
 	for _, f := range findings {
 		env.Stdout.Printf("%-9s %-22s %s\n", statusWord(f.Status), f.Subject, f.Detail)
 	}

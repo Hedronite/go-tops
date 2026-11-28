@@ -8,16 +8,13 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 
-	"go.yaml.in/yaml/v3"
+	"github.com/Hedronite/go-tops/internal/acks"
 )
 
 // nolintAll is the name a bare //nolint counts under: it silences every linter.
 const nolintAll = "all"
-
-var ackRE = regexp.MustCompile(`^tops:ack\s+(G-[0-9]{2})(\s|$)`)
 
 // skipDir says whether the walk leaves a directory out. It is the scope of the
 // CRAP layer (internal/crap): hidden and underscore directories, vendored code,
@@ -75,12 +72,12 @@ func bump(c *Counts, name, file string) {
 // per law and file. A comment that names two linters counts once for each. A
 // file that does not parse cannot be shown to hold no suppression, so it is an
 // error and not a zero.
-func scanSuppressions(dir, acks string) (nolint, ack Counts, err error) {
+func scanSuppressions(dir, ackPath string) (nolint, ack Counts, err error) {
 	var t tally
 	if err := walkGo(dir, t.scanFile); err != nil {
 		return nil, nil, err
 	}
-	if err := t.readAcks(dir, acks); err != nil {
+	if err := t.readAcks(dir, ackPath); err != nil {
 		return nil, nil, err
 	}
 	return t.nolint, t.ack, nil
@@ -113,36 +110,36 @@ func (t *tally) comment(rel, raw string) {
 			bump(&t.nolint, n, rel)
 		}
 	}
-	if m := ackRE.FindStringSubmatch(text); m != nil {
-		bump(&t.ack, m[1], rel)
+	if law, _, ok := acks.Comment("//" + text); ok {
+		bump(&t.ack, law, rel)
 	}
 }
 
 // readAcks counts the entries of acks.yaml, if the file is there.
-func (t *tally) readAcks(dir, acks string) error {
-	if acks == "" {
+func (t *tally) readAcks(dir, ackPath string) error {
+	if ackPath == "" {
 		return nil
 	}
-	raw, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(acks)))
+	raw, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(ackPath)))
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil
 	}
 	if err != nil {
 		return err
 	}
-	var doc struct {
-		Acks []struct {
-			Law  string `yaml:"law"`
-			File string `yaml:"file"`
-		} `yaml:"acks"`
-	}
-	if err := yaml.Unmarshal(raw, &doc); err != nil {
-		return fmt.Errorf("%s: %w", acks, err)
+	doc, err := acks.ParseYAML(ackPath, raw)
+	if err != nil {
+		return err
 	}
 	for _, a := range doc.Acks {
 		bump(&t.ack, a.Law, filepath.ToSlash(filepath.Clean(a.File)))
 	}
 	return nil
+}
+
+// ScanSuppressions counts //nolint and //tops:ack in the module's Go sources.
+func ScanSuppressions(dir, acksPath string) (nolint, ack Counts, err error) {
+	return scanSuppressions(dir, acksPath)
 }
 
 // nolintNames reads the text of a comment, after its slashes: `nolint`,

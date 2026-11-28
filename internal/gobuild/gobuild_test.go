@@ -1,6 +1,7 @@
 package gobuild_test
 
 import (
+	"context"
 	"slices"
 	"testing"
 
@@ -58,7 +59,7 @@ func TestPlatformTurnsCgoOff(t *testing.T) {
 func TestResolveFillsThePlatform(t *testing.T) {
 	t.Setenv("GOOS", "linux")
 	t.Setenv("GOARCH", "arm64")
-	got, err := gobuild.Resolve(t.TempDir(), gobuild.Build{Tags: []string{"x"}, CGOEnabled: true})
+	got, err := gobuild.Resolve(context.Background(), t.TempDir(), gobuild.Build{Tags: []string{"x"}, CGOEnabled: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,14 +71,14 @@ func TestResolveFillsThePlatform(t *testing.T) {
 func TestResolveKeepsWhatIsNamed(t *testing.T) {
 	t.Setenv("GOOS", "linux")
 	t.Setenv("GOARCH", "arm64")
-	got, err := gobuild.Resolve(t.TempDir(), gobuild.Build{GOOS: "windows", GOARCH: "386"})
+	got, err := gobuild.Resolve(context.Background(), t.TempDir(), gobuild.Build{GOOS: "windows", GOARCH: "386"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got.GOOS != "windows" || got.GOARCH != "386" {
 		t.Errorf("Resolve = %+v, want the named platform", got)
 	}
-	half, err := gobuild.Resolve(t.TempDir(), gobuild.Build{GOOS: "windows"})
+	half, err := gobuild.Resolve(context.Background(), t.TempDir(), gobuild.Build{GOOS: "windows"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +90,7 @@ func TestResolveKeepsWhatIsNamed(t *testing.T) {
 // A resolved build names a platform, so a recorded one cannot match every
 // platform.
 func TestResolveNeverLeavesThePlatformEmpty(t *testing.T) {
-	got, err := gobuild.Resolve(t.TempDir(), gobuild.Build{CGOEnabled: true})
+	got, err := gobuild.Resolve(context.Background(), t.TempDir(), gobuild.Build{CGOEnabled: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,7 +101,7 @@ func TestResolveNeverLeavesThePlatformEmpty(t *testing.T) {
 
 func TestResolveFailsWhenGoCannotAnswer(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
-	if _, err := gobuild.Resolve(t.TempDir(), gobuild.Build{}); err == nil {
+	if _, err := gobuild.Resolve(context.Background(), t.TempDir(), gobuild.Build{}); err == nil {
 		t.Error("Resolve succeeded with no go command")
 	}
 }

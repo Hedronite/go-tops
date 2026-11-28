@@ -1,6 +1,7 @@
 package config
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"go/version"
@@ -41,8 +42,8 @@ type Result struct {
 // root (GO_TOPS.md §12.1 `check`): the schema first, then each semantic rule.
 // Issues are configuration failures (exit 2). The error is an environment
 // failure (exit 3): an unreadable file, or a repository git cannot read.
-func Check(root string, opts Options) (Result, error) {
-	c := &checker{root: root, laws: opts.Laws}
+func Check(ctx context.Context, root string, opts Options) (Result, error) {
+	c := &checker{ctx: ctx, root: root, laws: opts.Laws}
 	now := opts.Now
 	if now == nil {
 		now = time.Now
@@ -59,6 +60,7 @@ func Check(root string, opts Options) (Result, error) {
 }
 
 type checker struct {
+	ctx    context.Context
 	root   string
 	laws   Laws
 	today  time.Time
@@ -415,7 +417,7 @@ func (c *checker) baseline() error {
 			return nil
 		}
 	}
-	problem, err := baselineProblem(c.root, rel)
+	problem, err := baselineProblem(c.ctx, c.root, rel)
 	if err != nil {
 		return err
 	}

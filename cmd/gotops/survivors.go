@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -60,10 +61,15 @@ func stop(code int, format string, a ...any) error {
 
 // ledgerFiles is what the commands work on: the module directory and the ledger
 // and report paths go-tops.yaml names.
-type ledgerFiles struct{ dir, ledger, report string }
+type ledgerFiles struct {
+	ctx                 context.Context
+	dir, ledger, report string
+}
 
 func runSurvivors(env cli.Env, args []string) int {
-	err := survivorsCommand(env, ".", args, time.Now())
+	ctx, stop := signalContext()
+	defer stop()
+	err := survivorsCommand(ctx, env, ".", args, time.Now())
 	if err == nil {
 		return 0
 	}
@@ -76,7 +82,7 @@ func runSurvivors(env cli.Env, args []string) int {
 }
 
 // survivorsCommand runs one subcommand. A plain error is a usage error.
-func survivorsCommand(env cli.Env, dir string, args []string, today time.Time) error {
+func survivorsCommand(ctx context.Context, env cli.Env, dir string, args []string, today time.Time) error {
 	if len(args) == 0 {
 		return errors.New("needs list, explain or expire")
 	}
@@ -89,7 +95,7 @@ func survivorsCommand(env cli.Env, dir string, args []string, today time.Time) e
 	case !ok:
 		return fmt.Errorf("unknown subcommand %s", args[0])
 	}
-	files, err := survivorFiles(dir)
+	files, err := survivorFiles(ctx, dir)
 	if err != nil {
 		return err
 	}
@@ -98,7 +104,7 @@ func survivorsCommand(env cli.Env, dir string, args []string, today time.Time) e
 
 // survivorFiles reads go-tops.yaml for the two paths. It does not run check: a
 // ledger with a passed entry fails check, and expire is how it is mended.
-func survivorFiles(dir string) (ledgerFiles, error) {
+func survivorFiles(ctx context.Context, dir string) (ledgerFiles, error) {
 	data, err := os.ReadFile(filepath.Join(dir, "go-tops.yaml"))
 	if err != nil {
 		return ledgerFiles{}, stop(cli.ExitUsage, "read go-tops.yaml: %w", err)
@@ -114,7 +120,7 @@ func survivorFiles(dir string) (ledgerFiles, error) {
 	if err != nil {
 		return ledgerFiles{}, stop(cli.ExitEnvironment, "%w", err)
 	}
-	files := ledgerFiles{dir: dir, ledger: eff.Gates.Mutation.Ledger, report: eff.Report.Path}
+	files := ledgerFiles{ctx: ctx, dir: dir, ledger: eff.Gates.Mutation.Ledger, report: eff.Report.Path}
 	for _, p := range []string{files.ledger, files.report} {
 		if !filepath.IsLocal(filepath.FromSlash(p)) {
 			return ledgerFiles{}, stop(cli.ExitUsage, "go-tops.yaml names %q, which is outside the module", p)
@@ -265,7 +271,7 @@ func (f ledgerFiles) listedUnexplained(k mutate.SurvivorKey) error {
 	if err != nil {
 		return err
 	}
-	now, err := currentHead(f.dir)
+	now, err := currentHead(f.ctx, f.dir)
 	if err != nil {
 		return stop(cli.ExitEnvironment, "%w", err)
 	}
@@ -313,8 +319,8 @@ func (f ledgerFiles) lastReport() (string, mutationRows, error) {
 	return "", rows, stop(refusedBy, "%s lists no mutation survivors", f.report)
 }
 
-func currentHead(dir string) (string, error) {
-	cmd := exec.Command("git", "rev-parse", "HEAD")
+func currentHead(ctx context.Context, dir string) (string, error) {
+	cmd := exec.CommandContext(ctx, "git", "rev-parse", "HEAD")
 	cmd.Dir = dir
 	out, err := cmd.Output()
 	if err != nil {

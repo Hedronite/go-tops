@@ -3,6 +3,7 @@
 package gotops
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -50,7 +51,7 @@ func TestSkillsRunTheRealGotopsOnAFixtureModule(t *testing.T) {
 		t.Skip("golangci-lint is not on PATH; the weekly adoption job installs it")
 	}
 	bin := filepath.Join(t.TempDir(), "gotops")
-	if out, err := exec.Command("go", "build", "-o", bin, "./cmd/gotops").CombinedOutput(); err != nil {
+	if out, err := exec.CommandContext(context.Background(), "go", "build", "-o", bin, "./cmd/gotops").CombinedOutput(); err != nil {
 		t.Fatalf("go build: %v\n%s", err, out)
 	}
 	r := newRepo(t)

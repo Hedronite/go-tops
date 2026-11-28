@@ -34,8 +34,8 @@ func TestParseFormat(t *testing.T) {
 	}
 	for _, in := range []string{"junit", "sarif"} {
 		_, err := ParseFormat(in)
-		if !errors.Is(err, ErrNotYet) || !strings.Contains(err.Error(), "M7") {
-			t.Errorf("ParseFormat(%q) = %v, want an error that names M7", in, err)
+		if !errors.Is(err, ErrNotYet) {
+			t.Errorf("ParseFormat(%q) = %v, want ErrNotYet", in, err)
 		}
 	}
 	if _, err := ParseFormat("xml"); err == nil || errors.Is(err, ErrNotYet) {

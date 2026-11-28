@@ -26,7 +26,9 @@ func runCheck(env cli.Env, args []string) int {
 		env.Stderr.Printf("gotops check: takes no arguments, got %q\n", args[0])
 		return cli.ExitUsage
 	}
-	res, err := config.Check(".", config.Options{})
+	ctx, stop := signalContext()
+	defer stop()
+	res, err := config.Check(ctx, ".", config.Options{})
 	if err != nil {
 		env.Stderr.Printf("gotops check: %v\n", err)
 		return cli.ExitEnvironment

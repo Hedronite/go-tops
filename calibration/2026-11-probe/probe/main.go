@@ -24,12 +24,12 @@ type block struct{ sl, sc, el, ec, n, cnt int }
 type span struct{ sl, sc, el, ec int }
 
 type fn struct {
-	File, Name            string
-	Line                  int
-	CC, Guards, TableX    int
-	Stmts, Cov            int
-	GStmts, GCov          int
-	MaxCases              int
+	File, Name         string
+	Line               int
+	CC, Guards, TableX int
+	Stmts, Cov         int
+	GStmts, GCov       int
+	MaxCases           int
 }
 
 func before(al, ac, bl, bc int) bool { return al < bl || (al == bl && ac <= bc) }

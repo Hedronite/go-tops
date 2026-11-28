@@ -76,7 +76,7 @@ import (
 
 func TestMutantWaitsForSIGINT(t *testing.T) {
 	if !IsBase(-1) {
-		child := exec.Command("sleep", "30")
+		child := exec.CommandContext(t.Context(), "sleep", "30")
 		child.Stdout = os.Stdout
 		child.Stderr = os.Stderr
 		if err := child.Start(); err != nil {
@@ -103,7 +103,7 @@ func TestMutantWaitsForSIGINT(t *testing.T) {
 		t.Fatal(err)
 	}
 	subTmp := t.TempDir()
-	helper := exec.Command(self, "-test.run=^$")
+	helper := exec.CommandContext(context.Background(), self, "-test.run=^$")
 	helper.Env = append(os.Environ(),
 		"GOTOPS_OVERLAY_SIGINT_HELPER=1",
 		"GOTOPS_OVERLAY_SIGINT_DIR="+dir,

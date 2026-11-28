@@ -1,6 +1,7 @@
 package laws
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -11,7 +12,7 @@ func TestCheckG33Floor(t *testing.T) {
 	writeFile(t, filepath.Join(dir, "go.mod"), "module example.com/t\n\ngo 1.25\n")
 	copyLock(t, dir)
 	out := map[string]int{"G-33": 0}
-	if err := checkG33(dir, func() (string, error) { return "go1.27.4", nil }, out); err != nil {
+	if err := checkG33(context.Background(), dir, func() (string, error) { return "go1.27.4", nil }, out); err != nil {
 		t.Fatal(err)
 	}
 	if out["G-33"] != 1 {
@@ -70,7 +71,7 @@ func TestCheckG33MismatchGoEnv(t *testing.T) {
 	writeFile(t, filepath.Join(dir, "go.mod"), "module example.com/t\n\ngo 1.26\n")
 	copyLock(t, dir)
 	out := map[string]int{"G-33": 0}
-	if err := checkG33(dir, func() (string, error) { return "go1.26.0", nil }, out); err != nil {
+	if err := checkG33(context.Background(), dir, func() (string, error) { return "go1.26.0", nil }, out); err != nil {
 		t.Fatal(err)
 	}
 	if out["G-33"] != 1 {
@@ -83,7 +84,7 @@ func TestCheckG33MissingGoDirective(t *testing.T) {
 	writeFile(t, filepath.Join(dir, "go.mod"), "module example.com/t\n")
 	copyLock(t, dir)
 	out := map[string]int{"G-33": 0}
-	if err := checkG33(dir, func() (string, error) { return "go1.27.4", nil }, out); err != nil {
+	if err := checkG33(context.Background(), dir, func() (string, error) { return "go1.27.4", nil }, out); err != nil {
 		t.Fatal(err)
 	}
 	if out["G-33"] != 1 {
@@ -96,7 +97,7 @@ func TestCheckG33OK(t *testing.T) {
 	writeFile(t, filepath.Join(dir, "go.mod"), "module example.com/t\n\ngo 1.26\n")
 	copyLock(t, dir)
 	out := map[string]int{"G-33": 0}
-	if err := checkG33(dir, func() (string, error) { return "go1.27.4", nil }, out); err != nil {
+	if err := checkG33(context.Background(), dir, func() (string, error) { return "go1.27.4", nil }, out); err != nil {
 		t.Fatal(err)
 	}
 	if out["G-33"] != 0 {

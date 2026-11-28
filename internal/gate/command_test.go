@@ -16,7 +16,7 @@ func cmdDeps(t *testing.T, ls []Layer, c Config) CommandDeps {
 	d := deps(ls)
 	return CommandDeps{
 		Dir: t.TempDir(), Layers: ls, Exec: d.Exec, Tools: d.Tools, Now: d.Now, ToolVersion: "0.0.0-dev",
-		LoadConfig: func(string) (Config, error) { return c, nil }, LawPass: StubLawPass, LawsRun: StubLawsRun,
+		LoadConfig: func(context.Context, string) (Config, error) { return c, nil }, LawPass: StubLawPass, LawsRun: StubLawsRun,
 	}
 }
 
@@ -80,7 +80,7 @@ func TestMainFailingRunWritesReport(t *testing.T) {
 // §6.6: a run refused before any layer runs (2, 3, 4) writes no report.
 func TestMainRefusedRunsWriteNoReport(t *testing.T) {
 	d := cmdDeps(t, gateLayers(nil, nil), cfg())
-	d.LoadConfig = func(string) (Config, error) {
+	d.LoadConfig = func(context.Context, string) (Config, error) {
 		return Config{}, errors.New("gates.crap.cap: 12 is above the class cap 10")
 	}
 	code, _, errText := run(nil, d)
@@ -170,7 +170,9 @@ func TestMainAdvisory(t *testing.T) {
 // cannot read) is exit 3, not 2.
 func TestMainLoadConfigEnvironmentErrorIsThree(t *testing.T) {
 	d := cmdDeps(t, gateLayers(nil, nil), cfg())
-	d.LoadConfig = func(string) (Config, error) { return Config{}, &EnvError{Err: errors.New("git: not a repository")} }
+	d.LoadConfig = func(context.Context, string) (Config, error) {
+		return Config{}, &EnvError{Err: errors.New("git: not a repository")}
+	}
 	if code, _, _ := run(nil, d); code != 3 {
 		t.Fatalf("exit %d, want 3", code)
 	}

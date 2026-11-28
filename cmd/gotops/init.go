@@ -57,7 +57,9 @@ func runInit(env cli.Env, args []string) int {
 		env.Stderr.Printf("gotops init: %v\n", err)
 		return cli.ExitEnvironment
 	}
-	return initcmd.Run(initcmd.Options{
+	ctx, stop := signalContext()
+	defer stop()
+	return initcmd.Run(ctx, initcmd.Options{
 		Class: *class, Dir: dir, Owner: *owner, Force: *force, Offline: *offline,
 		Assets: gotops.Files(), KitVersion: kitVersion(),
 	}, env.Stdout, env.Stderr)

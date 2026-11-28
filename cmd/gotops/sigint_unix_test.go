@@ -4,6 +4,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"os"
 	"os/exec"
@@ -31,7 +32,7 @@ func runSubcommandSIGINTTest(t *testing.T, subArgs ...string) {
 		t.Fatal(err)
 	}
 	bin := filepath.Join(t.TempDir(), "gotops")
-	bld := exec.Command("go", "build", "-o", bin, "./cmd/gotops")
+	bld := exec.CommandContext(context.Background(), "go", "build", "-o", bin, "./cmd/gotops")
 	bld.Dir = repoRoot
 	if out, err := bld.CombinedOutput(); err != nil {
 		t.Fatalf("build gotops: %v\n%s", err, string(out))
@@ -72,6 +73,7 @@ gates:
 		"a_test.go": `package ctrlcgate
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -80,7 +82,7 @@ import (
 )
 
 func TestWaitForSIGINT(t *testing.T) {
-	child := exec.Command("sleep", "30")
+	child := exec.CommandContext(context.Background(), "sleep", "30")
 	child.Stdout = os.Stdout
 	child.Stderr = os.Stderr
 	if err := child.Start(); err != nil {
@@ -113,7 +115,7 @@ func TestWaitForSIGINT(t *testing.T) {
 		{"add", "."},
 		{"commit", "-m", "base"},
 	} {
-		gcmd := exec.Command("git", args...)
+		gcmd := exec.CommandContext(context.Background(), "git", args...)
 		gcmd.Dir = dir
 		if out, gerr := gcmd.CombinedOutput(); gerr != nil {
 			t.Fatalf("git %v: %v\n%s", args, gerr, string(out))
@@ -129,7 +131,7 @@ func TestWaitForSIGINT(t *testing.T) {
 	}
 
 	var gateOut lockedBuf
-	gateCmd := exec.Command(bin, subArgs...)
+	gateCmd := exec.CommandContext(context.Background(), bin, subArgs...)
 	gateCmd.Dir = dir
 	gateCmd.Env = env
 	gateCmd.Stdout = &gateOut

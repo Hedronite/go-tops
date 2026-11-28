@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strings"
 	"testing"
 	"time"
 
@@ -131,13 +130,14 @@ func TestEvaluationStatusesLedgerAndExemptions(t *testing.T) {
 	if err := os.Remove(ledgerFile); err != nil {
 		t.Fatal(err)
 	}
+	errCorruptLedger := errors.New("corrupt survivor ledger")
 	DefaultLedger = func(_, gotPath string, _ time.Time) (Ledger, error) {
 		if gotPath != ".go-tops/survivors.yaml" {
 			t.Fatalf("ledgerPath = %q, want slash-separated", gotPath)
 		}
-		return nil, errors.New("corrupt survivor ledger")
+		return nil, errCorruptLedger
 	}
-	if _, err := accounted(t, dir, cfg, today); err == nil || !strings.Contains(err.Error(), "corrupt survivor ledger") {
+	if _, err := accounted(t, dir, cfg, today); !errors.Is(err, errCorruptLedger) {
 		t.Fatalf("expected loader error, got %v", err)
 	}
 
@@ -265,7 +265,7 @@ func TestEvalHelpersAndBoundaries(t *testing.T) {
 	if l, err := loadConfiguredLedger(dir, "does-not-exist.yaml", time.Now()); err != nil || l != nil {
 		t.Fatalf("missing ledger got (%v,%v)", l, err)
 	}
-	if _, err := loadConfiguredLedger(dir, "oob.go", time.Now()); err == nil || !strings.Contains(err.Error(), "no ledger reader") {
+	if _, err := loadConfiguredLedger(dir, "oob.go", time.Now()); !errors.Is(err, ErrNoLedgerReader) {
 		t.Fatalf("existing ledger without reader got %v", err)
 	}
 

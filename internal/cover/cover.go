@@ -22,6 +22,14 @@ import (
 // §3.4 rule 5).
 var ErrNoBlocks = errors.New("the profile holds no block of a production file")
 
+// LineError marks a parse failure on a given profile line.
+type LineError struct {
+	Line   int
+	Detail string
+}
+
+func (e *LineError) Error() string { return fmt.Sprintf("line %d: %s", e.Line, e.Detail) }
+
 // Block is one line of a profile: a stretch of source holding Stmts statements
 // that ran Count times.
 type Block struct {
@@ -52,14 +60,14 @@ func Parse(r io.Reader) (*Profile, error) {
 		if p.Mode == "" {
 			mode, ok := strings.CutPrefix(line, "mode: ")
 			if !ok || (mode != "set" && mode != "count" && mode != "atomic") {
-				return nil, fmt.Errorf("line %d: a profile starts with a mode line (set, count or atomic), got %q", n, line)
+				return nil, &LineError{Line: n, Detail: fmt.Sprintf("a profile starts with a mode line (set, count or atomic), got %q", line)}
 			}
 			p.Mode = mode
 			continue
 		}
 		b, err := parseBlock(line)
 		if err != nil {
-			return nil, fmt.Errorf("line %d: %w", n, err)
+			return nil, &LineError{Line: n, Detail: err.Error()}
 		}
 		p.Blocks = append(p.Blocks, b)
 	}

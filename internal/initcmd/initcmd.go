@@ -4,6 +4,7 @@
 package initcmd
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -30,7 +31,7 @@ type Options struct {
 	Assets     fs.FS  // the kit's embedded files, in repo layout: profiles/, config/
 	KitVersion string // the gotops release; empty or not a release leaves gotops out of tools/go.mod
 	// Tidy fills tools/go.sum. Nil runs `go -C tools mod tidy` in Dir.
-	Tidy func(dir string) error
+	Tidy func(context.Context, string) error
 }
 
 // refusal is an error that exits 2.
@@ -46,7 +47,7 @@ type Printer interface {
 }
 
 // Run writes the files and returns the exit code.
-func Run(o Options, stdout, stderr Printer) int {
+func Run(ctx context.Context, o Options, stdout, stderr Printer) int {
 	p, err := buildPlan(o)
 	if err != nil {
 		stderr.Printf("gotops init: %v\n", err)
@@ -69,7 +70,7 @@ func Run(o Options, stdout, stderr Printer) int {
 		stdout.Printf("note: until tools/go.sum exists, the workflow's setup-go cache (cache-dependency-path: go.sum and tools/go.sum) finds no file in a module with no dependencies, and the job can fail at setup\n")
 		return ExitOK
 	}
-	return runTidy(o, stderr)
+	return runTidy(ctx, o, stderr)
 }
 
 func codeOf(err error) int {
@@ -80,23 +81,23 @@ func codeOf(err error) int {
 	return ExitFailure
 }
 
-func runTidy(o Options, stderr Printer) int {
+func runTidy(ctx context.Context, o Options, stderr Printer) int {
 	tidy := o.Tidy
 	if tidy == nil {
 		tidy = goModTidy
 	}
-	if err := tidy(o.Dir); err != nil {
+	if err := tidy(ctx, o.Dir); err != nil {
 		stderr.Printf("gotops init: go mod tidy for tools/go.mod: %v\n", err)
 		return ExitFailure
 	}
 	return ExitOK
 }
 
-func goModTidy(dir string) error {
+func goModTidy(ctx context.Context, dir string) error {
 	// Inside tools/, so the tools module is tidied on its own. From the module root,
 	// -modfile=tools/go.mod would read the adopter's packages as packages of the
 	// tools module and fail as soon as one imports another.
-	cmd := exec.Command("go", "-C", "tools", "mod", "tidy")
+	cmd := exec.CommandContext(ctx, "go", "-C", "tools", "mod", "tidy")
 	cmd.Dir = dir
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("%w\n%s", err, out)

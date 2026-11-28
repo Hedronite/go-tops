@@ -2,6 +2,7 @@ package mutate
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -14,7 +15,7 @@ import (
 
 func gitRun(t *testing.T, dir string, args ...string) string {
 	t.Helper()
-	cmd := exec.Command("git", args...)
+	cmd := exec.CommandContext(context.Background(), "git", args...)
 	cmd.Dir = dir
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -59,8 +60,8 @@ func TestComputeDiffShallowAndMissingBaseFailClosed(t *testing.T) {
 
 	shallow := filepath.Join(t.TempDir(), "shallow")
 	gitRun(t, t.TempDir(), "clone", "--depth=1", "file://"+origin, shallow)
-	if _, err := ComputeDiff(ctx, gate.OS{}, shallow, "main", b); err == nil || !strings.Contains(err.Error(), "fetch-depth: 0") {
-		t.Fatalf("shallow error = %v, want fetch-depth: 0 hint", err)
+	if _, err := ComputeDiff(ctx, gate.OS{}, shallow, "main", b); err == nil || !errors.Is(err, ErrNeedFetchDepthZero) {
+		t.Fatalf("shallow error = %v, want ErrNeedFetchDepthZero", err)
 	}
 
 	// Unrelated orphan branch with no merge base.
@@ -74,8 +75,8 @@ func TestComputeDiffShallowAndMissingBaseFailClosed(t *testing.T) {
 	}
 	gitRun(t, orphan, "add", ".")
 	gitRun(t, orphan, "commit", "-m", "orphan commit")
-	if _, err := ComputeDiff(ctx, gate.OS{}, orphan, "main", b); err == nil || !strings.Contains(err.Error(), "fetch-depth: 0") {
-		t.Fatalf("orphan error = %v, want fetch-depth: 0 hint", err)
+	if _, err := ComputeDiff(ctx, gate.OS{}, orphan, "main", b); err == nil || !errors.Is(err, ErrNeedFetchDepthZero) {
+		t.Fatalf("orphan error = %v, want ErrNeedFetchDepthZero", err)
 	}
 }
 

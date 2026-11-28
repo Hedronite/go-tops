@@ -3,6 +3,7 @@
 package initcmd
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"os/exec"
@@ -45,7 +46,7 @@ func skillJudges(t *testing.T, report []byte, code string) bool {
 		t.Fatal(err)
 	}
 	args[0] = abs
-	cmd := exec.Command("nu", args...)
+	cmd := exec.CommandContext(context.Background(), "nu", args...)
 	cmd.Dir = work
 	cmd.Env = append(os.Environ(), "FAKE_REPORT="+in, "FAKE_EXIT="+code)
 	out, err := cmd.Output()
@@ -84,7 +85,7 @@ func TestTheGateSkillAndTheDropInJudgeAgreeOnEveryCase(t *testing.T) {
 			if err := os.WriteFile(filepath.Join(dir, ".go-tops", "report.json"), []byte(c.doc.json(t)), 0o644); err != nil {
 				t.Fatal(err)
 			}
-			cmd := exec.Command("bash", "-e", "-c", judge.Run)
+			cmd := exec.CommandContext(context.Background(), "bash", "-e", "-c", judge.Run)
 			cmd.Dir = dir
 			cmd.Env = append(os.Environ(), "GATE_EXIT="+c.code, "LEG="+c.leg)
 			_, err := cmd.CombinedOutput()
@@ -139,7 +140,7 @@ func TestC9InterimParityCases(t *testing.T) {
 			if err := os.WriteFile(filepath.Join(dir, ".go-tops", "report.json"), []byte(c.doc.json(t)), 0o644); err != nil {
 				t.Fatal(err)
 			}
-			cmd := exec.Command("bash", "-e", "-c", judge.Run)
+			cmd := exec.CommandContext(context.Background(), "bash", "-e", "-c", judge.Run)
 			cmd.Dir = dir
 			cmd.Env = append(os.Environ(), "GATE_EXIT="+c.code, "LEG="+c.leg)
 			_, err := cmd.CombinedOutput()

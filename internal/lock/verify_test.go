@@ -1,6 +1,7 @@
 package lock
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -69,7 +70,7 @@ func place(t *testing.T, dir, name, content string) {
 
 // fakeRun answers go env GOVERSION with goVersion and refuses every other command.
 func fakeRun(goVersion string) Runner {
-	return func(_ string, argv ...string) (string, error) {
+	return func(_ context.Context, _ string, argv ...string) (string, error) {
 		if strings.Join(argv, " ") == "go env GOVERSION" {
 			return goVersion + "\n", nil
 		}
@@ -91,7 +92,7 @@ func find(fs []Finding, subject string) (Finding, bool) {
 func TestVerifyPassesWhenEveryPinMatches(t *testing.T) {
 	dir := writeLock(t, "go1.27.4", "tool", sha(t, "good binary"), false)
 	place(t, dir, "tool", "good binary")
-	fs := Verify(VerifyOptions{Dir: dir, Platform: platform, Run: fakeRun("go1.27.4"), LookPath: noPath})
+	fs := Verify(context.Background(), VerifyOptions{Dir: dir, Platform: platform, Run: fakeRun("go1.27.4"), LookPath: noPath})
 	if code := ExitCode(fs); code != 0 {
 		t.Fatalf("exit %d: %+v", code, fs)
 	}
@@ -106,7 +107,7 @@ func TestVerifyPassesWhenEveryPinMatches(t *testing.T) {
 func TestVerifyStaleBinaryIsAMismatch(t *testing.T) {
 	dir := writeLock(t, "go1.27.4", "tool", sha(t, "pinned build"), false)
 	place(t, dir, "tool", "an older build")
-	fs := Verify(VerifyOptions{Dir: dir, Platform: platform, Run: fakeRun("go1.27.4"), LookPath: noPath})
+	fs := Verify(context.Background(), VerifyOptions{Dir: dir, Platform: platform, Run: fakeRun("go1.27.4"), LookPath: noPath})
 	f, _ := find(fs, "tool")
 	if f.Status != StatusMismatch || ExitCode(fs) != 2 || !strings.Contains(f.Detail, "SHA-256") {
 		t.Fatalf("exit %d, finding %+v", ExitCode(fs), f)
@@ -116,7 +117,7 @@ func TestVerifyStaleBinaryIsAMismatch(t *testing.T) {
 func TestVerifyAWrongHashInTheLockIsAMismatch(t *testing.T) {
 	dir := writeLock(t, "go1.27.4", "tool", strings.Repeat("0", 64), false)
 	place(t, dir, "tool", "good binary")
-	if code := ExitCode(Verify(VerifyOptions{Dir: dir, Platform: platform, Run: fakeRun("go1.27.4"), LookPath: noPath})); code != 2 {
+	if code := ExitCode(Verify(context.Background(), VerifyOptions{Dir: dir, Platform: platform, Run: fakeRun("go1.27.4"), LookPath: noPath})); code != 2 {
 		t.Fatalf("exit %d, want 2", code)
 	}
 }
@@ -130,11 +131,11 @@ func TestVerifyFindsTheBinaryOnPath(t *testing.T) {
 		t.Fatal(err)
 	}
 	look := func(string) (string, error) { return p, nil }
-	if code := ExitCode(Verify(VerifyOptions{Dir: dir, Platform: platform, Run: fakeRun("go1.27.4"), LookPath: look})); code != 0 {
+	if code := ExitCode(Verify(context.Background(), VerifyOptions{Dir: dir, Platform: platform, Run: fakeRun("go1.27.4"), LookPath: look})); code != 0 {
 		t.Fatalf("exit %d, want 0", code)
 	}
 	place(t, dir, "tool", "shadow in .go-tops/bin")
-	if code := ExitCode(Verify(VerifyOptions{Dir: dir, Platform: platform, Run: fakeRun("go1.27.4"), LookPath: look})); code != 2 {
+	if code := ExitCode(Verify(context.Background(), VerifyOptions{Dir: dir, Platform: platform, Run: fakeRun("go1.27.4"), LookPath: look})); code != 2 {
 		t.Fatalf(".go-tops/bin comes first, so the shadow must mismatch: exit %d", code)
 	}
 }
@@ -142,11 +143,11 @@ func TestVerifyFindsTheBinaryOnPath(t *testing.T) {
 // §12.2: an absent tool is tool-missing, exit 1; a mismatch outranks it.
 func TestVerifyAbsentToolExitsOne(t *testing.T) {
 	dir := writeLock(t, "go1.27.4", "tool", sha(t, "good binary"), false)
-	fs := Verify(VerifyOptions{Dir: dir, Platform: platform, Run: fakeRun("go1.27.4"), LookPath: noPath})
+	fs := Verify(context.Background(), VerifyOptions{Dir: dir, Platform: platform, Run: fakeRun("go1.27.4"), LookPath: noPath})
 	if f, _ := find(fs, "tool"); f.Status != StatusMissing || ExitCode(fs) != 1 {
 		t.Fatalf("exit %d, finding %+v", ExitCode(fs), f)
 	}
-	bad := Verify(VerifyOptions{Dir: dir, Platform: platform, Run: fakeRun("go1.26.1"), LookPath: noPath})
+	bad := Verify(context.Background(), VerifyOptions{Dir: dir, Platform: platform, Run: fakeRun("go1.26.1"), LookPath: noPath})
 	if ExitCode(bad) != 2 {
 		t.Fatalf("a mismatch outranks a missing tool: exit %d", ExitCode(bad))
 	}
@@ -155,7 +156,7 @@ func TestVerifyAbsentToolExitsOne(t *testing.T) {
 func TestVerifyToolchainMismatchExitsTwo(t *testing.T) {
 	dir := writeLock(t, "go1.27.4", "tool", sha(t, "x"), false)
 	place(t, dir, "tool", "x")
-	fs := Verify(VerifyOptions{Dir: dir, Platform: platform, Run: fakeRun("go1.27.3"), LookPath: noPath})
+	fs := Verify(context.Background(), VerifyOptions{Dir: dir, Platform: platform, Run: fakeRun("go1.27.3"), LookPath: noPath})
 	f, _ := find(fs, "toolchain")
 	if f.Status != StatusMismatch || ExitCode(fs) != 2 || !strings.Contains(f.Detail, "go1.27.3") || !strings.Contains(f.Detail, "go1.27.4") {
 		t.Fatalf("exit %d, finding %+v", ExitCode(fs), f)
@@ -165,14 +166,14 @@ func TestVerifyToolchainMismatchExitsTwo(t *testing.T) {
 // A lock that does not load fails the run with exit 2, by the schema.
 func TestVerifyMissingOrInvalidLockExitsTwo(t *testing.T) {
 	empty := t.TempDir()
-	if code := ExitCode(Verify(VerifyOptions{Dir: empty, Run: fakeRun("go1.27.4"), LookPath: noPath})); code != 2 {
+	if code := ExitCode(Verify(context.Background(), VerifyOptions{Dir: empty, Run: fakeRun("go1.27.4"), LookPath: noPath})); code != 2 {
 		t.Errorf("no lock: exit %d, want 2", code)
 	}
 	dir := writeLock(t, "go1.27.4", "tool", sha(t, "x"), false)
 	if err := os.WriteFile(filepath.Join(dir, FileName), []byte("protocol: \""+protocolID+"\"\nbogus_key: 1\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if code := ExitCode(Verify(VerifyOptions{Dir: dir, Run: fakeRun("go1.27.4"), LookPath: noPath})); code != 2 {
+	if code := ExitCode(Verify(context.Background(), VerifyOptions{Dir: dir, Run: fakeRun("go1.27.4"), LookPath: noPath})); code != 2 {
 		t.Errorf("invalid lock: exit %d, want 2", code)
 	}
 }
@@ -183,12 +184,12 @@ func TestVerifyMissingOrInvalidLockExitsTwo(t *testing.T) {
 func TestVerifyAnArchiveEntryComparesTheExecutableHash(t *testing.T) {
 	dir := writeLock(t, "go1.27.4", "tool", sha(t, "the executable inside the archive"), true)
 	place(t, dir, "tool", "the executable inside the archive")
-	fs := Verify(VerifyOptions{Dir: dir, Platform: platform, Run: fakeRun("go1.27.4"), LookPath: noPath})
+	fs := Verify(context.Background(), VerifyOptions{Dir: dir, Platform: platform, Run: fakeRun("go1.27.4"), LookPath: noPath})
 	if f, _ := find(fs, "tool"); f.Status != StatusOK || ExitCode(fs) != 0 {
 		t.Fatalf("exit %d, finding %+v", ExitCode(fs), f)
 	}
 	place(t, dir, "tool", "an older build of the executable")
-	fs = Verify(VerifyOptions{Dir: dir, Platform: platform, Run: fakeRun("go1.27.4"), LookPath: noPath})
+	fs = Verify(context.Background(), VerifyOptions{Dir: dir, Platform: platform, Run: fakeRun("go1.27.4"), LookPath: noPath})
 	if f, _ := find(fs, "tool"); f.Status != StatusMismatch || ExitCode(fs) != 2 {
 		t.Fatalf("a stale executable must mismatch: exit %d, finding %+v", ExitCode(fs), f)
 	}
@@ -238,7 +239,7 @@ func TestParseToolsMod(t *testing.T) {
 // moduleRun fakes go build and go version -m for the module tools: version[name]
 // is what the built binary reports for its module.
 func moduleRun(goVersion string, reports map[string]string) Runner {
-	return func(dir string, argv ...string) (string, error) {
+	return func(_ context.Context, dir string, argv ...string) (string, error) {
 		cmd := strings.Join(argv, " ")
 		switch {
 		case cmd == "go env GOVERSION":
@@ -276,12 +277,12 @@ func TestVerifyModuleToolsReadGoVersionM(t *testing.T) {
 		"govulncheck": buildInfo("golang.org/x/vuln", "v1.9.0"),
 		"gotestsum":   buildInfo("gotest.tools/gotestsum", "v1.13.0"),
 	}
-	fs := Verify(VerifyOptions{Dir: dir, Platform: platform, Run: moduleRun("go1.27.4", reports), LookPath: noPath})
+	fs := Verify(context.Background(), VerifyOptions{Dir: dir, Platform: platform, Run: moduleRun("go1.27.4", reports), LookPath: noPath})
 	if code := ExitCode(fs); code != 0 {
 		t.Fatalf("exit %d: %+v", code, fs)
 	}
 	reports["govulncheck"] = buildInfo("golang.org/x/vuln", "v1.8.0")
-	fs = Verify(VerifyOptions{Dir: dir, Platform: platform, Run: moduleRun("go1.27.4", reports), LookPath: noPath})
+	fs = Verify(context.Background(), VerifyOptions{Dir: dir, Platform: platform, Run: moduleRun("go1.27.4", reports), LookPath: noPath})
 	f, _ := find(fs, "govulncheck")
 	if f.Status != StatusMismatch || ExitCode(fs) != 2 || !strings.Contains(f.Detail, "v1.8.0") || !strings.Contains(f.Detail, "v1.9.0") {
 		t.Fatalf("exit %d, finding %+v", ExitCode(fs), f)
@@ -298,16 +299,16 @@ func TestVerifyStaleModuleToolBinaryInGoTopsBin(t *testing.T) {
 		"go-licenses": buildInfo("github.com/google/go-licenses/v2", "v2.0.1"),
 		"gotestsum":   buildInfo("gotest.tools/gotestsum", "v1.13.0"),
 	}
-	run := func(d string, argv ...string) (string, error) {
+	run := func(ctx context.Context, d string, argv ...string) (string, error) {
 		if argv[1] == "version" && strings.Contains(argv[len(argv)-1], ".go-tops") {
 			return buildInfo("golang.org/x/vuln", "v1.7.0"), nil
 		}
 		if argv[1] == "version" && filepath.Base(argv[len(argv)-1]) == "govulncheck" {
 			return buildInfo("golang.org/x/vuln", "v1.9.0"), nil
 		}
-		return moduleRun("go1.27.4", reports)(d, argv...)
+		return moduleRun("go1.27.4", reports)(ctx, d, argv...)
 	}
-	fs := Verify(VerifyOptions{Dir: dir, Platform: platform, Run: run, LookPath: noPath})
+	fs := Verify(context.Background(), VerifyOptions{Dir: dir, Platform: platform, Run: run, LookPath: noPath})
 	if f, ok := find(fs, "govulncheck (.go-tops/bin)"); !ok || f.Status != StatusMismatch || ExitCode(fs) != 2 {
 		t.Fatalf("exit %d, findings %+v", ExitCode(fs), fs)
 	}
@@ -317,13 +318,13 @@ func TestVerifyAToolThatCannotBeBuiltIsMissing(t *testing.T) {
 	dir := writeLock(t, "go1.27.4", "tool", sha(t, "x"), false)
 	place(t, dir, "tool", "x")
 	writeTools(t, dir)
-	run := func(_ string, argv ...string) (string, error) {
+	run := func(_ context.Context, _ string, argv ...string) (string, error) {
 		if argv[1] == "env" {
 			return "go1.27.4\n", nil
 		}
 		return "", errors.New("module not in cache")
 	}
-	fs := Verify(VerifyOptions{Dir: dir, Platform: platform, Run: run, LookPath: noPath})
+	fs := Verify(context.Background(), VerifyOptions{Dir: dir, Platform: platform, Run: run, LookPath: noPath})
 	if f, _ := find(fs, "govulncheck"); f.Status != StatusMissing || ExitCode(fs) != 1 {
 		t.Fatalf("exit %d, finding %+v", ExitCode(fs), f)
 	}
@@ -367,13 +368,13 @@ func TestVerifyBuildFailureKinds(t *testing.T) {
 			dir := writeLock(t, "go1.27.4", "tool", sha(t, "x"), false)
 			place(t, dir, "tool", "x")
 			writeTools(t, dir)
-			run := func(_ string, argv ...string) (string, error) {
+			run := func(_ context.Context, _ string, argv ...string) (string, error) {
 				if argv[1] == "env" {
 					return "go1.27.4\n", nil
 				}
 				return "", errors.New(strings.Join(argv, " ") + ": exit status 1: " + c.stderr)
 			}
-			fs := Verify(VerifyOptions{Dir: dir, Platform: platform, Run: run, LookPath: noPath})
+			fs := Verify(context.Background(), VerifyOptions{Dir: dir, Platform: platform, Run: run, LookPath: noPath})
 			f, _ := find(fs, "govulncheck")
 			wantCode := 1
 			if c.want == StatusMismatch {

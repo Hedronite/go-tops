@@ -16,10 +16,11 @@ import (
 
 // CommandDeps are what `gotops gate` needs from its surroundings.
 type CommandDeps struct {
-	Dir string
+	ScanAcks func(dir, ackPath string) (laws.FileCounts, error)
+	Dir      string
 	// LoadConfig loads, validates and merges go-tops.yaml. An error is a
 	// configuration failure: exit 2.
-	LoadConfig  func(dir string) (Config, error)
+	LoadConfig  func(ctx context.Context, dir string) (Config, error)
 	Layers      []Layer // default: Layers()
 	Exec        Executor
 	Tools       Resolver
@@ -62,12 +63,13 @@ func Main(ctx context.Context, args []string, d CommandDeps, stdout, stderr Prin
 	if !ok {
 		return code
 	}
-	cfg, code, ok := loadConfig(d, stderr)
+	cfg, code, ok := loadConfig(ctx, d, stderr)
 	if !ok {
 		return code
 	}
 	res, err := Execute(ctx, cfg, o, Deps{
-		Dir: d.Dir, Layers: d.Layers, Exec: d.Exec, Tools: d.Tools, CI: d.CI, Now: d.Now, ToolVersion: d.ToolVersion, LawPass: d.LawPass, LawsRun: d.LawsRun,
+		Dir: d.Dir, Layers: d.Layers, Exec: d.Exec, Tools: d.Tools, CI: d.CI, Now: d.Now,
+		ToolVersion: d.ToolVersion, LawPass: d.LawPass, LawsRun: d.LawsRun, ScanAcks: d.ScanAcks,
 	})
 	if err != nil {
 		stderr.Printf("gotops gate: %v\n", err)
@@ -116,8 +118,8 @@ func parseOptions(args []string, stdout, stderr Printer) (o Options, asJSON bool
 // loadConfig loads the configuration the run judges. ok is false when it cannot
 // be loaded, with the exit code: an environment error is 3, an invalid
 // configuration is 2.
-func loadConfig(d CommandDeps, stderr Printer) (cfg Config, code int, ok bool) {
-	cfg, err := d.LoadConfig(d.Dir)
+func loadConfig(ctx context.Context, d CommandDeps, stderr Printer) (cfg Config, code int, ok bool) {
+	cfg, err := d.LoadConfig(ctx, d.Dir)
 	if err == nil {
 		return cfg, ExitOK, true
 	}

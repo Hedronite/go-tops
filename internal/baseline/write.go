@@ -12,6 +12,7 @@ type Measure struct {
 	Functions  map[string]float64 // CRAP score of each function over the cap
 	Packages   map[string]Package // each package under the coverage floor
 	Findings   Counts             // lint findings no law maps, per linter and file
+	Laws       Counts             // law refusals, per law ID and file
 	Nolint     Counts             // //nolint comments, per linter and file
 	Ack        Counts             // //tops:ack comments and acks.yaml entries, per law and file
 	Exemptions int                // live exemption records
@@ -154,7 +155,8 @@ func putSurvivor(l *Ledger, _ map[ekey]float64, k ekey, v float64) {
 // trip through the flat form copies every map and drops counts of zero.
 func (m Measure) asFile() File {
 	return unflat(flat(File{JudgedLaws: m.JudgedLaws, Ledger: Ledger{
-		Functions: m.Functions, Packages: m.Packages, Findings: m.Findings, Nolint: m.Nolint, Ack: m.Ack, Exemptions: m.Exemptions,
+		Functions: m.Functions, Packages: m.Packages, Findings: m.Findings, Laws: m.Laws,
+		Nolint: m.Nolint, Ack: m.Ack, Exemptions: m.Exemptions,
 	}}), nil)
 }
 

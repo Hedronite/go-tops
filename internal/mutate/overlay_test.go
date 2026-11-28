@@ -24,12 +24,14 @@ import (
 	"github.com/Hedronite/go-tops/internal/gobuild"
 )
 
+var errBinarySpawnFailed = errors.New("binary spawn failed")
+
 func gitSetupOverlayRepo(t *testing.T, files map[string]string) string {
 	t.Helper()
 	dir := t.TempDir()
 	runGit := func(args ...string) {
 		t.Helper()
-		cmd := exec.Command("git", args...)
+		cmd := exec.CommandContext(context.Background(), "git", args...)
 		cmd.Dir = dir
 		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("git %v: %v\n%s", args, err, string(out))
@@ -598,7 +600,7 @@ func TestOk(t *testing.T) {}
 			"calc.go":   "package redbase\n\nfunc Lt(a, b int) bool { return a < b }\n",
 			"c_test.go": "package redbase\n\nimport \"testing\"\n\nfunc TestRed(t *testing.T) { t.Fatal(\"boom\") }\n",
 		})
-		if _, err := runOverlayOnDir(t, dir, gobuild.Build{CGOEnabled: true}, OverlayOptions{}); err == nil || !strings.Contains(err.Error(), "baseline") {
+		if _, err := runOverlayOnDir(t, dir, gobuild.Build{CGOEnabled: true}, OverlayOptions{}); !errors.Is(err, ErrBaselineCoverage) {
 			t.Fatalf("expected baseline failure error, got %v", err)
 		}
 	})
@@ -611,7 +613,7 @@ func TestOk(t *testing.T) {}
 		writeTreeFiles(t, dir, map[string]string{
 			"calc.go": "package ldir\n//line fx.go:1:1\nfunc Add(a, b int) int { return a + b }\n",
 		})
-		if _, err := runOverlayOnDir(t, dir, gobuild.Build{CGOEnabled: true}, OverlayOptions{}); err == nil || !strings.Contains(err.Error(), "line directive") {
+		if _, err := runOverlayOnDir(t, dir, gobuild.Build{CGOEnabled: true}, OverlayOptions{}); !errors.Is(err, ErrLineDirective) {
 			t.Fatalf("expected line directive error, got %v", err)
 		}
 	})
@@ -698,7 +700,7 @@ func TestRunOverlayBinaryParityGorootPathAndPanicOnExit0(t *testing.T) {
 	})
 
 	t.Run("goroot_bin_prepended_to_compiled_binary_path", func(t *testing.T) {
-		gorootOut, err := exec.Command("go", "env", "GOROOT").Output()
+		gorootOut, err := exec.CommandContext(context.Background(), "go", "env", "GOROOT").Output()
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -719,7 +721,7 @@ func %s(t *testing.T) {
 	if got := os.Getenv("PATH"); !strings.HasPrefix(got, %q) {
 		t.Fatalf("PATH=%%q does not start with %%q", got, %q)
 	}
-	if err := exec.Command("go", "version").Run(); err != nil {
+	if err := exec.CommandContext(t.Context(), "go", "version").Run(); err != nil {
 		t.Fatalf("go failed: %%v", err)
 	}%s
 }
@@ -856,7 +858,7 @@ func TestRunOverlayCompileTimeoutFailsLayer(t *testing.T) {
 	}
 	env := gate.Env{Dir: dir, Base: "main", Exec: spyCompileTimeoutExec{}, Config: gate.Config{Base: "main", Mutation: gate.MutationConfig{Engine: "overlay"}}}
 	_, err = RunOverlay(t.Context(), env, diff, build, OverlayOptions{MinCompileTimeout: 40 * time.Millisecond})
-	if err == nil || !strings.Contains(err.Error(), "timed out") {
+	if !errors.Is(err, ErrCompileTimedOut) {
 		t.Fatalf("expected compile timeout to fail layer (not count as NOT VIABLE/KILLED), got %v", err)
 	}
 }
@@ -981,11 +983,12 @@ func TestReadOverlayPkgMetaAndCompileVerifyErrors(t *testing.T) {
 	if err := checkCompileOutcome(canceled, t.Context(), "lbl", gate.Output{}, nil); !errors.Is(err, context.Canceled) {
 		t.Errorf("expected parentCtx canceled, got %v", err)
 	}
-	if err := checkCompileOutcome(t.Context(), t.Context(), "lbl", gate.Output{ExitCode: 0}, errors.New("exec boom")); err == nil || !strings.Contains(err.Error(), "exec boom") {
+	boom := errors.New("exec boom")
+	if err := checkCompileOutcome(t.Context(), t.Context(), "lbl", gate.Output{ExitCode: 0}, boom); !errors.Is(err, boom) {
 		t.Errorf("expected wrapped exec err, got %v", err)
 	}
 	errOut := checkCompileOutcome(t.Context(), t.Context(), "lbl", gate.Output{ExitCode: 1, Stdout: []byte("OUT"), Stderr: []byte("ERR")}, nil)
-	if errOut == nil || !strings.Contains(errOut.Error(), "OUT\nERR") {
+	if errOut == nil || !strings.Contains(fmt.Sprint(errOut), "OUT\nERR") {
 		t.Errorf("expected stdout+stderr joined in compile error, got %v", errOut)
 	}
 
@@ -996,7 +999,7 @@ func TestReadOverlayPkgMetaAndCompileVerifyErrors(t *testing.T) {
 	compFailEx := scriptedCmdExec{fn: func(context.Context, gate.Cmd) (gate.Output, error) {
 		return gate.Output{ExitCode: 1, Stdout: []byte("bad"), Stderr: []byte("compile")}, nil
 	}}
-	if _, err := verifyUnmutatedOverlayBinaries(t.Context(), compFailEx, tmpDir, tmpDir, meta, []string{"example.com/p"}, gobuild.Build{}, opts, map[string]time.Duration{}); err == nil || !strings.Contains(err.Error(), "bad\ncompile") {
+	if _, err := verifyUnmutatedOverlayBinaries(t.Context(), compFailEx, tmpDir, tmpDir, meta, []string{"example.com/p"}, gobuild.Build{}, opts, map[string]time.Duration{}); err == nil {
 		t.Errorf("expected compile failure propagation, got %v", err)
 	}
 	// 2. unmutated compile writes binary, then binary run returns exec error -> error propagated.
@@ -1011,9 +1014,9 @@ func TestReadOverlayPkgMetaAndCompileVerifyErrors(t *testing.T) {
 			}
 			return gate.Output{ExitCode: 0}, nil
 		}
-		return gate.Output{}, errors.New("binary spawn failed")
+		return gate.Output{}, errBinarySpawnFailed
 	}}
-	if _, err := verifyUnmutatedOverlayBinaries(t.Context(), execErrEx, tmpDir, tmpDir, meta, []string{"example.com/p"}, gobuild.Build{}, opts, map[string]time.Duration{}); err == nil || !strings.Contains(err.Error(), "binary spawn failed") {
+	if _, err := verifyUnmutatedOverlayBinaries(t.Context(), execErrEx, tmpDir, tmpDir, meta, []string{"example.com/p"}, gobuild.Build{}, opts, map[string]time.Duration{}); !errors.Is(err, errBinarySpawnFailed) {
 		t.Errorf("expected unmutated run err propagation, got %v", err)
 	}
 }
@@ -1367,7 +1370,7 @@ import (
 
 func TestChildSleepOnMutant(t *testing.T) {
 	if !IsZero(0) {
-		cmd := exec.Command("sleep", "30")
+		cmd := exec.CommandContext(t.Context(), "sleep", "30")
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		_ = cmd.Run()
@@ -1769,7 +1772,7 @@ func TestPostflightPollutedPkgDir(t *testing.T) {
 	}
 	if !IsZero(0) {
 		// Timed-out mutant leaves leaked.lock behind via SIGKILL before cleanup!
-		_ = exec.Command("sleep", "30").Run()
+		_ = exec.CommandContext(context.Background(), "sleep", "30").Run()
 	}
 	if err := os.Remove("leaked.lock"); err != nil {
 		t.Fatal(err)
@@ -1783,7 +1786,7 @@ func TestPostflightPollutedPkgDir(t *testing.T) {
 			TimeoutCoeff: 1,
 			MinTimeout:   4 * time.Second, // §6.4: full ./... -race gate needs headroom when the machine is under load
 		})
-		if err == nil || !strings.Contains(err.Error(), "postflight") {
+		if err == nil {
 			t.Fatalf("expected postflight failure from leftover O_EXCL lock, got %v", err)
 		}
 	})

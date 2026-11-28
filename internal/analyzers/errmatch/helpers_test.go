@@ -57,7 +57,7 @@ func f(err error) bool {
 	}
 }
 
-func TestRunSkipsTestGoFiles(t *testing.T) {
+func TestRunReportsInTestGoFiles(t *testing.T) {
 	fset := token.NewFileSet()
 	f, err := parser.ParseFile(fset, "x_test.go", `package p
 func TestX(t *testing.T) {
@@ -67,9 +67,16 @@ func TestX(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	pass := &analysis.Pass{Analyzer: Analyzer, Fset: fset, Files: []*ast.File{f}}
+	var reports int
+	pass := &analysis.Pass{
+		Analyzer: Analyzer, Fset: fset, Files: []*ast.File{f},
+		Report: func(analysis.Diagnostic) { reports++ },
+	}
 	if _, err := run(pass); err != nil {
 		t.Fatal(err)
+	}
+	if reports != 1 {
+		t.Fatalf("reports=%d want 1 in _test.go", reports)
 	}
 }
 

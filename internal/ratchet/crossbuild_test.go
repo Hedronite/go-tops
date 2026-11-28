@@ -1,6 +1,7 @@
 package ratchet_test
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -43,7 +44,7 @@ func ledgerBuilds(host gobuild.Build) map[string]gobuild.Build {
 
 func TestOtherLegSkipsWhateverBuildTheLedgerRecords(t *testing.T) {
 	probe := legacyProject(t)
-	host, err := gobuild.Resolve(probe.dir, tests.Build)
+	host, err := gobuild.Resolve(context.Background(), probe.dir, tests.Build)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,7 +79,7 @@ func TestOtherLegSkipsWhateverBuildTheLedgerRecords(t *testing.T) {
 // and a file only this build selects does.
 func TestOtherLegStillHoldsWhatOnlyItCompiles(t *testing.T) {
 	probe := legacyProject(t)
-	host, err := gobuild.Resolve(probe.dir, tests.Build)
+	host, err := gobuild.Resolve(context.Background(), probe.dir, tests.Build)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -110,7 +111,7 @@ func TestOtherLegStillHoldsWhatOnlyItCompiles(t *testing.T) {
 // layer's, never the ratchet's.
 func TestOtherLegThatCannotReadTheLedgerSourcesSkipsTheRatchetAndFailsCrapClosed(t *testing.T) {
 	probe := legacyProject(t)
-	host, err := gobuild.Resolve(probe.dir, tests.Build)
+	host, err := gobuild.Resolve(context.Background(), probe.dir, tests.Build)
 	if err != nil {
 		t.Fatal(err)
 	}

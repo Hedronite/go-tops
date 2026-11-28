@@ -68,6 +68,28 @@ func TestJudgeMaxTierZero(t *testing.T) {
 	}
 }
 
+func TestVerdictForAllowAtZeroInstances(t *testing.T) {
+	if verdictFor("G-11", Evidence{}, 0) != Allow {
+		t.Fatal("want allow at zero")
+	}
+}
+
+func TestVerdictForAckWhenLedgerCovers(t *testing.T) {
+	ev := Evidence{
+		Refusals: map[string]map[string]int{"G-30": {"a.go": 1}},
+		Acks:     map[string]map[string]int{"G-30": {"a.go": 1}},
+	}
+	if verdictFor("G-30", ev, 1) != Ack {
+		t.Fatal("want ack when counts covered")
+	}
+}
+
+func TestLawSeverityUnknownIDIsRefuse(t *testing.T) {
+	if lawSeverity("G-999") != SeverityR {
+		t.Fatal("want refuse severity for unknown catalog id")
+	}
+}
+
 func TestJudgeAnalyzerEvidence(t *testing.T) {
 	m := byID(Judge(Input{
 		Class: "binary-cli", MaxTier: 0, InRange: true, Reached: true, Required: cliRequired,
@@ -163,6 +185,26 @@ func TestJudgeToolWithoutLintPass(t *testing.T) {
 	}))
 	if m["G-02"].Reason != InputMissing {
 		t.Fatalf("G-02 = %+v", m["G-02"])
+	}
+}
+
+// G-12 is severity refuse: a ledger ack that mirrors refusals must not downgrade the verdict.
+func TestJudgeRLawG12StaysRefuseDespiteValidLookingAck(t *testing.T) {
+	const file = "internal/check.go"
+	m := byID(Judge(Input{
+		Class: "binary-cli", MaxTier: 1, InRange: true, Reached: true, Required: cliRequired,
+		Evidence: Evidence{
+			LintPassOK: true,
+			Lint:       lawpass.LintResult{ByLaw: map[string]int{"G-12": 1}},
+			Hygiene: HygieneEvidence{
+				Ran: true, TidyPass: true, VerifyPass: true, VulnsPass: true,
+			},
+			Refusals: map[string]map[string]int{"G-12": {file: 1}},
+			Acks:     map[string]map[string]int{"G-12": {file: 1}},
+		},
+	}))
+	if m["G-12"].Verdict != Refuse {
+		t.Fatalf("G-12 = %+v, want refuse (R laws are never ackable)", m["G-12"])
 	}
 }
 

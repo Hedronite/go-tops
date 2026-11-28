@@ -1,6 +1,7 @@
 package initcmd
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"strings"
@@ -22,7 +23,7 @@ func fixedNow() time.Time { return time.Date(2026, 11, 17, 15, 4, 5, 0, time.UTC
 
 func checkDir(t *testing.T, dir string) config.Result {
 	t.Helper()
-	res, err := config.Check(dir, config.Options{Now: fixedNow})
+	res, err := config.Check(context.Background(), dir, config.Options{Now: fixedNow})
 	if err != nil {
 		t.Fatalf("check: %v", err)
 	}

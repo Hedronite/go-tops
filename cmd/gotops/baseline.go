@@ -280,7 +280,7 @@ func openBaseline(ctx context.Context, env cli.Env, a baselineArgs) (*baselineRu
 	if err != nil {
 		return nil, bfail(baselineEnv, "%v", err)
 	}
-	cfg, acks, rel, err := loadBaselineConfig(dir)
+	cfg, acks, rel, err := loadBaselineConfig(ctx, dir)
 	if err != nil {
 		return nil, err
 	}
@@ -288,11 +288,11 @@ func openBaseline(ctx context.Context, env cli.Env, a baselineArgs) (*baselineRu
 		return nil, bfail(baselineRefused, "refused under enforce: advisory: the baseline cannot be written (GO_TOPS.md §6.7)")
 	}
 	r := &baselineRun{env: env, a: a, dir: dir, rel: rel, path: filepath.Join(dir, filepath.FromSlash(rel)), acks: acks, cfg: cfg}
-	if err := r.findLedger(); err != nil {
+	if err := r.findLedger(ctx); err != nil {
 		return nil, err
 	}
 	if !a.init {
-		if err := r.requireClean(); err != nil {
+		if err := r.requireClean(ctx); err != nil {
 			return nil, err
 		}
 	}
@@ -305,10 +305,10 @@ func openBaseline(ctx context.Context, env cli.Env, a baselineArgs) (*baselineRu
 // findLedger reads the ledger a plain write, an accept or a rename changes, and
 // refuses --init when one exists: in the tree or at HEAD, because deleting the
 // file is not a reset.
-func (r *baselineRun) findLedger() error {
+func (r *baselineRun) findLedger(ctx context.Context) error {
 	old, exists, err := readLedger(r.path, r.rel)
 	switch {
-	case r.a.init && (exists || trackedAtHead(r.dir, r.rel)):
+	case r.a.init && (exists || trackedAtHead(ctx, r.dir, r.rel)):
 		return bfail(baselineRefused, "%s exists, in the tree or at HEAD: --init writes a first ledger only, and deleting the file is not a reset (GO_TOPS.md §6.7). A later write is `gotops baseline`", r.rel)
 	case !r.a.init && !exists:
 		return bfail(baselineCustody, "%s does not exist: under ratchet a missing baseline is a custody failure. The first ledger is `gotops baseline --init`", r.rel)
@@ -322,8 +322,8 @@ func (r *baselineRun) findLedger() error {
 // requireClean refuses a write when the ledger in the working tree is not the
 // copy at HEAD, whatever the enforcement mode: a hand edit would otherwise be
 // lowered back to a value above the committed one, with no record.
-func (r *baselineRun) requireClean() error {
-	why := ledgerProblem(r.dir, r.rel)
+func (r *baselineRun) requireClean(ctx context.Context) error {
+	why := ledgerProblem(ctx, r.dir, r.rel)
 	if why == "" {
 		return nil
 	}
@@ -333,8 +333,8 @@ func (r *baselineRun) requireClean() error {
 // ledgerProblem says why the ledger is not the copy at HEAD, or "" when it is
 // tracked and unchanged, or when the directory is not a git repository (check
 // settles that under ratchet). It is the rule `check` applies to the baseline.
-func ledgerProblem(dir, rel string) string {
-	if gitExit(dir, "rev-parse", "--is-inside-work-tree") != 0 {
+func ledgerProblem(ctx context.Context, dir, rel string) string {
+	if gitExit(ctx, dir, "rev-parse", "--is-inside-work-tree") != 0 {
 		return ""
 	}
 	for _, s := range []struct {
@@ -345,7 +345,7 @@ func ledgerProblem(dir, rel string) string {
 		{"is not tracked by git", []string{"ls-files", "--error-unmatch", "--", rel}},
 		{"differs from HEAD", []string{"diff", "--quiet", "HEAD", "--", rel}},
 	} {
-		if gitExit(dir, s.args...) != 0 {
+		if gitExit(ctx, dir, s.args...) != 0 {
 			return s.problem
 		}
 	}
@@ -353,8 +353,8 @@ func ledgerProblem(dir, rel string) string {
 }
 
 // gitExit runs git in dir and returns its exit code, or -1 when it did not run.
-func gitExit(dir string, args ...string) int {
-	err := exec.Command("git", append([]string{"-C", dir}, args...)...).Run()
+func gitExit(ctx context.Context, dir string, args ...string) int {
+	err := exec.CommandContext(ctx, "git", append([]string{"-C", dir}, args...)...).Run()
 	var exit *exec.ExitError
 	switch {
 	case err == nil:
@@ -469,8 +469,8 @@ func measure(ctx context.Context, dir string, cfg gate.Config, acks string, buil
 // currentBuild is the build of the run: the tests layer's build with the GOOS and
 // GOARCH the go command resolves (gobuild.Resolve), because a ledger that left
 // them empty would let every platform write it.
-func currentBuild(_ context.Context, dir string) (baseline.Build, error) {
-	b, err := gobuild.Resolve(dir, tests.Build)
+func currentBuild(ctx context.Context, dir string) (baseline.Build, error) {
+	b, err := gobuild.Resolve(ctx, dir, tests.Build)
 	if err != nil {
 		return baseline.Build{}, err
 	}
@@ -519,7 +519,7 @@ func runLayers(ctx context.Context, dir string, cfg gate.Config, layers []gate.L
 	// The feeding layers read figures and judge nothing, so they run under hard:
 	// the ratchet judgment, once it is wired into the gate, never runs for a write.
 	cfg.Enforce = "hard"
-	deps := gate.Deps{Dir: dir, Layers: layers, ToolVersion: toolVersion()}
+	deps := gate.Deps{Dir: dir, Layers: layers, ToolVersion: toolVersion(), ScanAcks: scanAcks}
 	if testLawPass != nil {
 		deps.LawPass = testLawPass
 	}
@@ -551,8 +551,8 @@ func startError(err error) *baselineError {
 // against HEAD is what this command is here to settle. A ledger that does not
 // parse or is not valid stays an issue. It returns the gate's configuration,
 // the module-relative path of the acks file and of the ledger.
-func loadBaselineConfig(dir string) (gate.Config, string, string, error) {
-	res, err := config.Check(dir, config.Options{})
+func loadBaselineConfig(ctx context.Context, dir string) (gate.Config, string, string, error) {
+	res, err := config.Check(ctx, dir, config.Options{})
 	if err != nil {
 		return gate.Config{}, "", "", bfail(baselineEnv, "%v", err)
 	}
@@ -586,8 +586,8 @@ func loadBaselineConfig(dir string) (gate.Config, string, string, error) {
 // module need not be. A ledger deleted from
 // the working tree is still the repo's ledger, so --init does not stand in for
 // it. A directory git cannot read has none.
-func trackedAtHead(dir, rel string) bool {
-	return exec.Command("git", "-C", dir, "cat-file", "-e", "HEAD:./"+rel).Run() == nil
+func trackedAtHead(ctx context.Context, dir, rel string) bool {
+	return exec.CommandContext(ctx, "git", "-C", dir, "cat-file", "-e", "HEAD:./"+rel).Run() == nil
 }
 
 // readLedger reads the ledger. A file that is there but is not a ledger is a

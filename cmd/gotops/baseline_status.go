@@ -49,12 +49,12 @@ func status(ctx context.Context, a baselineArgs) (statusLine, int) {
 	if err != nil {
 		return cannotTell(statusLine{}, err.Error())
 	}
-	cfg, _, rel, err := loadBaselineConfig(dir)
+	cfg, _, rel, err := loadBaselineConfig(ctx, dir)
 	if err != nil {
 		return cannotTell(statusLine{}, err.Error())
 	}
 	line := statusLine{Path: rel, BaseRef: cfg.BaseRef(a.base)}
-	if state := treeState(cfg.Enforce, dir, rel); state != "" {
+	if state := treeState(ctx, cfg.Enforce, dir, rel); state != "" {
 		line.State, line.Tree = state, state == "present"
 		return line, statusNotDue
 	}
@@ -66,14 +66,14 @@ func status(ctx context.Context, a baselineArgs) (statusLine, int) {
 // thresholds) none is ever due: not-ratchet. Under ratchet a ledger in the tree is
 // present, and one the head tracks that the tree lost is deleted (`baseline --init`
 // refuses it too). "" means the tree has none and head had none.
-func treeState(enforce, dir, rel string) string {
+func treeState(ctx context.Context, enforce, dir, rel string) string {
 	if enforce != "ratchet" {
 		return "not-ratchet"
 	}
 	if _, err := os.Stat(filepath.Join(dir, filepath.FromSlash(rel))); err == nil {
 		return "present"
 	}
-	if trackedAtHead(dir, rel) {
+	if trackedAtHead(ctx, dir, rel) {
 		return "deleted"
 	}
 	return ""
@@ -83,7 +83,7 @@ func treeState(enforce, dir, rel string) string {
 // the tree lacks is a deletion, which is not a reset; one that has none makes the
 // first ledger due.
 func dueOrDeleted(ctx context.Context, dir string, line statusLine) (statusLine, int) {
-	b := ratchet.ReadBase(dir, line.BaseRef, line.Path)
+	b := ratchet.ReadBase(ctx, dir, line.BaseRef, line.Path)
 	if b.Err != nil {
 		return cannotTell(line, b.Err.Error())
 	}

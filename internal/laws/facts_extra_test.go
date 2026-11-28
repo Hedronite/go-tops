@@ -1,6 +1,7 @@
 package laws
 
 import (
+	"context"
 	"path/filepath"
 	"testing"
 )
@@ -21,7 +22,7 @@ func TestCheckFactsRoundTrip(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, filepath.Join(dir, "go.mod"), "module example.com/t\n\ngo 1.26\n")
 	copyLock(t, dir)
-	out, err := CheckFacts(dir, "binary-cli", func() (string, error) { return "go1.27.4", nil })
+	out, err := CheckFacts(context.Background(), dir, "binary-cli", func() (string, error) { return "go1.27.4", nil })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -59,7 +60,7 @@ func TestCheckG26SkipsTestdata(t *testing.T) {
 }
 
 func TestDefaultGoEnvLive(t *testing.T) {
-	if _, err := defaultGoEnv(); err != nil {
+	if _, err := defaultGoEnv(context.Background()); err != nil {
 		t.Skip(err)
 	}
 }
@@ -100,7 +101,7 @@ func TestCheckG33LockMissing(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, filepath.Join(dir, "go.mod"), "module example.com/t\n\ngo 1.26\n")
 	out := map[string]int{"G-33": 0}
-	if err := checkG33(dir, func() (string, error) { return "go1.27.4", nil }, out); err != nil {
+	if err := checkG33(context.Background(), dir, func() (string, error) { return "go1.27.4", nil }, out); err != nil {
 		t.Fatal(err)
 	}
 	if out["G-33"] != 1 {

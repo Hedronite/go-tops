@@ -1,6 +1,7 @@
 package config_test
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -177,7 +178,7 @@ func expect(t *testing.T, issues []config.Issue, w want) {
 
 func check(t *testing.T, dir string) config.Result {
 	t.Helper()
-	res, err := config.Check(dir, opts)
+	res, err := config.Check(context.Background(), dir, opts)
 	if err != nil {
 		t.Fatalf("Check: %v", err)
 	}

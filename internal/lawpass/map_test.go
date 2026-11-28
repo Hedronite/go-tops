@@ -31,6 +31,29 @@ func TestLawForIssueBranches(t *testing.T) {
 	}
 }
 
+func TestCountsByLawFileGroupsPaths(t *testing.T) {
+	t.Parallel()
+	issues := []LintIssue{
+		{FromLinter: "noctx", Pos: struct {
+			Filename string
+			Line     int
+		}{Filename: "a.go"}},
+		{FromLinter: "noctx", Pos: struct {
+			Filename string
+			Line     int
+		}{Filename: "a.go"}},
+		{FromLinter: "errcheck", Pos: struct {
+			Filename string
+			Line     int
+		}{Filename: "b.go"}},
+	}
+	rel := func(name string) string { return name }
+	got := CountsByLawFile(issues, rel)
+	if got["G-16"]["a.go"] != 2 || got["G-12"]["b.go"] != 1 {
+		t.Fatalf("got %#v", got)
+	}
+}
+
 func TestIsToolLawMembership(t *testing.T) {
 	t.Parallel()
 	for _, id := range toolLawIDs {

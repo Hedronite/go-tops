@@ -1,6 +1,7 @@
 package initcmd
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -80,7 +81,7 @@ func TestTheGateStepRecordsItsExitCodeWithoutFailing(t *testing.T) {
 			t.Fatal(err)
 		}
 		out := filepath.Join(dir, "output")
-		cmd := exec.Command("bash", "-e", "-c", gate.Run)
+		cmd := exec.CommandContext(context.Background(), "bash", "-e", "-c", gate.Run)
 		cmd.Dir = dir
 		cmd.Env = append(os.Environ(), "PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"), "GITHUB_OUTPUT="+out)
 		if b, err := cmd.CombinedOutput(); err != nil {
@@ -396,7 +397,7 @@ func ptr(s string) *string { return &s }
 // error annotation, exactly when it should.
 func judged(t *testing.T, name string, judge step, dir, leg, code string, fails bool) {
 	t.Helper()
-	cmd := exec.Command("bash", "-e", "-c", judge.Run)
+	cmd := exec.CommandContext(context.Background(), "bash", "-e", "-c", judge.Run)
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), "GATE_EXIT="+code, "LEG="+leg)
 	out, err := cmd.CombinedOutput()
@@ -446,13 +447,13 @@ func TestRefreshSaysWhenNothingChanged(t *testing.T) {
 			t.Fatal(err)
 		}
 		for _, args := range [][]string{{"init", "-q"}, {"add", "-A"}, {"-c", "user.name=t", "-c", "user.email=t@example.com", "-c", "commit.gpgsign=false", "commit", "-q", "-m", "ledger"}} {
-			cmd := exec.Command("git", args...)
+			cmd := exec.CommandContext(context.Background(), "git", args...)
 			cmd.Dir = repo
 			if out, err := cmd.CombinedOutput(); err != nil {
 				t.Fatalf("git %v: %v\n%s", args, err, out)
 			}
 		}
-		cmd := exec.Command("bash", "-e", "-c", steps[i].Run)
+		cmd := exec.CommandContext(context.Background(), "bash", "-e", "-c", steps[i].Run)
 		cmd.Dir = repo
 		cmd.Env = append(os.Environ(), "PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 		out, err := cmd.CombinedOutput()
@@ -488,7 +489,7 @@ func TestTheJudgeNamesTheCauseOfAGateThatGaveNoVerdict(t *testing.T) {
 		if err := os.MkdirAll(filepath.Join(dir, ".go-tops"), 0o755); err != nil {
 			t.Fatal(err)
 		}
-		cmd := exec.Command("bash", "-e", "-c", judge.Run)
+		cmd := exec.CommandContext(context.Background(), "bash", "-e", "-c", judge.Run)
 		cmd.Dir = dir
 		cmd.Env = append(os.Environ(), "GATE_EXIT="+c.code, "LEG=ubuntu", "STATUS_STATE="+c.state)
 		out, err := cmd.CombinedOutput()
@@ -522,7 +523,7 @@ func TestTheJudgeSaysWhereTheFirstLedgerComesFromOnASkip(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, ".go-tops", "report.json"), []byte(doc.json(t)), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	cmd := exec.Command("bash", "-e", "-c", judge.Run)
+	cmd := exec.CommandContext(context.Background(), "bash", "-e", "-c", judge.Run)
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), "GATE_EXIT=1", "LEG=ubuntu", "STATUS_STATE=present")
 	out, err := cmd.CombinedOutput()

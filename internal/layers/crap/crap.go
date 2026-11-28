@@ -42,11 +42,11 @@ func (Layer) Needs() []string { return []string{tests.CoverageID} }
 
 // Run implements gate.Layer. It never runs the tests: it reads the profile of
 // the run the tests layer made, under the build that run used (§3.1).
-func (Layer) Run(_ context.Context, env *gate.Env) gate.Result {
+func (Layer) Run(ctx context.Context, env *gate.Env) gate.Result {
 	cc := env.Config.Crap
 	// The build of the test run, with the platform the go command picks named,
 	// so the files scored are the files the profile covers.
-	build, err := gobuild.Resolve(env.Dir, tests.Build)
+	build, err := gobuild.Resolve(ctx, env.Dir, tests.Build)
 	if err != nil {
 		return failure(err)
 	}
@@ -83,7 +83,10 @@ func judge(rep crap.Report, limit float64, exemptions []report.Exemption, now ti
 	for _, f := range unmeasured {
 		violations = append(violations, violation(f.Key, f.File, f.Comp, nil, nil))
 	}
-	details := map[string]any{"cap": limit, "violations": violations, "not_measured": len(rep.NotMeasured)}
+	details := map[string]any{
+		"cap": limit, "violations": violations, "functions": scoreRows(rep),
+		"not_measured": len(rep.NotMeasured),
+	}
 	if rows := exemptRows(rep, covered); len(rows) > 0 {
 		details["exempt"] = rows
 	}
@@ -111,6 +114,20 @@ func exemptFuncs(rep crap.Report) []exempt.Func {
 		out = append(out, exempt.Func{Key: f.Key, File: f.File, Recv: f.Recv, Name: f.Name, Table: f.Table})
 	}
 	return out
+}
+
+// scoreRows is every production function the run scored (F18).
+func scoreRows(rep crap.Report) []any {
+	rows := make([]any, 0, len(rep.Measured)+len(rep.NotMeasured))
+	for _, f := range rep.Measured {
+		cov := f.Cov * 100
+		crap := f.CRAP
+		rows = append(rows, violation(f.Key, f.File, f.Comp, cov, crap))
+	}
+	for _, f := range rep.NotMeasured {
+		rows = append(rows, violation(f.Key, f.File, f.Comp, nil, nil))
+	}
+	return rows
 }
 
 // over is the functions over the cap that no exemption covers.

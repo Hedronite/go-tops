@@ -12,7 +12,7 @@ import (
 
 func init() {
 	if os.Getenv("GOTOPS_EXEC_PGID_HELPER") == "1" {
-		c := exec.Command("sleep", "30")
+		c := exec.CommandContext(context.Background(), "sleep", "30")
 		c.Stdout = os.Stdout
 		c.Stderr = os.Stderr
 		if err := c.Run(); err != nil {
@@ -23,7 +23,7 @@ func init() {
 }
 
 func TestConfigureExecCmdAndKillProcessGroup(t *testing.T) {
-	cmd := exec.Command("true")
+	cmd := exec.CommandContext(context.Background(), "true")
 	configureExecCmd(cmd)
 	if cmd.SysProcAttr == nil || !cmd.SysProcAttr.Setpgid {
 		t.Fatal("expected SysProcAttr.Setpgid = true")

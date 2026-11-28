@@ -274,6 +274,23 @@ func TestSchemaRefusesHalfMeasuredRows(t *testing.T) {
 }
 
 // The text says what typing the not-measured functions cost.
+func TestDetailsEmitFunctionsListF18(t *testing.T) {
+	env := fixture(t, map[string]string{"m.go": "package m\n\n" + ifs("Light", 2)},
+		line("m.go", 3, 1, 10, 2, 10, 1))
+	r := run(env)
+	rows, ok := r.Details["functions"].([]any)
+	if !ok || len(rows) == 0 {
+		t.Fatalf("functions=%T %+v", r.Details["functions"], r.Details["functions"])
+	}
+	row, ok := rows[0].(map[string]any)
+	if !ok || row["crap"] == nil || row["cov_pct"] == nil {
+		t.Fatalf("row=%+v", rows[0])
+	}
+	if cov, ok := row["cov_pct"].(float64); !ok || cov != 100 {
+		t.Fatalf("cov_pct=%v want 100", row["cov_pct"])
+	}
+}
+
 func TestReasonSaysHowManyPlatformsWereLoaded(t *testing.T) {
 	env := fixture(t, map[string]string{
 		"m.go":         "package m\n\n" + ifs("Light", 2),

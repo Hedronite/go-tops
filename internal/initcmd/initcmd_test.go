@@ -2,6 +2,7 @@ package initcmd
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -63,7 +64,7 @@ func (p *printer) Printf(format string, a ...any) { fmt.Fprintf(&p.Builder, form
 
 func run(o Options) (int, string, string) {
 	var out, errp printer
-	code := Run(o, &out, &errp)
+	code := Run(context.Background(), o, &out, &errp)
 	return code, out.String(), errp.String()
 }
 
@@ -457,7 +458,7 @@ func TestDevelopmentBuildLeavesGotopsOutWithANote(t *testing.T) {
 // its failure is a failure of the run, not of the files (§12.1).
 func TestTidyRunsUnlessOffline(t *testing.T) {
 	var calls []string
-	tidy := func(dir string) error { calls = append(calls, dir); return nil }
+	tidy := func(_ context.Context, dir string) error { calls = append(calls, dir); return nil }
 	dir := newModule(t, "github.com/acme/demo", "1.26")
 	o := opts(dir, "binary-cli")
 	o.Offline, o.Tidy = true, tidy
@@ -472,7 +473,7 @@ func TestTidyRunsUnlessOffline(t *testing.T) {
 	}
 	dir3 := newModule(t, "github.com/acme/demo", "1.26")
 	o3 := opts(dir3, "binary-cli")
-	o3.Offline, o3.Tidy = false, func(string) error { return fmt.Errorf("no network") }
+	o3.Offline, o3.Tidy = false, func(context.Context, string) error { return fmt.Errorf("no network") }
 	if code, _, errs := run(o3); code != ExitFailure || !strings.Contains(errs, "no network") {
 		t.Fatalf("a tidy failure must exit %d, got %d:\n%s", ExitFailure, code, errs)
 	}

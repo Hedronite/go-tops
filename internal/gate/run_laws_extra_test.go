@@ -1,0 +1,126 @@
+package gate
+
+import (
+	"context"
+	"errors"
+	"testing"
+
+	"github.com/Hedronite/go-tops/internal/lawpass"
+	"github.com/Hedronite/go-tops/internal/laws"
+)
+
+func TestLawEvidenceScanAcksErrorFails(t *testing.T) {
+	d := deps(nil)
+	d.ScanAcks = func(string, string) (laws.FileCounts, error) {
+		return nil, errors.New("broken acks")
+	}
+	_, err := lawEvidence(context.Background(), d, &Env{Dir: "."}, cfg(), Options{MaxTier: 1}, true, false, nil)
+	if err == nil {
+		t.Fatal("want error from ScanAcks")
+	}
+}
+
+func TestLawEvidenceReturnsEarlyWhenLawsOutOfRange(t *testing.T) {
+	d := deps(nil)
+	ev, err := lawEvidence(context.Background(), d, &Env{Dir: "."}, cfg(), Options{MaxTier: 1}, false, false, nil)
+	if err != nil || ev.LintPassOK || ev.AnalyzersOK {
+		t.Fatalf("ev=%+v err=%v", ev, err)
+	}
+}
+
+func TestLawEvidenceStoppedSkipsRefusals(t *testing.T) {
+	d := deps(nil)
+	ev, err := lawEvidence(context.Background(), d, &Env{Dir: "."}, cfg(), Options{MaxTier: 1}, true, true, nil)
+	if err != nil || ev.LintPassOK || len(ev.Refusals) != 0 {
+		t.Fatalf("ev=%+v err=%v", ev, err)
+	}
+}
+
+func TestLawEvidenceSkipsRefusalsWhenLintFails(t *testing.T) {
+	d := deps(nil)
+	d.LawsRun = func(context.Context, string, string) (laws.RunnerResult, error) {
+		return laws.RunnerResult{
+			OK:        true,
+			ByLawFile: map[string]map[string]int{"G-11": {"a.go": 1}},
+		}, nil
+	}
+	d.LawPass = func(context.Context, *Env) (lawpass.LintResult, error) {
+		return lawpass.LintResult{}, errors.New("lint broke")
+	}
+	env := &Env{Dir: "."}
+	ev, err := lawEvidence(context.Background(), d, env, cfg(), Options{MaxTier: 1}, true, false, nil)
+	if err != nil || ev.LintPassOK || ev.Refusals != nil || env.RatchetLawRefusals != nil {
+		t.Fatalf("ev=%+v env=%v err=%v", ev, env.RatchetLawRefusals, err)
+	}
+}
+
+func TestLawEvidenceSkipsRefusalsBelowTierOne(t *testing.T) {
+	d := deps(nil)
+	d.LawsRun = func(context.Context, string, string) (laws.RunnerResult, error) {
+		return laws.RunnerResult{
+			OK:        true,
+			ByLawFile: map[string]map[string]int{"G-11": {"a.go": 1}},
+		}, nil
+	}
+	env := &Env{Dir: "."}
+	ev, err := lawEvidence(context.Background(), d, env, cfg(), Options{MaxTier: 0}, true, false, nil)
+	if err != nil || ev.Refusals != nil || env.RatchetLawRefusals != nil {
+		t.Fatalf("ev=%+v env=%v err=%v", ev, env.RatchetLawRefusals, err)
+	}
+}
+
+func TestLawEvidenceAttachesRefusals(t *testing.T) {
+	d := deps(nil)
+	d.LawPass = func(context.Context, *Env) (lawpass.LintResult, error) {
+		return lawpass.LintResult{
+			ByLaw: map[string]int{"G-12": 1},
+			Issues: []lawpass.LintIssue{{
+				FromLinter: "errcheck",
+				Pos: struct {
+					Filename string
+					Line     int
+				}{Filename: "a.go", Line: 1},
+			}},
+		}, nil
+	}
+	ev, err := lawEvidence(context.Background(), d, &Env{Dir: "."}, cfg(), Options{MaxTier: 1}, true, false, nil)
+	if err != nil || !ev.LintPassOK {
+		t.Fatalf("ev=%+v err=%v", ev, err)
+	}
+	if ev.Refusals["G-12"]["a.go"] != 1 {
+		t.Fatalf("refusals=%+v", ev.Refusals)
+	}
+}
+
+func TestAttachRefusalsSetsEnvMap(t *testing.T) {
+	env := &Env{Dir: "."}
+	ev := &laws.Evidence{
+		LintPassOK: true,
+		Lint: lawpass.LintResult{
+			Issues: []lawpass.LintIssue{{
+				FromLinter: "errcheck",
+				Pos: struct {
+					Filename string
+					Line     int
+				}{Filename: "x.go", Line: 2},
+			}},
+		},
+	}
+	attachRefusals(env, ev)
+	if env.RatchetLawRefusals == nil || ev.Refusals["G-12"]["x.go"] != 1 {
+		t.Fatalf("env=%+v ev=%+v", env.RatchetLawRefusals, ev.Refusals)
+	}
+}
+
+func TestLawEvidenceCollectsAcks(t *testing.T) {
+	want := laws.FileCounts{"G-12": {"a.go": 1}}
+	d := deps(nil)
+	d.ScanAcks = func(string, string) (laws.FileCounts, error) { return want, nil }
+	ev, err := lawEvidence(context.Background(), d, &Env{Dir: "."}, cfg(), Options{MaxTier: 1}, true, false, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ev.Acks["G-12"]["a.go"] != 1 {
+		t.Fatalf("acks=%+v", ev.Acks)
+	}
+}

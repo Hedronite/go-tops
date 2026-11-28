@@ -544,11 +544,11 @@ func TestPreflightNeedsALoadableLock(t *testing.T) {
 
 type lockFailing struct{ *fake }
 
-func (l lockFailing) Resolve(_ context.Context, name string) ([]string, error) {
+func (l lockFailing) Resolve(ctx context.Context, name string) ([]string, error) {
 	if name == "golangci-lint" {
 		return nil, &gate.LockError{Err: errors.New("sha mismatch")}
 	}
-	return l.fake.Resolve(context.Background(), name)
+	return l.fake.Resolve(ctx, name)
 }
 
 func TestPreflightPassesALockMismatchOn(t *testing.T) {

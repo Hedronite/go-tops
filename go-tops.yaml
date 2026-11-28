@@ -46,20 +46,5 @@ layers:
   fuzz:  { targets: ["./internal/config:FuzzLoad"] }
   bench: { enabled: false, reason: "binary-cli does not gate benchmarks" }
 
-# Exemptions (GO_TOPS.md section 6.8). Every kit function meets the CRAP cap
-# except these two, which the ratchet hook changed at M2 and the laws layer
-# reworks at M5. Each expires on or before the M5 date, the expiry of the
-# advisory record above.
-exemptions:
-  - path: internal/gate/run.go
-    symbol: Execute
-    layer: crap
-    reason: already over the cap; split with the M5 laws work
-    owner: maintainer
-    expires: "2027-03-31"
-  - path: internal/gate/run.go
-    symbol: assemble
-    layer: crap
-    reason: already over the cap; split with the M5 laws work
-    owner: maintainer
-    expires: "2027-03-31"
+# Exemptions (GO_TOPS.md section 6.8). M5 G5 split gate.Execute/assemble to meet CRAP.
+exemptions: []

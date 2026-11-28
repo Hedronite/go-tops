@@ -4,6 +4,7 @@ package gotops
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"os"
 	"os/exec"
@@ -36,7 +37,7 @@ func needNu(t *testing.T) {
 	if err != nil {
 		t.Fatalf("nu is required under -tags skills: %v", err)
 	}
-	out, err := exec.Command(path, "--version").Output()
+	out, err := exec.CommandContext(context.Background(), path, "--version").Output()
 	if err != nil {
 		t.Fatalf("nu --version: %v", err)
 	}
@@ -59,7 +60,7 @@ func skillScript(t *testing.T, skill string) string {
 func runSkill(t *testing.T, skill, dir string, env []string, args ...string) envelope {
 	t.Helper()
 	needNu(t)
-	cmd := exec.Command("nu", append([]string{skillScript(t, skill)}, args...)...)
+	cmd := exec.CommandContext(context.Background(), "nu", append([]string{skillScript(t, skill)}, args...)...)
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), env...)
 	var stdout, stderr bytes.Buffer
@@ -629,7 +630,7 @@ func TestAdoptSkillRefusesWhatItCannotRun(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			f := newFake(t)
 			dir := t.TempDir()
-			cmd := exec.Command("nu", append([]string{skillScript(t, "go-tops-adopt")}, c.args...)...)
+			cmd := exec.CommandContext(context.Background(), "nu", append([]string{skillScript(t, "go-tops-adopt")}, c.args...)...)
 			cmd.Dir, cmd.Env = dir, append(os.Environ(), f.env...)
 			out, err := cmd.Output()
 			if c.err == "" {

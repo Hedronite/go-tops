@@ -1,10 +1,13 @@
 package laws
 
-import "testing"
+import (
+	"context"
+	"testing"
+)
 
 func TestDefaultGoEnvMissingTool(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
-	if _, err := defaultGoEnv(); err == nil {
+	if _, err := defaultGoEnv(context.Background()); err == nil {
 		t.Fatal("want error when go is not on PATH")
 	}
 }

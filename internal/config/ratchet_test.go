@@ -1,6 +1,8 @@
 package config_test
 
 import (
+	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -200,15 +202,16 @@ func TestRatchetOutsideARepositoryIsAnEnvironmentError(t *testing.T) {
 	dir := writeModule(t, ratchetDoc(t), map[string]string{".go-tops/baseline.json": baselineJSON})
 	// Stop git looking above the module for a work tree the temp root may sit in.
 	t.Setenv("GIT_CEILING_DIRECTORIES", filepath.Dir(dir))
-	if _, err := config.Check(dir, opts); err == nil {
-		t.Fatal("Check succeeded outside a git repository under ratchet, want an environment error")
+	_, err := config.Check(context.Background(), dir, opts)
+	if err == nil || !errors.Is(err, config.ErrUnreadableRepository) {
+		t.Fatalf("outside a git repository want ErrUnreadableRepository, got err=%v", err)
 	}
 }
 
 func TestRatchetBaselineMissingFileNeedsNoGit(t *testing.T) {
 	// The file is absent, so the answer is known without asking git.
 	dir := writeModule(t, ratchetDoc(t), nil)
-	res, err := config.Check(dir, opts)
+	res, err := config.Check(context.Background(), dir, opts)
 	if err != nil {
 		t.Fatalf("Check: %v", err)
 	}

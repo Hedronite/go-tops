@@ -16,6 +16,12 @@ type Evidence struct {
 	AnalyzersOK bool
 	// Analyzers holds per-law counts from facts and custom analyzers.
 	Analyzers map[string]int
+	// AnalyzersByFile holds analyzer diagnostics per law and file.
+	AnalyzersByFile map[string]map[string]int
+	// Refusals is the per-law per-file counts ledgered as laws.*.
+	Refusals FileCounts
+	// Acks is the per-law per-file acknowledgement ledger count.
+	Acks FileCounts
 }
 
 // HygieneEvidence holds gate-1 outcomes for G-34 and G-40.
