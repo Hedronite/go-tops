@@ -1,8 +1,8 @@
 package lock
 
 import (
-	"context"
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -56,9 +56,7 @@ func (o VerifyOptions) withDefaults() VerifyOptions {
 		o.Platform = HostPlatform()
 	}
 	if o.Run == nil {
-		o.Run = func(ctx context.Context, dir string, argv ...string) (string, error) {
-			return execRunner(ctx, dir, argv...)
-		}
+		o.Run = execRunner
 	}
 	if o.LookPath == nil {
 		o.LookPath = exec.LookPath

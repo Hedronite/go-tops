@@ -3,8 +3,8 @@
 package gotops
 
 import (
-	"context"
 	"bytes"
+	"context"
 	"encoding/json"
 	"os"
 	"os/exec"

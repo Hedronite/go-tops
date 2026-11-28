@@ -3,8 +3,8 @@
 package initcmd
 
 import (
-	"context"
 	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"os/exec"

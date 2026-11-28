@@ -1,8 +1,8 @@
 package laws
 
 import (
-	"context"
 	"bytes"
+	"context"
 	"fmt"
 	"go/parser"
 	"go/token"
