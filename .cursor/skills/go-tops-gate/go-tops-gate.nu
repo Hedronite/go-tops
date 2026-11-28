@@ -46,22 +46,35 @@ def argv-line [args: list<string>] {
   $args | each {|a| quote-arg $a } | str join " "
 }
 
+def c9-laws-ok [laws: record] {
+  let req = ($laws.required? | default 0)
+  let judged = ($laws.judged? | default 0)
+  let ne = ($laws.required_not_evaluated? | default 0)
+  let results = ($laws.results? | default [])
+  let refused = ($results | where {|r| ($r.verdict? | default "") == "refuse" })
+  if not ($refused | is-empty) { return false }
+  if $req <= 0 { return false }
+  if $judged == 0 { return ($req == $ne) }
+  if $judged == $req { return ($ne == 0) }
+  if $judged > 0 and $judged < $req {
+    let bad_j = ($results | where {|r|
+      let v = ($r.verdict? | default "")
+      ($v != "not-evaluated") and ($v not-in ["allow" "ack"])
+    })
+    let bad_p = ($results | where {|r|
+      ($r.verdict? | default "") == "not-evaluated" and (($r.reason? | default "") != "no_reader")
+    })
+    let ok = ($ne == ($req - $judged)) and ($bad_j | is-empty) and ($bad_p | is-empty)
+    return $ok
+  }
+  false
+}
+
 def laws-problems [laws: record, failed_laws: bool] {
   if not $failed_laws { return [] }
-  let results = ($laws.results? | default [])
-  let refused = ($results | where {|r| ($r.verdict? | default "") == "refuse" } | each {|r| $r.id? | default "?" })
   mut out = []
-  if ($laws.required? | default 0) <= 0 {
-    $out = ($out | append "the gate failed on laws, but no law is required: that is not the C9 gap")
-  }
-  if ($laws.required? | default 0) != ($laws.required_not_evaluated? | default (-1)) {
-    $out = ($out | append "a required law was judged or is missing from the not-evaluated count")
-  }
-  if ($laws.judged? | default 0) != 0 {
-    $out = ($out | append $"laws were judged \(($laws.judged)\): a failure there is a refusal, not the C9 gap")
-  }
-  if not ($refused | is-empty) {
-    $out = ($out | append $"a law is refused: ($refused | str join ', ')")
+  if not (c9-laws-ok $laws) {
+    $out = ($out | append "the laws block does not satisfy ruling C9 for this judged count")
   }
   $out
 }

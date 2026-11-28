@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Hedronite/go-tops/internal/laws"
 	"github.com/Hedronite/go-tops/internal/report"
 )
 
@@ -400,5 +401,25 @@ func TestNoCommandIsNotRunWhateverItsNeeds(t *testing.T) {
 	o = layerOutcomes(mustRun(t, c, Options{MaxTier: 1, Only: "crap"}, deps(mk())))
 	if o["coverage"] != "not-run" || o["crap"] != "not-reached" {
 		t.Fatalf("under --only crap: %v", o)
+	}
+}
+
+func TestApplicableJudgedCountsNonNotEvaluated(t *testing.T) {
+	results := []laws.Result{
+		{ID: "G-02", Verdict: laws.Allow},
+		{ID: "G-08", Verdict: laws.NotEvaluated, Reason: laws.NoReader},
+	}
+	if n := applicableJudged(results); n != 1 {
+		t.Fatalf("applicableJudged = %d, want 1", n)
+	}
+}
+
+func TestApplicableJudgedCountsOnlyNotEvaluated(t *testing.T) {
+	results := []laws.Result{
+		{ID: "G-02", Verdict: laws.NotEvaluated, Reason: laws.NoReader},
+		{ID: "G-08", Verdict: laws.NotEvaluated, Reason: laws.NoReader},
+	}
+	if n := applicableJudged(results); n != 0 {
+		t.Fatalf("applicableJudged = %d, want 0", n)
 	}
 }

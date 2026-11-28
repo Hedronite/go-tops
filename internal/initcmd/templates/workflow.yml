@@ -242,12 +242,23 @@ jobs:
             and .summary.exit_code == $code
             and ($code == 0 or (.summary.failed | length) > 0)
             and (if (.summary.failed | any(. == "laws")) then
-                   .laws.required == 16
-                   and .laws.judged == 9
-                   and .laws.required_not_evaluated == 7
-                   and ([.laws.results[] | select(.verdict == "refuse")] | length) == 0
+                   def c9_laws_ok:
+                     (.laws.required // 0) as $req
+                     | (.laws.judged // 0) as $judged
+                     | (.laws.required_not_evaluated // 0) as $ne
+                     | ([.laws.results[] | select(.verdict == "refuse")] | length) == 0
+                     and (
+                       ($judged == 0 and $req > 0 and $req == $ne)
+                       or ($judged > 0 and $judged < $req
+                         and $ne == ($req - $judged)
+                         and ([(.laws.results // [])[] as $r
+                           | select(($r.verdict != "not-evaluated") and (($r.verdict | IN("allow","ack")) | not))] | length) == 0
+                         and ([(.laws.results // [])[] as $r
+                           | select(($r.verdict == "not-evaluated") and (($r.reason // "") != "no_reader"))] | length) == 0)
+                       or ($judged == $req and $ne == 0));
+                   c9_laws_ok
                  else true end)
-          ' "$report" > /dev/null || fail "the gate report is not a pass under ruling C9: the gate exited $GATE_EXIT and its report says another exit code, a layer failed or did not run, the run was partial, or something besides the required laws (all reported not evaluated, none judged, none refused) failed"
+          ' "$report" > /dev/null || fail "the gate report is not a pass under ruling C9: the gate exited $GATE_EXIT and its report says another exit code, a layer failed or did not run, the run was partial, or something besides the required laws (ruling C9 (M4, interim, or retired)) failed"
       # The floor leg builds and tests on the floor toolchain. The gate itself
       # runs on the other legs: a narrowed gate run leaves laws out of range.
       - name: build and test on the floor

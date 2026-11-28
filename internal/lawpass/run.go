@@ -156,18 +156,52 @@ func headErr(out Output) string {
 	return strings.Join(lines[:min(len(lines), 2)], "\n")
 }
 
+// validateGolangciLintShape checks golangci-lint v2.15.x JSON before decode.
+func validateGolangciLintShape(top map[string]json.RawMessage) error {
+	issuesRaw, ok := top["Issues"]
+	if !ok {
+		return errors.New("not a golangci-lint result: no Issues key")
+	}
+	switch {
+	case string(issuesRaw) == "null":
+		return errors.New("not a golangci-lint result: Issues is null")
+	case len(issuesRaw) == 0, issuesRaw[0] != '[':
+		return errors.New("not a golangci-lint result: Issues is not an array")
+	}
+	reportRaw, ok := top["Report"]
+	if !ok {
+		return errors.New("not a golangci-lint result: no Report key")
+	}
+	var rep map[string]json.RawMessage
+	if err := json.Unmarshal(reportRaw, &rep); err != nil {
+		return errors.New("not a golangci-lint result: Report is not an object")
+	}
+	lintersRaw, ok := rep["Linters"]
+	if !ok {
+		return errors.New("not a golangci-lint result: no Report.Linters key")
+	}
+	if len(lintersRaw) == 0 || lintersRaw[0] != '[' {
+		return errors.New("not a golangci-lint result: Report.Linters is not an array")
+	}
+	return nil
+}
+
 // ParseLintLawsJSON reads golangci-lint JSON from doc.
+// It accepts the v2.15.x shape: Issues is a JSON array (possibly empty) and Report.Linters is present.
 func ParseLintLawsJSON(doc []byte) (LintResult, error) {
-	var top map[string]any
+	var top map[string]json.RawMessage
 	if err := json.Unmarshal(doc, &top); err != nil {
 		return LintResult{}, fmt.Errorf("not JSON: %w", err)
 	}
-	if _, ok := top["Issues"]; !ok {
-		return LintResult{}, errors.New("not a golangci-lint result: no Issues key")
+	if err := validateGolangciLintShape(top); err != nil {
+		return LintResult{}, err
 	}
 	var res LintResult
 	if err := json.Unmarshal(doc, &res); err != nil {
 		return LintResult{}, err
+	}
+	if res.Issues == nil {
+		res.Issues = []LintIssue{}
 	}
 	return res, nil
 }
