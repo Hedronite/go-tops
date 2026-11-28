@@ -158,8 +158,8 @@ jobs:
       # advisory, so this step reads the report and fails unless
       #   - hygiene, tests, coverage and crap are `pass`;
       #   - mutation is `pass` or `vacuous` (never `skip`);
-      #   - G2 (M5): nine tier-1 laws judged (allow/refuse); seven v0.1 analyzers stay
-      #     `not-evaluated` with `no_reader`. G6 tightens this to 16 judged.
+      #   - G3 (M5): all 16 v0.1 laws judged (`allow` or `refuse`); none `no_reader`;
+      #     kit G-16 `refuse` expected while enforce is advisory. G6 hardens enforce.
       #   - the run is reported as not enforced, and every enabled layer ran.
       # To plant a failure locally, change .go-tops/report.json and run this step's
       # script from the repository root.
@@ -180,22 +180,21 @@ jobs:
                 | layer($id) as $l
                 | select($l == null or ($l.outcome != "pass" and $l.outcome != "vacuous"))
                 | "\($id): outcome \($l.outcome // "absent"), want pass or vacuous" ),
-              ( select((.laws.judged // 0) != 9)
-                | "laws: judged \(.laws.judged // 0), want 9 in release G2" ),
-              ( select(.laws.required_not_evaluated != 7)
-                | "laws: required_not_evaluated \(.laws.required_not_evaluated), want 7 pending analyzers" ),
+              ( select((.laws.judged // 0) != 16)
+                | "laws: judged \(.laws.judged // 0), want 16 in release G3" ),
+              ( select(.laws.required_not_evaluated != 0)
+                | "laws: required_not_evaluated \(.laws.required_not_evaluated), want 0 (G3)" ),
               ( (.laws.results // [])[] as $r
-                | select( ($r.id | test("^G-(08|17|19|25|26|33|38)$"))
-                  and ($r.verdict != "not-evaluated" or ($r.reason // "") != "no_reader") )
-                | "law \($r.id): \($r.verdict) \($r.reason // ""), want not-evaluated no_reader (G2 pending)" ),
-              ( (.laws.results // [])[] as $r
-                | select( ($r.id | test("^G-(02|07|11|12|16|18|37|34|40)$"))
+                | select( ($r.id | test("^G-(02|07|08|11|12|16|17|18|19|25|26|33|34|37|38|40)$"))
                   and (($r.verdict | IN("allow","refuse")) | not) )
-                | "law \($r.id): \($r.verdict), want allow or refuse (G2 tool law)" ),
+                | "law \($r.id): \($r.verdict) \($r.reason // ""), want allow or refuse (G3)" ),
               ( (.laws.results // [])[] as $r
-                | select( ($r.id | test("^G-(02|07|11|12|16|18|37|34|40)$"))
+                | select( ($r.id | test("^G-(02|07|08|11|12|16|17|18|19|25|26|33|34|37|38|40)$"))
                   and ($r.reason // "") == "no_reader" )
-                | "law \($r.id): still no_reader, want a tier-1 judgment" ),
+                | "law \($r.id): still no_reader, want a tier-1 judgment (G3)" ),
+              ( (.laws.results // [])[] as $r
+                | select(.id == "G-16" and .verdict != "refuse")
+                | "law G-16: \($r.verdict), want refuse on kit under advisory (pre-existing noctx)" ),
               ( select(.summary.enforced != false)
                 | "summary.enforced is \(.summary.enforced), want false under advisory" ),
               ( select(.enforce != "advisory")
